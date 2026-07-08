@@ -4,21 +4,33 @@ import { applyAudioSettings, initAudio, playSfx, startMusic } from '../audioMana
 import { formatHighScoreLabel } from '../gameFlow';
 import { quitGame } from '../quitGame';
 import { getAutoFire } from '../settings';
-import { createMenuButton } from '../ui/MenuButtons';
+import { createMenuButton, resetMenuButtonHover } from '../ui/MenuButtons';
 import { createSettingsPanel } from '../ui/SettingsPanel';
 import { createAlmanacPanel } from '../ui/AlmanacPanel';
 import { createShopPanel } from '../ui/ShopPanel';
+
+const MENU_BUTTON_HIT_AREA = new Phaser.Geom.Rectangle(-110, -24, 220, 48);
 
 export class MenuScene extends Phaser.Scene {
   private quitOverlay?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
   private almanacPanel?: Phaser.GameObjects.Container;
   private shopPanel?: Phaser.GameObjects.Container;
+  private menuButtons: Phaser.GameObjects.Container[] = [];
+  private menuButtonsEnabled = true;
+
   constructor() {
     super({ key: 'MenuScene' });
   }
 
   create(): void {
+    this.almanacPanel = undefined;
+    this.settingsPanel = undefined;
+    this.shopPanel = undefined;
+    this.quitOverlay = undefined;
+    this.menuButtons = [];
+    this.menuButtonsEnabled = true;
+
     this.cameras.main.fadeIn(400, 0, 0, 0);
     this.createStarfield();
     this.createTitle();
@@ -27,15 +39,63 @@ export class MenuScene extends Phaser.Scene {
     this.createActionButtons();
 
     this.input.keyboard?.once('keydown-SPACE', () => {
+      if (this.isMenuOverlayOpen()) return;
       initAudio();
       startMusic();
       this.openModeSelect();
     });
     this.input.keyboard?.once('keydown-ENTER', () => {
+      if (this.isMenuOverlayOpen()) return;
       initAudio();
       startMusic();
       this.openModeSelect();
     });
+  }
+
+  shutdown(): void {
+    this.almanacPanel?.destroy();
+    this.settingsPanel?.destroy();
+    this.shopPanel?.destroy();
+    this.quitOverlay?.destroy();
+    this.almanacPanel = undefined;
+    this.settingsPanel = undefined;
+    this.shopPanel = undefined;
+    this.quitOverlay = undefined;
+    this.menuButtons = [];
+    this.menuButtonsEnabled = true;
+  }
+
+  private isMenuOverlayOpen(): boolean {
+    return !!(this.almanacPanel || this.settingsPanel || this.shopPanel || this.quitOverlay);
+  }
+
+  private setMenuButtonsEnabled(enabled: boolean): void {
+    if (this.menuButtonsEnabled === enabled) return;
+    this.menuButtonsEnabled = enabled;
+    for (const container of this.menuButtons) {
+      if (enabled) {
+        container.setInteractive(MENU_BUTTON_HIT_AREA, Phaser.Geom.Rectangle.Contains);
+        if (container.input) container.input.cursor = 'pointer';
+        container.setAlpha(1);
+      } else {
+        resetMenuButtonHover(container);
+        container.disableInteractive();
+        container.setAlpha(0.35);
+      }
+    }
+    if (!enabled) {
+      this.input.setDefaultCursor('default');
+    }
+  }
+
+  private openMenuOverlay(): void {
+    this.setMenuButtonsEnabled(false);
+  }
+
+  private closeMenuOverlay(): void {
+    if (!this.isMenuOverlayOpen()) {
+      this.setMenuButtonsEnabled(true);
+    }
   }
 
   private createStarfield(): void {
@@ -116,6 +176,7 @@ export class MenuScene extends Phaser.Scene {
       label: 'LAUNCH',
       y: launchY,
       onClick: () => {
+        if (this.isMenuOverlayOpen()) return;
         initAudio();
         playSfx('ui');
         startMusic();
@@ -123,6 +184,7 @@ export class MenuScene extends Phaser.Scene {
       },
     });
     launchBtn.setX(GAME_WIDTH / 2);
+    this.menuButtons.push(launchBtn);
     this.tweens.add({
       targets: launchBtn,
       scaleX: 1.05,
@@ -144,6 +206,7 @@ export class MenuScene extends Phaser.Scene {
       },
     });
     almanacBtn.setX(GAME_WIDTH / 2);
+    this.menuButtons.push(almanacBtn);
 
     const { container: shopBtn } = createMenuButton(this, {
       label: 'SHOP',
@@ -156,6 +219,7 @@ export class MenuScene extends Phaser.Scene {
       },
     });
     shopBtn.setX(GAME_WIDTH / 2);
+    this.menuButtons.push(shopBtn);
 
     const { container: settingsBtn } = createMenuButton(this, {
       label: 'SETTINGS',
@@ -168,6 +232,7 @@ export class MenuScene extends Phaser.Scene {
       },
     });
     settingsBtn.setX(GAME_WIDTH / 2);
+    this.menuButtons.push(settingsBtn);
 
     const { container: quitBtn } = createMenuButton(this, {
       label: 'QUIT',
@@ -176,15 +241,18 @@ export class MenuScene extends Phaser.Scene {
       onClick: () => this.showQuitConfirm(),
     });
     quitBtn.setX(GAME_WIDTH / 2);
+    this.menuButtons.push(quitBtn);
   }
 
   private showSettingsPanel(): void {
-    if (this.settingsPanel || this.almanacPanel || this.shopPanel || this.quitOverlay) return;
+    if (this.isMenuOverlayOpen()) return;
+    this.openMenuOverlay();
 
     const panel = createSettingsPanel(this, 300, {
       onBack: () => {
         panel.destroy();
         this.settingsPanel = undefined;
+        this.closeMenuOverlay();
       },
       onSoundVolumeChange: () => applyAudioSettings(),
       onMusicVolumeChange: () => applyAudioSettings(),
@@ -193,31 +261,36 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private showAlmanacPanel(): void {
-    if (this.almanacPanel || this.settingsPanel || this.shopPanel || this.quitOverlay) return;
+    if (this.isMenuOverlayOpen()) return;
+    this.openMenuOverlay();
 
     const panel = createAlmanacPanel(this, 300, {
       onBack: () => {
         panel.destroy();
         this.almanacPanel = undefined;
+        this.closeMenuOverlay();
       },
     });
     this.almanacPanel = panel.root;
   }
 
   private showShopPanel(): void {
-    if (this.shopPanel || this.almanacPanel || this.settingsPanel || this.quitOverlay) return;
+    if (this.isMenuOverlayOpen()) return;
+    this.openMenuOverlay();
 
     const panel = createShopPanel(this, 300, {
       onBack: () => {
         panel.destroy();
         this.shopPanel = undefined;
+        this.closeMenuOverlay();
       },
     });
     this.shopPanel = panel.root;
   }
 
   private showQuitConfirm(): void {
-    if (this.quitOverlay) return;
+    if (this.isMenuOverlayOpen()) return;
+    this.openMenuOverlay();
 
     const root = this.add.container(0, 0).setDepth(300);
 
@@ -254,6 +327,7 @@ export class MenuScene extends Phaser.Scene {
       onClick: () => {
         root.destroy();
         this.quitOverlay = undefined;
+        this.closeMenuOverlay();
       },
     });
     noBtn.setX(GAME_WIDTH / 2);
@@ -293,6 +367,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private openModeSelect(): void {
+    if (this.isMenuOverlayOpen()) return;
     initAudio();
     startMusic();
     this.cameras.main.fadeOut(400, 0, 0, 0);

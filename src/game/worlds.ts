@@ -39,7 +39,7 @@ export const WORLDS: WorldMeta[] = [
   {
     id: 'world4',
     number: 4,
-    title: 'Oort Cloud',
+    title: 'The Nebula',
     subtitle: 'Deep frontier',
     locked: true,
     levelCount: 0,

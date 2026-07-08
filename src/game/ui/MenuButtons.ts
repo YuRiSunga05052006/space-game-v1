@@ -57,6 +57,10 @@ export function createMenuButton(
   };
 }
 
+export function resetMenuButtonHover(container: Phaser.GameObjects.Container): void {
+  container.emit('pointerout');
+}
+
 export function createMenuOverlay(
   scene: Phaser.Scene,
   title: string,
