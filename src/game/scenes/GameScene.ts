@@ -12,11 +12,24 @@ import { BossShip } from '../entities/BossShip';
 import { getBossConfigForLevel, getBossSpawnMsForLevel } from '../levelConfig';
 import { computeBossHealth } from '../bossHealth';
 import {
+<<<<<<< Updated upstream
   BOSS_SPECIAL_DAMAGE,
   getBossDefinition,
   type BossDefinition,
 } from '../world1/bosses';
 import { isEnemyLaserOffScreen, LASER_DAMAGE, spawnEnemyLaser, type EnemyLaserOptions } from '../entities/EnemyLaser';
+=======
+  getBossDefinition,
+  type BossDefinition,
+} from '../world1/bosses';
+import {
+  BOSS_SPECIAL_LASER_DAMAGE,
+  isEnemyLaserOffScreen,
+  LASER_DAMAGE,
+  spawnEnemyLaser,
+  type EnemyLaserOptions,
+} from '../entities/EnemyLaser';
+>>>>>>> Stashed changes
 import { HealthBar, MAX_HP } from '../ui/HealthBar';
 import { BossHealthBar } from '../ui/BossHealthBar';
 import {
@@ -979,6 +992,7 @@ export class GameScene extends Phaser.Scene {
 
     this.isChoosingWeapon = true;
     this.isDragging = false;
+    this.manualFireHeld = false;
     this.touchTarget = null;
     this.player.stopMove();
     this.dragIndicator?.clear();
@@ -1271,7 +1285,11 @@ export class GameScene extends Phaser.Scene {
     const ty = this.player.y;
     const baseAngle = Phaser.Math.Angle.Between(boss.x, boss.y, tx, ty);
     const specialOpts: EnemyLaserOptions = {
+<<<<<<< Updated upstream
       damage: BOSS_SPECIAL_DAMAGE,
+=======
+      damage: BOSS_SPECIAL_LASER_DAMAGE,
+>>>>>>> Stashed changes
       isSpecial: true,
     };
 
@@ -1730,7 +1748,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
-    if (this.isGameOver || this.isPaused) return;
+    if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
 
     this.updateStarfield(delta);
 

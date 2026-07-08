@@ -77,8 +77,12 @@ export function createVolumeSlider(
   };
 
   const pointerToTrackX = (pointer: Phaser.Input.Pointer) => {
+<<<<<<< Updated upstream
     const centerX = container.getBounds().centerX;
     return pointer.x - centerX;
+=======
+    return pointer.x - container.x;
+>>>>>>> Stashed changes
   };
 
   const updateFromPointer = (pointer: Phaser.Input.Pointer) => {
@@ -121,6 +125,7 @@ export function createVolumeSlider(
   };
 
   container.add([trackBg, trackFill, thumb, labelText, valueText]);
+<<<<<<< Updated upstream
   container.setSize(TRACK_WIDTH + THUMB_RADIUS * 2, 40);
   container.setInteractive(
     new Phaser.Geom.Rectangle(
@@ -128,6 +133,14 @@ export function createVolumeSlider(
       -20,
       TRACK_WIDTH + THUMB_RADIUS * 2,
       40,
+=======
+  container.setInteractive(
+    new Phaser.Geom.Rectangle(
+      -TRACK_WIDTH / 2 - THUMB_RADIUS,
+      -THUMB_RADIUS,
+      TRACK_WIDTH + THUMB_RADIUS * 2,
+      THUMB_RADIUS * 2,
+>>>>>>> Stashed changes
     ),
     Phaser.Geom.Rectangle.Contains,
   );

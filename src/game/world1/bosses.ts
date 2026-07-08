@@ -191,8 +191,11 @@ export const BOSS_DEFINITIONS: Record<number, BossDefinition> = {
   },
 };
 
+<<<<<<< Updated upstream
 export const BOSS_SPECIAL_DAMAGE = 10;
 
+=======
+>>>>>>> Stashed changes
 export function getBossDefinition(level: number): BossDefinition {
   return BOSS_DEFINITIONS[level] ?? BOSS_DEFINITIONS[1];
 }

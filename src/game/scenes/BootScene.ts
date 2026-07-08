@@ -20,6 +20,7 @@ export class BootScene extends Phaser.Scene {
     this.createPowerStarTexture();
     this.createSpiderShipTexture();
     this.createEnemyLaserTexture();
+    this.createBossSpecialLaserTexture();
     this.createLootBoxTexture();
     this.createHeavyBulletTexture();
     this.createSeekerDroneTexture();
@@ -178,6 +179,18 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(0xff8899, 0.9);
     g.fillRoundedRect(2, 2, 4, 8, 1);
     g.generateTexture('enemy-laser', 8, 20);
+    g.destroy();
+  }
+
+  private createBossSpecialLaserTexture(): void {
+    const g = this.make.graphics({ x: 0, y: 0 }, false);
+    g.fillStyle(0x6611bb, 1);
+    g.fillRoundedRect(0, 0, 10, 24, 2);
+    g.fillStyle(0xaa44ff, 0.95);
+    g.fillRoundedRect(2, 2, 6, 12, 1);
+    g.fillStyle(0xddbbff, 0.85);
+    g.fillRoundedRect(4, 4, 2, 8, 1);
+    g.generateTexture('boss-special-laser', 10, 24);
     g.destroy();
   }
 
