@@ -1,7 +1,8 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { formatCoinsLabel } from '../coins';
-import { WORLDS } from '../worlds';
+import { WORLDS, isWorldLocked } from '../worlds';
+import type { GameMode } from '../gameMode';
 import {
   createWorldOverviewCard,
   getWorldOverviewCardHeight,
@@ -9,9 +10,19 @@ import {
 } from '../ui/WorldOverviewCard';
 import { createMenuButton } from '../ui/MenuButtons';
 
+interface WorldSelectSceneData {
+  mode?: GameMode;
+}
+
 export class WorldSelectScene extends Phaser.Scene {
+  private mode: GameMode = 'story';
+
   constructor() {
     super({ key: 'WorldSelectScene' });
+  }
+
+  init(data: WorldSelectSceneData = {}): void {
+    this.mode = data.mode ?? 'story';
   }
 
   create(): void {
@@ -19,9 +30,10 @@ export class WorldSelectScene extends Phaser.Scene {
 
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0a0e27);
 
-    this.add.text(GAME_WIDTH / 2, 72, 'SELECT WORLD', {
+    const modeLabel = this.mode === 'story' ? 'STORY' : 'SURVIVAL';
+    this.add.text(GAME_WIDTH / 2, 72, `SELECT WORLD · ${modeLabel}`, {
       fontFamily: 'Orbitron, sans-serif',
-      fontSize: '28px',
+      fontSize: '24px',
       fontStyle: '900',
       color: '#00d4ff',
     }).setOrigin(0.5);
@@ -45,14 +57,22 @@ export class WorldSelectScene extends Phaser.Scene {
       const row = Math.floor(index / 2);
       const x = startX + col * (cardW + colGap);
       const y = startY + row * (cardH + rowGap);
+      const locked = isWorldLocked(world.id, this.mode);
 
       createWorldOverviewCard(this, {
         x,
         y,
-        world,
-        onClick: world.locked
+        world: { ...world, locked },
+        mode: this.mode,
+        onClick: locked
           ? undefined
-          : () => this.transitionTo('LevelSelectScene', { worldId: world.id }),
+          : () => {
+            if (this.mode === 'story') {
+              this.transitionTo('LevelSelectScene', { worldId: world.id, mode: this.mode });
+            } else {
+              this.transitionTo('GameScene', { mode: 'survival', worldId: world.id, level: world.id === 'world2' ? 11 : 1 });
+            }
+          },
       });
     });
 

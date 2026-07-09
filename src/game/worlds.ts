@@ -1,3 +1,6 @@
+import type { GameMode } from './gameMode';
+import { isWorldUnlocked as checkWorldUnlocked } from './worldProgress';
+
 export interface WorldMeta {
   id: string;
   number: number;
@@ -22,10 +25,10 @@ export const WORLDS: WorldMeta[] = [
     id: 'world2',
     number: 2,
     title: 'Outer Solar System',
-    subtitle: 'Jupiter → Neptune',
+    subtitle: 'Jupiter → Oort Cloud',
     locked: true,
-    levelCount: 0,
-    cardTheme: 'mars',
+    levelCount: 10,
+    cardTheme: 'jupiter',
   },
   {
     id: 'world3',
@@ -51,6 +54,16 @@ export function getWorld(id: string): WorldMeta | undefined {
   return WORLDS.find((world) => world.id === id);
 }
 
-export function getPlayableWorlds(): WorldMeta[] {
-  return WORLDS.filter((world) => !world.locked);
+export function getWorldLevelRange(worldId: string): { min: number; max: number } {
+  if (worldId === 'world2') return { min: 11, max: 20 };
+  return { min: 1, max: 10 };
+}
+
+export function isWorldLocked(worldId: string, mode: GameMode = 'story'): boolean {
+  if (worldId === 'world1') return false;
+  return !checkWorldUnlocked(worldId, mode);
+}
+
+export function getPlayableWorlds(mode: GameMode = 'story'): WorldMeta[] {
+  return WORLDS.filter((world) => !isWorldLocked(world.id, mode));
 }

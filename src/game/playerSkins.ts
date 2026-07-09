@@ -71,6 +71,30 @@ export const PLAYER_SKINS: PlayerSkinDefinition[] = [
     price: 250,
     description: 'Hot pink and cyan glow for maximum visibility.',
   },
+  {
+    id: 'obsidian',
+    name: 'Obsidian Fighter',
+    textureKey: 'rocket-obsidian',
+    appearanceId: 'obsidian',
+    price: 220,
+    description: 'Jet-black hull with a white outline and green thruster burn.',
+  },
+  {
+    id: 'amber',
+    name: 'Amber Vanguard',
+    textureKey: 'rocket-amber',
+    appearanceId: 'amber',
+    price: 280,
+    description: 'Neon orange hull with vivid purple exhaust trails.',
+  },
+  {
+    id: 'sapphire',
+    name: 'Apollo Sapphire',
+    textureKey: 'rocket-sapphire',
+    appearanceId: 'sapphire',
+    price: 300,
+    description: 'Royal blue plating with sky-blue flames tipped in gold.',
+  },
 ];
 
 function getSkinById(id: string): PlayerSkinDefinition | undefined {

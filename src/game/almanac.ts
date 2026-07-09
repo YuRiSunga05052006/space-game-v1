@@ -19,12 +19,16 @@ import {
   TURRET_POINTS,
 } from './entities/PlasmaTurret';
 import { ASTEROID_DAMAGE, ASTEROID_DATA, GOLD_ASTEROID_HEALTH, GOLD_ASTEROID_TEXTURES, type AsteroidSize } from './entities/Asteroid';
-import { getGoldAsteroidCoinReward } from './coinDrops';
-import { BOSS_DEFINITIONS } from './world1/bosses';
-import { STORY_ENEMY_DEFINITIONS, type StoryEnemyBehavior } from './world1/storyEnemyDefinitions';
+import { COMET_DAMAGE, COMET_POINTS, GOLD_COMET_POINTS } from './entities/Comet';
+import { getGoldAsteroidCoinReward, getGoldCometCoinReward } from './coinDrops';
+import { BOSS_DEFINITIONS as WORLD1_BOSSES } from './world1/bosses';
+import { BOSS_DEFINITIONS as WORLD2_BOSSES } from './world2/bosses';
+import { STORY_ENEMY_DEFINITIONS as WORLD1_STORY_ENEMIES, type StoryEnemyBehavior } from './world1/storyEnemyDefinitions';
+import { STORY_ENEMY_DEFINITIONS as WORLD2_STORY_ENEMIES } from './world2/storyEnemyDefinitions';
 import { getStoryEnemyUnlockScore, getSurvivalBossUnlockScore } from './survivalSpawn';
+import { isWorld2Unlocked } from './worldProgress';
 
-export type AlmanacCategory = 'asteroid' | 'goldAsteroid' | 'storyEnemy' | 'enemy' | 'boss';
+export type AlmanacCategory = 'asteroid' | 'goldAsteroid' | 'storyEnemy' | 'enemy' | 'boss' | 'comet' | 'goldComet';
 
 export interface AlmanacEntry {
   id: string;
@@ -35,6 +39,7 @@ export interface AlmanacEntry {
   subtitle?: string;
   description: string;
   stats: string;
+  worldGated?: boolean;
 }
 
 const ASTEROID_NAMES: Record<AsteroidSize, string> = {
@@ -150,48 +155,89 @@ const STORY_BEHAVIOR_DESCRIPTIONS: Record<StoryEnemyBehavior, string> = {
   hybridHunter: 'Chases your ship and fires periodic lasers.',
 };
 
-function buildStoryEnemyEntries(): AlmanacEntry[] {
-  return Object.values(STORY_ENEMY_DEFINITIONS)
+function buildStoryEnemyEntries(
+  definitions: Record<number, { level: number; enemyName: string; textureKey: string; health: number; bodyDamage: number; points: number; behavior: StoryEnemyBehavior }>,
+  worldId: string,
+  worldLabel: string,
+): AlmanacEntry[] {
+  return Object.values(definitions)
     .sort((a, b) => a.level - b.level)
     .map((enemy) => {
-      const unlockScore = getStoryEnemyUnlockScore(enemy.level);
+      const unlockScore = getStoryEnemyUnlockScore(enemy.level, worldId);
       return {
-        id: `story-enemy-${enemy.level}`,
-        category: 'storyEnemy',
+        id: `story-enemy-${worldId}-${enemy.level}`,
+        category: 'storyEnemy' as const,
         name: enemy.enemyName,
         textureKey: enemy.textureKey,
         textureScale: 1,
-        subtitle: `Story L${enemy.level} · Survival ${unlockScore}+ score`,
+        subtitle: `${worldLabel} L${enemy.level} · Survival ${unlockScore}+ score`,
         description: `${STORY_BEHAVIOR_DESCRIPTIONS[enemy.behavior]} Story levels use this enemy exclusively.${STORY_SURVIVAL_SUFFIX}`,
         stats: `HP ${enemy.health} · DMG ${enemy.bodyDamage} · ${enemy.points} pts`,
+        worldGated: worldId === 'world2',
       };
     });
 }
 
-function buildBossEntries(): AlmanacEntry[] {
-  return Object.values(BOSS_DEFINITIONS)
+function buildBossEntries(
+  definitions: Record<number, { level: number; bossName: string; textureKey: string; baseScale?: number; baseHealth: number; bodyDamage: number; points: number; special: { name: string } }>,
+  worldId: string,
+  worldLabel: string,
+): AlmanacEntry[] {
+  return Object.values(definitions)
     .sort((a, b) => a.level - b.level)
     .map((boss) => {
-      const survivalUnlock = getSurvivalBossUnlockScore(boss.level);
+      const survivalUnlock = getSurvivalBossUnlockScore(boss.level, worldId);
       return {
-        id: `boss-${boss.level}`,
-        category: 'boss',
+        id: `boss-${worldId}-${boss.level}`,
+        category: 'boss' as const,
         name: boss.bossName,
         textureKey: boss.textureKey,
         textureScale: boss.baseScale ?? 1,
-        subtitle: `Story L${boss.level} · Survival ${survivalUnlock}+ score`,
+        subtitle: `${worldLabel} L${boss.level} · Survival ${survivalUnlock}+ score`,
         description: `Special: ${boss.special.name}. Story: defeating ends the level. Survival: awards points and coins, then the run continues.`,
         stats: `HP ${boss.baseHealth} · DMG ${boss.bodyDamage} · ${boss.points} pts`,
+        worldGated: worldId === 'world2',
       };
     });
+}
+
+function buildCometEntries(): AlmanacEntry[] {
+  const goldCoins = getGoldCometCoinReward();
+  return [
+    {
+      id: 'comet-normal',
+      category: 'comet',
+      name: 'Comet',
+      textureKey: 'comet',
+      textureScale: 1,
+      subtitle: 'Story L16+ · World 2 Survival',
+      description: 'Fast icy hazard with a glowing tail. Appears from Kuiper Belt onward.',
+      stats: `DMG ${COMET_DAMAGE} · ${COMET_POINTS} pts`,
+      worldGated: true,
+    },
+    {
+      id: 'comet-gold',
+      category: 'goldComet',
+      name: 'Gold Comet',
+      textureKey: 'comet-gold',
+      textureScale: 1,
+      subtitle: 'Story L16+ · World 2 Survival',
+      description: 'Rare golden comet. Destroy to earn bonus coins.',
+      stats: `DMG ${COMET_DAMAGE} · ${GOLD_COMET_POINTS} pts · +${goldCoins} coins`,
+      worldGated: true,
+    },
+  ];
 }
 
 export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   ...buildAsteroidEntries(),
   ...buildGoldAsteroidEntries(),
-  ...buildStoryEnemyEntries(),
+  ...buildStoryEnemyEntries(WORLD1_STORY_ENEMIES, 'world1', 'Story W1'),
+  ...buildStoryEnemyEntries(WORLD2_STORY_ENEMIES, 'world2', 'Story W2'),
   ...ENEMY_ENTRIES,
-  ...buildBossEntries(),
+  ...buildBossEntries(WORLD1_BOSSES, 'world1', 'Story W1'),
+  ...buildBossEntries(WORLD2_BOSSES, 'world2', 'Story W2'),
+  ...buildCometEntries(),
 ];
 
 export const ALMANAC_SECTIONS: { label: string; category: AlmanacCategory }[] = [
@@ -200,4 +246,21 @@ export const ALMANAC_SECTIONS: { label: string; category: AlmanacCategory }[] = 
   { label: 'STORY ENEMIES', category: 'storyEnemy' },
   { label: 'SURVIVAL ENEMIES', category: 'enemy' },
   { label: 'BOSSES', category: 'boss' },
+  { label: 'COMETS', category: 'comet' },
+  { label: 'GOLD COMETS', category: 'goldComet' },
 ];
+
+export function isAlmanacEntryVisible(entry: AlmanacEntry): boolean {
+  if (!entry.worldGated) return true;
+  return isWorld2Unlocked();
+}
+
+export function getVisibleAlmanacEntries(): AlmanacEntry[] {
+  return ALMANAC_ENTRIES.filter(isAlmanacEntryVisible);
+}
+
+export function getVisibleAlmanacSections(): { label: string; category: AlmanacCategory }[] {
+  return ALMANAC_SECTIONS.filter((section) =>
+    getVisibleAlmanacEntries().some((entry) => entry.category === section.category),
+  );
+}

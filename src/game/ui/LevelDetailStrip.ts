@@ -1,19 +1,21 @@
-import Phaser from 'phaser';
-import { isLevelUnlocked } from '../storyProgress';
-import { getWorld1Level } from '../world1/levels';
-import { getBackgroundTheme } from '../world1/backgrounds';
+﻿import Phaser from 'phaser';
+import { isLevelUnlocked, getHighestUnlockedLevelForWorld } from '../storyProgress';
+import { getLevelMeta, getBackgroundTheme } from '../levelResolver';
+import { getSecretLevel } from '../world1/secretLevels';
 
 export interface LevelDetailStripConfig {
   x: number;
   y: number;
   width: number;
+  worldId: string;
   initialLevel: number;
-  onPlay: (level: number) => void;
+  initialSecretId?: string;
+  onPlay: (level: number, secretId?: string) => void;
 }
 
 export interface LevelDetailStripHandle {
   container: Phaser.GameObjects.Container;
-  setLevel: (level: number) => void;
+  setLevel: (level: number, secretId?: string) => void;
 }
 
 function hexColor(color: number): string {
@@ -67,9 +69,10 @@ export function createLevelDetailStrip(
   scene: Phaser.Scene,
   config: LevelDetailStripConfig,
 ): LevelDetailStripHandle {
-  const { x, y, width, initialLevel, onPlay } = config;
+  const { x, y, width, worldId, initialLevel, initialSecretId, onPlay } = config;
   const container = scene.add.container(x, y);
   let currentLevel = initialLevel;
+  let currentSecretId = initialSecretId;
   let playBtn!: Phaser.GameObjects.Container;
 
   const bg = scene.add.graphics();
@@ -100,10 +103,24 @@ export function createLevelDetailStrip(
 
   container.add([locationText, bossText, statusText]);
 
-  const updateDisplay = (level: number) => {
+  const updateDisplay = (level: number, secretId?: string) => {
     currentLevel = level;
-    const meta = getWorld1Level(level);
-    const theme = getBackgroundTheme(meta.themeId);
+    currentSecretId = secretId;
+
+    if (secretId) {
+      const secret = getSecretLevel(secretId);
+      const theme = getBackgroundTheme(worldId, secret?.themeId ?? 'iss');
+      locationText.setText(`SECRET · ${(secret?.name ?? 'ISS').toUpperCase()}`);
+      locationText.setColor(hexColor(theme.accentColor));
+      bossText.setText('No boss — reach warp panel');
+      statusText.setText('Ready to launch');
+      playBtn.setVisible(true);
+      playBtn.setAlpha(1);
+      return;
+    }
+
+    const meta = getLevelMeta(worldId, level);
+    const theme = getBackgroundTheme(worldId, meta.themeId);
     const unlocked = isLevelUnlocked(level);
 
     locationText.setText(`LEVEL ${level} · ${meta.location.toUpperCase()}`);
@@ -115,25 +132,26 @@ export function createLevelDetailStrip(
   };
 
   playBtn = createPlayButton(scene, width / 2 - 78, 24, () => {
+    if (currentSecretId) {
+      onPlay(currentLevel, currentSecretId);
+      return;
+    }
     if (isLevelUnlocked(currentLevel)) {
       onPlay(currentLevel);
     }
   });
   container.add(playBtn);
 
-  updateDisplay(initialLevel);
+  updateDisplay(initialLevel, initialSecretId);
 
   return {
     container,
-    setLevel: (level: number) => {
-      updateDisplay(level);
+    setLevel: (level: number, secretId?: string) => {
+      updateDisplay(level, secretId);
     },
   };
 }
 
-export function getHighestUnlockedLevel(): number {
-  for (let level = 10; level >= 1; level--) {
-    if (isLevelUnlocked(level)) return level;
-  }
-  return 1;
+export function getHighestUnlockedLevel(worldId = 'world1'): number {
+  return getHighestUnlockedLevelForWorld(worldId);
 }

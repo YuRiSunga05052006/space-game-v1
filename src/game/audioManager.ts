@@ -9,6 +9,10 @@ let musicOscillators: OscillatorNode[] = [];
 let musicArpTimer: ReturnType<typeof setInterval> | null = null;
 let musicPlaying = false;
 let musicMutedByPause = false;
+let playerExplosionBuffer: AudioBuffer | null = null;
+let playerExplosionLoadPromise: Promise<AudioBuffer | null> | null = null;
+
+const PLAYER_EXPLOSION_URL = '/assets/player-explosion.mp3';
 
 function ensureContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -44,6 +48,58 @@ function getEffectiveSfxGain(): number {
 
 export function initAudio(): void {
   ensureContext();
+  preloadPlayerExplosionSfx();
+}
+
+function loadPlayerExplosionBuffer(): Promise<AudioBuffer | null> {
+  if (playerExplosionBuffer) {
+    return Promise.resolve(playerExplosionBuffer);
+  }
+
+  if (!playerExplosionLoadPromise) {
+    playerExplosionLoadPromise = (async () => {
+      const audioCtx = ensureContext();
+      if (!audioCtx) return null;
+
+      try {
+        const response = await fetch(PLAYER_EXPLOSION_URL);
+        if (!response.ok) return null;
+
+        const arrayBuffer = await response.arrayBuffer();
+        playerExplosionBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        return playerExplosionBuffer;
+      } catch {
+        return null;
+      }
+    })();
+  }
+
+  return playerExplosionLoadPromise;
+}
+
+export function preloadPlayerExplosionSfx(): void {
+  void loadPlayerExplosionBuffer();
+}
+
+export function playPlayerExplosionSfx(): void {
+  const audioCtx = ensureContext();
+  if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
+
+  void loadPlayerExplosionBuffer().then((buffer) => {
+    if (!buffer || !ctx || !sfxGain) {
+      playSfx('explosion');
+      return;
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.9;
+    source.connect(gain);
+    gain.connect(sfxGain);
+    source.start();
+  });
 }
 
 export function applyAudioSettings(): void {

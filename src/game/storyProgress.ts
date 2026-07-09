@@ -1,7 +1,9 @@
 import { getWorld1LevelCount } from './world1/levels';
+import { getWorld2LevelCount } from './world2/levels';
+import { isWorld2StoryUnlocked } from './worldProgress';
 
 const STORAGE_KEY = 'star-blaster-story-progress';
-const MAX_LEVEL = getWorld1LevelCount();
+const MAX_LEVEL = getWorld1LevelCount() + getWorld2LevelCount();
 
 function readUnlocked(): number[] {
   try {
@@ -32,11 +34,13 @@ export function getUnlockedLevels(): number[] {
 }
 
 export function isLevelUnlocked(level: number): boolean {
+  if (level >= 11 && !isWorld2StoryUnlocked()) return false;
   return readUnlocked().includes(level);
 }
 
 export function unlockLevel(level: number): void {
   if (level < 1 || level > MAX_LEVEL) return;
+  if (level >= 11 && !isWorld2StoryUnlocked()) return;
   const levels = readUnlocked();
   if (!levels.includes(level)) {
     levels.push(level);
@@ -46,4 +50,21 @@ export function unlockLevel(level: number): void {
 
 export function getMaxLevelSlots(): number {
   return MAX_LEVEL;
+}
+
+export function getHighestUnlockedLevelForWorld(worldId: string): number {
+  const world1Max = getWorld1LevelCount();
+  const world2Max = getWorld1LevelCount() + getWorld2LevelCount();
+
+  if (worldId === 'world2') {
+    for (let level = world2Max; level > world1Max; level--) {
+      if (isLevelUnlocked(level)) return level;
+    }
+    return world1Max + 1;
+  }
+
+  for (let level = world1Max; level >= 1; level--) {
+    if (isLevelUnlocked(level)) return level;
+  }
+  return 1;
 }

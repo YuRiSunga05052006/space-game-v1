@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import type { StoryEnemyDefinition, StoryEnemyBehavior } from '../world1/storyEnemyDefinitions';
+import type { StoryEnemyDefinition, StoryEnemyBehavior } from '../levelResolver';
 
 export type StoryEnemyFireCallback = (x: number, y: number, angle: number) => void;
 

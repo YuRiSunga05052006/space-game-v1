@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import { getEquippedSkinTextureKey } from '../playerSkins';
+import { getEquippedSkinTextureKey, getEquippedSkinId, PLAYER_SKINS } from '../playerSkins';
+import { getThrusterTints, ROCKET_ENGINE_OFFSET_Y } from '../rocketAppearances';
 import {
   buildFirePattern,
   computePlayerPowerScore,
@@ -14,6 +15,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly baseMaxSpeed = 280;
   private lastFired = 0;
   private thruster?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private smokeTrail?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private smokeEmitCooldown = 0;
+  private readonly smokeEmitIntervalMs = 16;
+  private readonly engineWorldPos = new Phaser.Math.Vector2();
+  private readonly worldMatrix = new Phaser.GameObjects.Components.TransformMatrix();
   private isMoving = false;
 
   private invincible = false;
@@ -82,18 +88,45 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private createThruster(): void {
+    const equippedSkin = PLAYER_SKINS.find((skin) => skin.id === getEquippedSkinId());
+    const tint = equippedSkin
+      ? getThrusterTints(equippedSkin.appearanceId)
+      : [0xff6b35, 0xffcc00, 0xff4400];
+
     this.thruster = this.scene.add.particles(0, 0, 'particle', {
-      speed: { min: 40, max: 100 },
-      scale: { start: 0.6, end: 0 },
-      alpha: { start: 0.8, end: 0 },
-      lifespan: 300,
-      tint: [0xff6b35, 0xffcc00, 0xff4400],
-      angle: { min: 80, max: 100 },
+      speed: { min: 60, max: 140 },
+      scale: { start: 1.4, end: 0.1 },
+      alpha: { start: 0.95, end: 0 },
+      lifespan: 700,
+      tint,
+      angle: {
+        onEmit: () => {
+          const exhaustDeg = Phaser.Math.RadToDeg(this.rotation) + 90;
+          return Phaser.Math.FloatBetween(exhaustDeg - 12, exhaustDeg + 12);
+        },
+      },
       frequency: -1,
-      follow: this,
-      followOffset: { x: 0, y: 24 },
     });
     this.thruster.setDepth(9);
+
+    this.smokeTrail = this.scene.add.particles(0, 0, 'smoke-particle', {
+      speed: { min: 0, max: 2 },
+      scale: { start: 0.85, end: 0.3 },
+      alpha: { start: 0.28, end: 0 },
+      lifespan: 900,
+      tint,
+      rotate: {
+        onEmit: () => Phaser.Math.RadToDeg(this.rotation) + 90 + Phaser.Math.FloatBetween(-8, 8),
+      },
+      frequency: -1,
+    });
+    this.smokeTrail.setDepth(8);
+  }
+
+  private getEngineWorldPosition(): { x: number; y: number } {
+    this.getWorldTransformMatrix(this.worldMatrix);
+    this.worldMatrix.transformPoint(0, ROCKET_ENGINE_OFFSET_Y, this.engineWorldPos);
+    return { x: this.engineWorldPos.x, y: this.engineWorldPos.y };
   }
 
   isInvincible(): boolean {
@@ -181,9 +214,40 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.isMoving = false;
   }
 
+  hideForDeath(): void {
+    this.stopMove();
+    this.setVisible(false);
+    this.thruster?.setVisible(false);
+    this.smokeTrail?.setVisible(false);
+    if (this.body) {
+      this.body.enable = false;
+    }
+  }
+
   updateThruster(_time: number, _delta: number): void {
     if (this.isMoving && this.thruster) {
+      const engine = this.getEngineWorldPosition();
+      this.thruster.setPosition(engine.x, engine.y);
       this.thruster.emitParticle();
+      this.thruster.emitParticle();
+      this.thruster.emitParticle();
+
+      if (this.smokeTrail) {
+        this.smokeEmitCooldown += _delta;
+        if (this.smokeEmitCooldown >= this.smokeEmitIntervalMs) {
+          this.smokeEmitCooldown = 0;
+          const perpRad = this.rotation;
+          const spreads = [0, 6, -6, 10, -10];
+          for (const spread of spreads) {
+            this.smokeTrail.emitParticleAt(
+              engine.x + Math.cos(perpRad) * spread,
+              engine.y + Math.sin(perpRad) * spread,
+            );
+          }
+        }
+      }
+    } else {
+      this.smokeEmitCooldown = 0;
     }
     if (this.invincible && this.rainbowGlow) {
       this.drawRainbowGlow();
@@ -199,7 +263,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   getBulletSpawnPoint(): { x: number; y: number } {
-    return { x: this.x, y: this.y - 26 };
+    this.getWorldTransformMatrix(this.worldMatrix);
+    this.worldMatrix.transformPoint(0, -ROCKET_ENGINE_OFFSET_Y, this.engineWorldPos);
+    return { x: this.engineWorldPos.x, y: this.engineWorldPos.y };
   }
 
   moveTowardTarget(tx: number, ty: number, strength = 1): void {
@@ -223,6 +289,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   destroy(fromScene?: boolean): void {
     this.deactivateInvincibility();
     this.thruster?.destroy();
+    this.smokeTrail?.destroy();
     super.destroy(fromScene);
   }
 }

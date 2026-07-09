@@ -1,11 +1,14 @@
-import { getStoryEnemyDefinition } from './world1/storyEnemyDefinitions';
+import { getStoryEnemyDefinition } from './levelResolver';
+import { getWorldIdFromLevel } from './gameMode';
 
 export function getStoryEnemySpawnInterval(level: number): number {
-  return getStoryEnemyDefinition(level).spawnIntervalMs;
+  const worldId = getWorldIdFromLevel(level);
+  return getStoryEnemyDefinition(worldId, level).spawnIntervalMs;
 }
 
 export function getStoryEnemyMaxOnScreen(level: number): number {
-  return getStoryEnemyDefinition(level).maxOnScreen;
+  const worldId = getWorldIdFromLevel(level);
+  return getStoryEnemyDefinition(worldId, level).maxOnScreen;
 }
 
 export function canSpawnStoryEnemy(level: number, activeCount: number): boolean {

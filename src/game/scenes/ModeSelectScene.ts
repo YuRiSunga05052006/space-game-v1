@@ -1,5 +1,4 @@
-import Phaser from 'phaser';
-import { initAudio, startMusic } from '../audioManager';
+﻿import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { createMenuButton } from '../ui/MenuButtons';
 
@@ -37,16 +36,12 @@ export class ModeSelectScene extends Phaser.Scene {
       {
         label: 'STORY',
         color: 0x00d4ff,
-        onClick: () => this.transitionTo('WorldSelectScene'),
+        onClick: () => this.transitionTo('WorldSelectScene', { mode: 'story' }),
       },
       {
         label: 'SURVIVAL',
         color: 0xffcc00,
-        onClick: () => {
-          initAudio();
-          startMusic();
-          this.transitionTo('GameScene', { mode: 'survival', level: 1 });
-        },
+        onClick: () => this.transitionTo('WorldSelectScene', { mode: 'survival' }),
       },
       {
         label: 'BACK',

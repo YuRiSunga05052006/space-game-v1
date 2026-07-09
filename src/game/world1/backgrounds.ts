@@ -1,11 +1,11 @@
-export interface BackgroundTheme {
+﻿export interface BackgroundTheme {
   id: string;
   skyTop: number;
   skyBottom: number;
   starColor: number;
   planetColor: number;
   planetSize: number;
-  /** Horizontal position as fraction of screen width (0–1). */
+  /** Horizontal position as fraction of screen width (0â€“1). */
   planetX: number;
   accentColor: number;
 }
@@ -110,6 +110,16 @@ export const BACKGROUND_THEMES: Record<string, BackgroundTheme> = {
     planetSize: 80,
     planetX: 0.5,
     accentColor: 0xcc6644,
+  },
+  iss: {
+    id: 'iss',
+    skyTop: 0x020208,
+    skyBottom: 0x0c1a3a,
+    starColor: 0xccccff,
+    planetColor: 0x8899aa,
+    planetSize: 0,
+    planetX: 0.5,
+    accentColor: 0x00d4ff,
   },
   survival: {
     id: 'survival',

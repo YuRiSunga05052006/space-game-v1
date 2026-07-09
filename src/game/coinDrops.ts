@@ -22,3 +22,12 @@ export function rollEnemyCoinDrop(): number | null {
   }
   return null;
 }
+
+export const COMET_SPAWN_CHANCE = 0.03;
+export const GOLD_COMET_SPAWN_CHANCE = 0.005;
+export const MAX_COMETS_ON_SCREEN = 2;
+export const GOLD_COMET_COIN_REWARD = 15;
+
+export function getGoldCometCoinReward(): number {
+  return GOLD_COMET_COIN_REWARD;
+}

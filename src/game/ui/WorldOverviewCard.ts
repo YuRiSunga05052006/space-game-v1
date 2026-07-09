@@ -1,5 +1,6 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import type { WorldMeta } from '../worlds';
+import type { GameMode } from '../gameMode';
 import { getBackgroundTheme } from '../world1/backgrounds';
 
 const CARD_WIDTH = 170;
@@ -74,6 +75,7 @@ export interface WorldOverviewCardConfig {
   x: number;
   y: number;
   world: WorldMeta;
+  mode?: GameMode;
   onClick?: () => void;
 }
 

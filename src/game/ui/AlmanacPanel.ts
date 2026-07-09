@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import { ALMANAC_ENTRIES, ALMANAC_SECTIONS, type AlmanacEntry } from '../almanac';
+import { getVisibleAlmanacEntries, getVisibleAlmanacSections, type AlmanacEntry } from '../almanac';
 import { createMenuButton } from './MenuButtons';
 
 const SCROLL_TOP = 118;
@@ -68,9 +68,9 @@ function createEntryCard(scene: Phaser.Scene, entry: AlmanacEntry, y: number): P
 
 function buildContentHeight(): number {
   let height = 0;
-  for (const section of ALMANAC_SECTIONS) {
+  for (const section of getVisibleAlmanacSections()) {
     height += SECTION_HEADER_HEIGHT;
-    height += ALMANAC_ENTRIES.filter((e) => e.category === section.category).length * ENTRY_HEIGHT;
+    height += getVisibleAlmanacEntries().filter((e) => e.category === section.category).length * ENTRY_HEIGHT;
   }
   return height;
 }
@@ -117,7 +117,7 @@ export function createAlmanacPanel(
   scrollViewport.add(content);
 
   let y = 0;
-  for (const section of ALMANAC_SECTIONS) {
+  for (const section of getVisibleAlmanacSections()) {
     const header = scene.add.text(GAME_WIDTH / 2, y + 16, section.label, {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '12px',
@@ -127,7 +127,7 @@ export function createAlmanacPanel(
     content.add(header);
     y += SECTION_HEADER_HEIGHT;
 
-    const entries = ALMANAC_ENTRIES.filter((entry) => entry.category === section.category);
+    const entries = getVisibleAlmanacEntries().filter((entry) => entry.category === section.category);
     for (const entry of entries) {
       content.add(createEntryCard(scene, entry, y));
       y += ENTRY_HEIGHT;

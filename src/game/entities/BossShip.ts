@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import type { BossDefinition } from '../world1/bosses';
+import type { BossDefinition } from '../levelResolver';
 
 export type BossFireCallback = (x: number, y: number, angle: number) => void;
 export type BossSpecialCallback = () => void;
