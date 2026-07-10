@@ -34,7 +34,7 @@ const ENEMY_BASE_MAX: Record<EnemyKind, number> = {
 /** Minimum ms between any enemy spawn attempt. */
 export const ENEMY_SPAWN_TICK_MS = 2500;
 
-/** Survival score bands: 0-999 none, 1000+ spider, 2000+ seeker, 4000+ wasp, 5000+ turret. */
+/** Score bands: 0-999 none, 1000+ spider, 2000+ seeker, 4000+ wasp, 5000+ turret. */
 export function getUnlockedEnemyKinds(score: number): EnemyKind[] {
   const kinds: EnemyKind[] = [];
   if (score >= 1000) kinds.push('spider');

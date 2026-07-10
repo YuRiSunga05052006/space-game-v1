@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { playSfx } from '../audioManager';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import type { Weapon } from '../weapons';
 
@@ -50,7 +51,10 @@ function createWeaponCard(
 
   card.on('pointerover', () => drawBg(1, 1));
   card.on('pointerout', () => drawBg(0.9, 0.8));
-  card.on('pointerup', onSelect);
+  card.on('pointerup', () => {
+    playSfx('ui');
+    onSelect();
+  });
 
   return card;
 }

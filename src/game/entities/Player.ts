@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
+import { startInvincibilityTheme, stopInvincibilityTheme } from '../audioManager';
 import { getEquippedSkinTextureKey, getEquippedSkinId, PLAYER_SKINS } from '../playerSkins';
 import { getThrusterTints, ROCKET_ENGINE_OFFSET_Y } from '../rocketAppearances';
 import {
@@ -133,6 +134,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.invincible;
   }
 
+  getIsMoving(): boolean {
+    return this.isMoving;
+  }
+
   activateInvincibility(durationMs: number): void {
     this.invincible = true;
     this.invincibleTimer?.remove(false);
@@ -140,6 +145,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.deactivateInvincibility();
     });
     this.startRainbowGlow();
+    startInvincibilityTheme();
   }
 
   deactivateInvincibility(): void {
@@ -147,6 +153,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.invincibleTimer?.remove(false);
     this.invincibleTimer = undefined;
     this.stopRainbowGlow();
+    stopInvincibilityTheme();
   }
 
   private startRainbowGlow(): void {

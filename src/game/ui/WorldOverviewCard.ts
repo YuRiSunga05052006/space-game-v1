@@ -1,4 +1,5 @@
 ﻿import Phaser from 'phaser';
+import { playSfx } from '../audioManager';
 import type { WorldMeta } from '../worlds';
 import type { GameMode } from '../gameMode';
 import { getBackgroundTheme } from '../world1/backgrounds';
@@ -123,7 +124,10 @@ export function createWorldOverviewCard(
     container.setInteractive({ useHandCursor: true });
     container.on('pointerover', () => drawCard(1));
     container.on('pointerout', () => drawCard(0.9));
-    container.on('pointerup', onClick);
+    container.on('pointerup', () => {
+      playSfx('ui');
+      onClick();
+    });
   }
 
   if (world.locked) {

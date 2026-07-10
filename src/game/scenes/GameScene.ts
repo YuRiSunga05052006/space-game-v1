@@ -81,7 +81,18 @@ import {
   completeSecretIss,
 } from '../worldProgress';
 import { applyStoryBackground } from '../ui/StoryThemeBackground';
-import { applyAudioSettings, initAudio, pauseMusic, playPlayerExplosionSfx, playSfx, resumeMusic, startMusic } from '../audioManager';
+import {
+  applyAudioSettings,
+  initAudio,
+  pauseMusic,
+  playExplosionSfx,
+  playSfx,
+  resumeMusic,
+  setRocketEngineActive,
+  startMusic,
+  stopInvincibilityTheme,
+  stopRocketEngineSfx,
+} from '../audioManager';
 import { normalizeGameSceneData, type GameMode } from '../gameMode';
 import { getAutoFire } from '../settings';
 import { createSettingsPanel } from '../ui/SettingsPanel';
@@ -271,6 +282,11 @@ export class GameScene extends Phaser.Scene {
 
     initAudio();
     startMusic();
+    stopRocketEngineSfx();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      stopRocketEngineSfx();
+      stopInvincibilityTheme();
+    });
 
     this.spawnAsteroid('lg');
     for (let i = 0; i < 4; i++) {
@@ -460,7 +476,10 @@ export class GameScene extends Phaser.Scene {
 
     btn.on('pointerover', () => btn.setColor('#00d4ff'));
     btn.on('pointerout', () => btn.setColor('#8899bb'));
-    btn.on('pointerup', () => this.togglePause());
+    btn.on('pointerup', () => {
+      playSfx('ui');
+      this.togglePause();
+    });
   }
 
   private setupInput(): void {
@@ -504,6 +523,7 @@ export class GameScene extends Phaser.Scene {
       this.isDragging = false;
       this.touchTarget = null;
       this.player.stopMove();
+      stopRocketEngineSfx();
       this.dragIndicator?.clear();
     });
 
@@ -511,6 +531,7 @@ export class GameScene extends Phaser.Scene {
       this.isDragging = false;
       this.touchTarget = null;
       this.player.stopMove();
+      stopRocketEngineSfx();
       this.dragIndicator?.clear();
     });
   }
@@ -777,7 +798,7 @@ export class GameScene extends Phaser.Scene {
       const { x, y } = boss;
       this.bossHealthBar.hide();
       this.addScore(boss.points);
-      this.spawnExplosion(x, y, 20);
+      this.spawnBigExplosion(x, y);
       this.lastDefeatedBossX = x;
       this.lastDefeatedBossY = y;
       this.onBossDefeated();
@@ -911,6 +932,7 @@ export class GameScene extends Phaser.Scene {
     this.isDragging = false;
     this.touchTarget = null;
     this.player.stopMove();
+    stopRocketEngineSfx();
     this.dragIndicator?.clear();
     this.physics.pause();
     this.time.paused = true;
@@ -1312,6 +1334,7 @@ export class GameScene extends Phaser.Scene {
     this.manualFireHeld = false;
     this.touchTarget = null;
     this.player.stopMove();
+    stopRocketEngineSfx();
     this.dragIndicator?.clear();
     this.physics.pause();
     this.time.paused = true;
@@ -1433,7 +1456,8 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.pause();
     this.player.hideForDeath();
-    this.spawnPlayerDeathExplosion(deathX, deathY);
+    stopRocketEngineSfx();
+    this.spawnBigExplosion(deathX, deathY);
     this.cameras.main.shake(400, 0.025);
     this.cameras.main.flash(250, 255, 120, 60);
 
@@ -2124,10 +2148,6 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
-    if (this.gameMode === 'story') {
-      return;
-    }
-
     this.spiderShips.children.each((child) => {
       (child as SpiderShip).tryFire(time, px, py);
       return true;
@@ -2164,8 +2184,8 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(600, () => emitter.destroy());
   }
 
-  private spawnPlayerDeathExplosion(x: number, y: number): void {
-    playPlayerExplosionSfx();
+  private spawnBigExplosion(x: number, y: number): void {
+    playExplosionSfx();
     const burst = this.add.particles(x, y, 'particle', {
       speed: { min: 90, max: 300 },
       scale: { start: 1.6, end: 0 },
@@ -2402,8 +2422,37 @@ export class GameScene extends Phaser.Scene {
     comet.setVelocity(config.velocityX, config.velocityY);
   }
 
+  private isMovementInputHeld(): boolean {
+    if (this.isDragging) return true;
+    if (!this.input.keyboard) return false;
+
+    return (
+      this.cursors.left.isDown
+      || this.cursors.right.isDown
+      || this.cursors.up.isDown
+      || this.cursors.down.isDown
+      || this.wasd.A.isDown
+      || this.wasd.D.isDown
+      || this.wasd.W.isDown
+      || this.wasd.S.isDown
+    );
+  }
+
+  private syncRocketEngineSound(): void {
+    const shouldPlay =
+      !this.isGameOver
+      && !this.isPaused
+      && !this.isChoosingWeapon
+      && !this.isHitStunned
+      && this.isMovementInputHeld();
+    setRocketEngineActive(shouldPlay);
+  }
+
   update(time: number, delta: number): void {
-    if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
+    if (this.isGameOver || this.isPaused || this.isChoosingWeapon) {
+      stopRocketEngineSfx();
+      return;
+    }
 
     this.updateStarfield(delta);
 
@@ -2411,8 +2460,11 @@ export class GameScene extends Phaser.Scene {
       this.handleKeyboardMovement();
       this.handleTouchMovement();
       this.handleShooting(time);
+    } else {
+      stopRocketEngineSfx();
     }
 
+    this.syncRocketEngineSound();
     this.player.updateThruster(time, delta);
     if (!this.isHitStunned) {
       this.player.clampToBounds();
@@ -2469,6 +2521,17 @@ export class GameScene extends Phaser.Scene {
         if (this.storyEnemySpawnTimer >= interval) {
           this.storyEnemySpawnTimer = 0;
           this.spawnStoryEnemy();
+        }
+      }
+
+      // Survival enemies also appear in story levels, unlocked/escalated by score.
+      this.enemySpawnTimer += delta;
+      if (!this.bossActive) {
+        const enemyInterval = getEnemySpawnInterval(this.score);
+        if (this.enemySpawnTimer >= enemyInterval) {
+          this.enemySpawnTimer = 0;
+          const kind = pickEnemyToSpawn(this.score, this.getEnemyCounts());
+          if (kind) this.spawnEnemy(kind);
         }
       }
     } else {

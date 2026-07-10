@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { playSfx } from '../audioManager';
 import { isLevelUnlocked } from '../storyProgress';
 import { getLevelMeta, getBackgroundTheme, getMapLayout } from '../levelResolver';
 import { isSecretIssUnlocked } from '../worldProgress';
@@ -510,6 +511,7 @@ export function createSolarSystemMap(
     });
     nodeContainer.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       pointer.event.stopPropagation();
+      playSfx('ui');
       selectedLevel = level;
       selectedSecretId = undefined;
       redrawSelection();
@@ -549,6 +551,7 @@ export function createSolarSystemMap(
     });
     secretContainer.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       pointer.event.stopPropagation();
+      playSfx('ui');
       selectedSecretId = 'iss';
       selectedLevel = 1;
       redrawSelection();

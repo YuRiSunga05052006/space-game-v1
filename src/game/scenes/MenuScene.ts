@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import { applyAudioSettings, initAudio, playSfx, startMusic } from '../audioManager';
+import { applyAudioSettings, initAudio, startMusic } from '../audioManager';
 import { formatHighScoreLabel } from '../gameFlow';
 import { quitGame } from '../quitGame';
 import { getAutoFire } from '../settings';
@@ -178,7 +178,6 @@ export class MenuScene extends Phaser.Scene {
       onClick: () => {
         if (this.isMenuOverlayOpen()) return;
         initAudio();
-        playSfx('ui');
         startMusic();
         this.openModeSelect();
       },
@@ -201,7 +200,6 @@ export class MenuScene extends Phaser.Scene {
       color: 0x8899bb,
       onClick: () => {
         initAudio();
-        playSfx('ui');
         this.showAlmanacPanel();
       },
     });
@@ -214,7 +212,6 @@ export class MenuScene extends Phaser.Scene {
       color: 0x8899bb,
       onClick: () => {
         initAudio();
-        playSfx('ui');
         this.showShopPanel();
       },
     });
@@ -227,7 +224,6 @@ export class MenuScene extends Phaser.Scene {
       color: 0x8899bb,
       onClick: () => {
         initAudio();
-        playSfx('ui');
         this.showSettingsPanel();
       },
     });

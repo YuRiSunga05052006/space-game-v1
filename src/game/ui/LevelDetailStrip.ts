@@ -1,4 +1,5 @@
 ﻿import Phaser from 'phaser';
+import { playSfx } from '../audioManager';
 import { isLevelUnlocked, getHighestUnlockedLevelForWorld } from '../storyProgress';
 import { getLevelMeta, getBackgroundTheme } from '../levelResolver';
 import { getSecretLevel } from '../world1/secretLevels';
@@ -59,6 +60,7 @@ function createPlayButton(
   container.on('pointerout', () => drawBg(0.15, 0.8));
   container.on('pointerup', (pointer: Phaser.Input.Pointer) => {
     pointer.event.stopPropagation();
+    playSfx('ui');
     onClick();
   });
 

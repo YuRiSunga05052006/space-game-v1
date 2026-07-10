@@ -97,6 +97,7 @@ export function createSettingsPanel(
   const { container: soundSlider } = createVolumeSlider(scene, {
     label: 'SOUND',
     value: getSoundVolume(),
+    clickChannel: 'sound',
     onChange: (volume) => {
       const next = setSoundVolume(volume);
       options.onSoundVolumeChange?.(next);
@@ -108,6 +109,7 @@ export function createSettingsPanel(
   const { container: musicSlider } = createVolumeSlider(scene, {
     label: 'MUSIC',
     value: getMusicVolume(),
+    clickChannel: 'music',
     onChange: (volume) => {
       const next = setMusicVolume(volume);
       options.onMusicVolumeChange?.(next);

@@ -1,13 +1,18 @@
 import Phaser from 'phaser';
+import { playUiClick, type UiClickChannel } from '../audioManager';
 
 const TRACK_WIDTH = 220;
 const TRACK_HEIGHT = 8;
 const THUMB_RADIUS = 10;
+const HIT_WIDTH = TRACK_WIDTH + THUMB_RADIUS * 2;
+const HIT_HEIGHT = THUMB_RADIUS * 2 + 8;
 
 export interface VolumeSliderConfig {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  /** Which volume slider controls this slider's own click sound. */
+  clickChannel?: UiClickChannel;
 }
 
 export interface VolumeSliderResult {
@@ -23,6 +28,7 @@ export function createVolumeSlider(
   let currentValue = Phaser.Math.Clamp(Math.round(config.value), 0, 100);
   let dragging = false;
   let dragT: number | null = null;
+  const clickChannel: UiClickChannel = config.clickChannel ?? 'sound';
 
   const container = scene.add.container(0, 0);
 
@@ -43,6 +49,10 @@ export function createVolumeSlider(
   const trackBg = scene.add.graphics();
   const trackFill = scene.add.graphics();
   const thumb = scene.add.graphics();
+
+  // Hit target matches the track + thumb only (not the label/value text above).
+  const hitZone = scene.add.zone(0, 0, HIT_WIDTH, HIT_HEIGHT);
+  hitZone.setInteractive({ useHandCursor: true });
 
   const getThumbT = () => dragT ?? currentValue / 100;
 
@@ -71,14 +81,14 @@ export function createVolumeSlider(
     valueText.setText(String(currentValue));
   };
 
+  const pointerToTrackX = (pointer: Phaser.Input.Pointer) => {
+    const local = container.getLocalPoint(pointer.x, pointer.y);
+    return local.x;
+  };
+
   const valueFromLocalX = (localX: number) => {
     const t = Phaser.Math.Clamp((localX + TRACK_WIDTH / 2) / TRACK_WIDTH, 0, 1);
     return Math.round(t * 100);
-  };
-
-  const pointerToTrackX = (pointer: Phaser.Input.Pointer) => {
-    const centerX = container.getBounds().centerX;
-    return pointer.x - centerX;
   };
 
   const updateFromPointer = (pointer: Phaser.Input.Pointer) => {
@@ -120,27 +130,18 @@ export function createVolumeSlider(
     stopDragging();
   };
 
-  container.add([trackBg, trackFill, thumb, labelText, valueText]);
-  container.setSize(TRACK_WIDTH + THUMB_RADIUS * 2, 40);
-  container.setInteractive(
-    new Phaser.Geom.Rectangle(
-      -TRACK_WIDTH / 2 - THUMB_RADIUS,
-      -20,
-      TRACK_WIDTH + THUMB_RADIUS * 2,
-      40,
-    ),
-    Phaser.Geom.Rectangle.Contains,
-  );
-  container.input!.cursor = 'pointer';
+  container.add([trackBg, trackFill, thumb, hitZone, labelText, valueText]);
 
-  container.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+  hitZone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+    playUiClick(clickChannel);
     dragging = true;
     updateFromPointer(pointer);
     scene.input.on('pointermove', onScenePointerMove);
     scene.input.on('pointerup', onScenePointerUp);
   });
 
-  container.on('wheel', (_pointer: Phaser.Input.Pointer, _dx: number, dy: number) => {
+  hitZone.on('wheel', (_pointer: Phaser.Input.Pointer, _dx: number, dy: number) => {
+    playUiClick(clickChannel);
     const step = dy > 0 ? -5 : 5;
     setValue(currentValue + step);
   });
