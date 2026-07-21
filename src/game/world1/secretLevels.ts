@@ -4,6 +4,10 @@ export interface SecretLevelDefinition {
   location: string;
   themeId: string;
   hasBoss: boolean;
+  /** Score required to spawn wormhole (enter) or warp panel (exit). */
+  scoreThreshold: number;
+  /** Story level where the entry wormhole appears. */
+  entryLevel: number;
 }
 
 export const SECRET_LEVELS: Record<string, SecretLevelDefinition> = {
@@ -13,6 +17,17 @@ export const SECRET_LEVELS: Record<string, SecretLevelDefinition> = {
     location: 'International Space Station',
     themeId: 'iss',
     hasBoss: false,
+    scoreThreshold: 5000,
+    entryLevel: 1,
+  },
+  dawn: {
+    id: 'dawn',
+    name: 'Dawn',
+    location: 'Dawn Mission — Ceres Transit',
+    themeId: 'dawn',
+    hasBoss: false,
+    scoreThreshold: 6000,
+    entryLevel: 6,
   },
 };
 

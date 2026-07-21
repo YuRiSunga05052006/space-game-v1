@@ -1,9 +1,11 @@
 import { getWorld1LevelCount } from './world1/levels';
 import { getWorld2LevelCount } from './world2/levels';
-import { isWorld2StoryUnlocked } from './worldProgress';
+import { getWorld3LevelCount } from './world3/levels';
+import { getWorldLevelRange } from './worlds';
+import { isWorld2StoryUnlocked, isWorld3StoryUnlocked } from './worldProgress';
 
 const STORAGE_KEY = 'star-blaster-story-progress';
-const MAX_LEVEL = getWorld1LevelCount() + getWorld2LevelCount();
+const MAX_LEVEL = getWorld1LevelCount() + getWorld2LevelCount() + getWorld3LevelCount();
 
 function readUnlocked(): number[] {
   try {
@@ -34,13 +36,20 @@ export function getUnlockedLevels(): number[] {
 }
 
 export function isLevelUnlocked(level: number): boolean {
-  if (level >= 11 && !isWorld2StoryUnlocked()) return false;
+  const world2Min = getWorldLevelRange('world2').min;
+  const world3Min = getWorldLevelRange('world3').min;
+  if (level >= world2Min && level < world3Min && !isWorld2StoryUnlocked()) return false;
+  if (level >= world3Min && !isWorld3StoryUnlocked()) return false;
+  if (level === world3Min && isWorld3StoryUnlocked()) return true;
   return readUnlocked().includes(level);
 }
 
 export function unlockLevel(level: number): void {
   if (level < 1 || level > MAX_LEVEL) return;
-  if (level >= 11 && !isWorld2StoryUnlocked()) return;
+  const world2Min = getWorldLevelRange('world2').min;
+  const world3Min = getWorldLevelRange('world3').min;
+  if (level >= world2Min && level < world3Min && !isWorld2StoryUnlocked()) return;
+  if (level >= world3Min && !isWorld3StoryUnlocked()) return;
   const levels = readUnlocked();
   if (!levels.includes(level)) {
     levels.push(level);
@@ -53,18 +62,10 @@ export function getMaxLevelSlots(): number {
 }
 
 export function getHighestUnlockedLevelForWorld(worldId: string): number {
-  const world1Max = getWorld1LevelCount();
-  const world2Max = getWorld1LevelCount() + getWorld2LevelCount();
+  const { min, max } = getWorldLevelRange(worldId);
 
-  if (worldId === 'world2') {
-    for (let level = world2Max; level > world1Max; level--) {
-      if (isLevelUnlocked(level)) return level;
-    }
-    return world1Max + 1;
-  }
-
-  for (let level = world1Max; level >= 1; level--) {
+  for (let level = max; level >= min; level--) {
     if (isLevelUnlocked(level)) return level;
   }
-  return 1;
+  return min;
 }

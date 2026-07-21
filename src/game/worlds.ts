@@ -1,4 +1,7 @@
 import type { GameMode } from './gameMode';
+import { getWorld1LevelCount } from './world1/levels';
+import { getWorld2LevelCount } from './world2/levels';
+import { getWorld3LevelCount } from './world3/levels';
 import { isWorldUnlocked as checkWorldUnlocked } from './worldProgress';
 
 export interface WorldMeta {
@@ -10,6 +13,15 @@ export interface WorldMeta {
   levelCount: number;
   cardTheme: string;
 }
+
+export const WORLD_LEVEL_RANGES: Record<string, { min: number; max: number }> = {
+  world1: { min: 1, max: getWorld1LevelCount() },
+  world2: { min: getWorld1LevelCount() + 1, max: getWorld1LevelCount() + getWorld2LevelCount() },
+  world3: {
+    min: getWorld1LevelCount() + getWorld2LevelCount() + 1,
+    max: getWorld1LevelCount() + getWorld2LevelCount() + getWorld3LevelCount(),
+  },
+};
 
 export const WORLDS: WorldMeta[] = [
   {
@@ -34,10 +46,10 @@ export const WORLDS: WorldMeta[] = [
     id: 'world3',
     number: 3,
     title: 'Stellar Neighbors',
-    subtitle: 'Proxima → Sirius',
+    subtitle: 'Proxima Centauri → Aldebaran',
     locked: true,
-    levelCount: 0,
-    cardTheme: 'mercury',
+    levelCount: 18,
+    cardTheme: 'sirius',
   },
   {
     id: 'world4',
@@ -55,8 +67,12 @@ export function getWorld(id: string): WorldMeta | undefined {
 }
 
 export function getWorldLevelRange(worldId: string): { min: number; max: number } {
-  if (worldId === 'world2') return { min: 11, max: 20 };
-  return { min: 1, max: 10 };
+  return WORLD_LEVEL_RANGES[worldId] ?? WORLD_LEVEL_RANGES.world1;
+}
+
+export function getWorldNumber(worldId: string): number {
+  const world = getWorld(worldId);
+  return world?.number ?? 1;
 }
 
 export function isWorldLocked(worldId: string, mode: GameMode = 'story'): boolean {

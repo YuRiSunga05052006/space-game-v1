@@ -17,5 +17,7 @@ export function normalizeGameSceneData(data: GameSceneData = {}): Required<Pick<
 }
 
 export function getWorldIdFromLevel(level: number): string {
-  return level >= 11 ? 'world2' : 'world1';
+  if (level >= 21) return 'world3';
+  if (level >= 11) return 'world2';
+  return 'world1';
 }

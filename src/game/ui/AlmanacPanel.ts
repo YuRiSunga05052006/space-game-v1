@@ -1,13 +1,23 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import { getVisibleAlmanacEntries, getVisibleAlmanacSections, type AlmanacEntry } from '../almanac';
+import {
+  ALMANAC_PAGES,
+  getVisibleEntriesForPage,
+  getVisibleSectionsForPage,
+  isAlmanacPageUnlocked,
+  type AlmanacEntry,
+  type AlmanacPage,
+} from '../almanac';
 import { createMenuButton } from './MenuButtons';
 
-const SCROLL_TOP = 118;
-const SCROLL_HEIGHT = 530;
+const SCROLL_TOP = 148;
+const SCROLL_HEIGHT = 500;
 const SECTION_HEADER_HEIGHT = 34;
 const ENTRY_HEIGHT = 92;
 const ENTRY_GAP = 8;
+const TAB_Y = 108;
+const TAB_WIDTH = 88;
+const TAB_GAP = 6;
 
 export interface AlmanacPanelOptions {
   onBack: () => void;
@@ -66,11 +76,11 @@ function createEntryCard(scene: Phaser.Scene, entry: AlmanacEntry, y: number): P
   return card;
 }
 
-function buildContentHeight(): number {
+function buildContentHeight(page: AlmanacPage): number {
   let height = 0;
-  for (const section of getVisibleAlmanacSections()) {
+  for (const section of getVisibleSectionsForPage(page)) {
     height += SECTION_HEADER_HEIGHT;
-    height += getVisibleAlmanacEntries().filter((e) => e.category === section.category).length * ENTRY_HEIGHT;
+    height += getVisibleEntriesForPage(page).filter((e) => e.category === section.category).length * ENTRY_HEIGHT;
   }
   return height;
 }
@@ -116,27 +126,10 @@ export function createAlmanacPanel(
   const content = scene.add.container(0, SCROLL_TOP);
   scrollViewport.add(content);
 
-  let y = 0;
-  for (const section of getVisibleAlmanacSections()) {
-    const header = scene.add.text(GAME_WIDTH / 2, y + 16, section.label, {
-      fontFamily: 'Orbitron, sans-serif',
-      fontSize: '12px',
-      fontStyle: '700',
-      color: '#8899bb',
-    }).setOrigin(0.5, 0.5);
-    content.add(header);
-    y += SECTION_HEADER_HEIGHT;
-
-    const entries = getVisibleAlmanacEntries().filter((entry) => entry.category === section.category);
-    for (const entry of entries) {
-      content.add(createEntryCard(scene, entry, y));
-      y += ENTRY_HEIGHT;
-    }
-  }
-
-  const contentHeight = buildContentHeight();
-  const maxScroll = Math.max(0, contentHeight - SCROLL_HEIGHT);
+  const tabContainers: Phaser.GameObjects.Container[] = [];
+  let currentPage: AlmanacPage = 'shared';
   let scrollY = 0;
+  let maxScroll = 0;
   let dragging = false;
   let dragStartY = 0;
   let scrollStartY = 0;
@@ -144,6 +137,81 @@ export function createAlmanacPanel(
   const applyScroll = () => {
     content.setY(SCROLL_TOP - scrollY);
   };
+
+  const rebuildContent = () => {
+    content.removeAll(true);
+    let y = 0;
+    for (const section of getVisibleSectionsForPage(currentPage)) {
+      const header = scene.add.text(GAME_WIDTH / 2, y + 16, section.label, {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '12px',
+        fontStyle: '700',
+        color: '#8899bb',
+      }).setOrigin(0.5, 0.5);
+      content.add(header);
+      y += SECTION_HEADER_HEIGHT;
+
+      const entries = getVisibleEntriesForPage(currentPage).filter((entry) => entry.category === section.category);
+      for (const entry of entries) {
+        content.add(createEntryCard(scene, entry, y));
+        y += ENTRY_HEIGHT;
+      }
+    }
+    scrollY = 0;
+    maxScroll = Math.max(0, buildContentHeight(currentPage) - SCROLL_HEIGHT);
+    applyScroll();
+  };
+
+  const drawTabs = () => {
+    tabContainers.forEach((tab) => tab.destroy());
+    tabContainers.length = 0;
+
+    const totalWidth = ALMANAC_PAGES.length * TAB_WIDTH + (ALMANAC_PAGES.length - 1) * TAB_GAP;
+    let tabX = GAME_WIDTH / 2 - totalWidth / 2 + TAB_WIDTH / 2;
+
+    for (const page of ALMANAC_PAGES) {
+      const unlocked = isAlmanacPageUnlocked(page.id);
+      const active = page.id === currentPage;
+      const tab = scene.add.container(tabX, TAB_Y);
+      const bg = scene.add.graphics();
+      const color = active ? 0x00d4ff : unlocked ? 0x334455 : 0x222233;
+      bg.fillStyle(color, active ? 0.25 : 0.15);
+      bg.fillRoundedRect(-TAB_WIDTH / 2, -14, TAB_WIDTH, 28, 6);
+      bg.lineStyle(1, active ? 0x00d4ff : 0x445566, active ? 1 : 0.6);
+      bg.strokeRoundedRect(-TAB_WIDTH / 2, -14, TAB_WIDTH, 28, 6);
+      tab.add(bg);
+
+      const label = scene.add.text(0, 0, page.label, {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '8px',
+        fontStyle: '700',
+        color: unlocked ? (active ? '#00d4ff' : '#8899aa') : '#445566',
+      }).setOrigin(0.5);
+      tab.add(label);
+
+      if (unlocked) {
+        tab.setInteractive(
+          new Phaser.Geom.Rectangle(-TAB_WIDTH / 2, -14, TAB_WIDTH, 28),
+          Phaser.Geom.Rectangle.Contains,
+        );
+        tab.input!.cursor = 'pointer';
+        tab.on('pointerup', () => {
+          if (currentPage !== page.id) {
+            currentPage = page.id;
+            drawTabs();
+            rebuildContent();
+          }
+        });
+      }
+
+      root.add(tab);
+      tabContainers.push(tab);
+      tabX += TAB_WIDTH + TAB_GAP;
+    }
+  };
+
+  drawTabs();
+  rebuildContent();
 
   const isInScrollArea = (pointer: Phaser.Input.Pointer) => (
     pointer.y >= SCROLL_TOP &&

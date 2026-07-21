@@ -1,7 +1,7 @@
 ﻿import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { formatCoinsLabel } from '../coins';
-import { WORLDS, isWorldLocked } from '../worlds';
+import { WORLDS, isWorldLocked, getWorldLevelRange } from '../worlds';
 import type { GameMode } from '../gameMode';
 import {
   createWorldOverviewCard,
@@ -70,7 +70,11 @@ export class WorldSelectScene extends Phaser.Scene {
             if (this.mode === 'story') {
               this.transitionTo('LevelSelectScene', { worldId: world.id, mode: this.mode });
             } else {
-              this.transitionTo('GameScene', { mode: 'survival', worldId: world.id, level: world.id === 'world2' ? 11 : 1 });
+              this.transitionTo('GameScene', {
+                mode: 'survival',
+                worldId: world.id,
+                level: getWorldLevelRange(world.id).min,
+              });
             }
           },
       });

@@ -39,13 +39,16 @@ export class Comet extends Phaser.Physics.Arcade.Sprite {
     this.setCircle(14);
     this.setDepth(5);
     this.setVelocity(config.velocityX, config.velocityY);
-    this.setAngularVelocity(Phaser.Math.Between(-60, 60));
+
+    const moveAngle = Math.atan2(config.velocityY, config.velocityX);
+    this.setRotation(moveAngle);
 
     if (variant === 'gold') {
       this.setTint(0xffee88);
     }
 
     if (scene.textures.exists('particle')) {
+      const tailAngle = Phaser.Math.RadToDeg(moveAngle + Math.PI);
       this.tailEmitter = scene.add.particles(config.x, config.y, 'particle', {
         speed: { min: 20, max: 60 },
         scale: { start: 0.5, end: 0 },
@@ -53,7 +56,7 @@ export class Comet extends Phaser.Physics.Arcade.Sprite {
         lifespan: 400,
         frequency: 40,
         tint: variant === 'gold' ? 0xffcc44 : 0x88aaff,
-        angle: { min: 160, max: 200 },
+        angle: { min: tailAngle - 20, max: tailAngle + 20 },
         follow: this,
       });
       this.tailEmitter.setDepth(4);

@@ -2,9 +2,11 @@ import Phaser from 'phaser';
 import { playSfx } from '../audioManager';
 import { isLevelUnlocked } from '../storyProgress';
 import { getLevelMeta, getBackgroundTheme, getMapLayout } from '../levelResolver';
-import { isSecretIssUnlocked } from '../worldProgress';
+import { isSecretIssUnlocked, isSecretDawnUnlocked } from '../worldProgress';
 import type { MapNodeStyle, MapPlanetId, MapNodeLayout as World1MapNodeLayout } from '../world1/mapLayout';
-import { SECRET_ISS_MAP_POSITION } from '../world1/mapLayout';
+import { SECRET_ISS_MAP_POSITION, SECRET_DAWN_MAP_POSITION } from '../world1/mapLayout';
+import type { MapPlanetId as World2PlanetId, MapNodeLayout as World2MapNodeLayout } from '../world2/mapLayout';
+import type { MapNodeLayout as World3MapNodeLayout } from '../world3/mapLayout';
 
 const FINALE_STAR_COLOR = 0xffdd66;
 const PLANET_RADII: Record<MapPlanetId, number> = {
@@ -13,6 +15,13 @@ const PLANET_RADII: Record<MapPlanetId, number> = {
   earth: 12,
   moon: 6,
   mars: 9,
+};
+const WORLD2_PLANET_RADII: Record<World2PlanetId, number> = {
+  jupiter: 14,
+  saturn: 12,
+  uranus: 10,
+  neptune: 10,
+  titan: 6,
 };
 
 function drawWorld1Background(g: Phaser.GameObjects.Graphics): void {
@@ -31,6 +40,18 @@ function drawWorld1Background(g: Phaser.GameObjects.Graphics): void {
     const y = Phaser.Math.Between(top, top + h);
     g.fillCircle(x, y, Phaser.Math.FloatBetween(0.3, 0.8));
   }
+}
+
+function drawMiniDawn(g: Phaser.GameObjects.Graphics): void {
+  g.fillStyle(0x8899aa, 1);
+  g.fillRect(-10, -4, 20, 8);
+  g.fillStyle(0xaabbcc, 1);
+  g.fillRect(-6, -8, 12, 16);
+  g.fillStyle(0x6688aa, 0.9);
+  g.fillRect(-14, -2, 4, 4);
+  g.fillRect(10, -2, 4, 4);
+  g.fillStyle(0x88aacc, 0.85);
+  g.fillCircle(0, -10, 3);
 }
 
 function drawMiniIss(g: Phaser.GameObjects.Graphics): void {
@@ -136,6 +157,59 @@ function drawPlanetNode(
   }
 }
 
+function drawWorld2PlanetNode(
+  g: Phaser.GameObjects.Graphics,
+  planetId: World2PlanetId,
+  alpha: number,
+  radius: number,
+): void {
+  switch (planetId) {
+    case 'jupiter': {
+      g.fillStyle(0xcc8844, alpha);
+      g.fillCircle(0, 0, radius);
+      g.fillStyle(0xb87238, alpha * 0.85);
+      g.fillRect(-radius, -radius * 0.15, radius * 2, radius * 0.12);
+      g.fillRect(-radius, radius * 0.05, radius * 2, radius * 0.1);
+      g.fillRect(-radius, radius * 0.28, radius * 2, radius * 0.08);
+      g.fillStyle(0xcc5544, alpha * 0.9);
+      g.fillEllipse(radius * 0.25, radius * 0.15, radius * 0.35, radius * 0.22);
+      g.fillStyle(0xffffff, alpha * 0.12);
+      g.fillCircle(-radius * 0.25, -radius * 0.3, radius * 0.28);
+      break;
+    }
+    case 'saturn': {
+      g.lineStyle(2, 0xc8a060, alpha * 0.75);
+      g.strokeEllipse(0, 0, radius * 2.4, radius * 0.55);
+      g.fillStyle(0xddbb88, alpha);
+      g.fillCircle(0, 0, radius);
+      g.fillStyle(0xeeddaa, alpha * 0.35);
+      g.fillCircle(-radius * 0.2, -radius * 0.25, radius * 0.35);
+      break;
+    }
+    case 'uranus': {
+      g.fillStyle(0x66bbcc, alpha);
+      g.fillCircle(0, 0, radius);
+      g.fillStyle(0x88ddff, alpha * 0.25);
+      g.fillCircle(-radius * 0.2, -radius * 0.25, radius * 0.35);
+      break;
+    }
+    case 'neptune': {
+      g.fillStyle(0x2244aa, alpha);
+      g.fillCircle(0, 0, radius);
+      g.fillStyle(0x4466ff, alpha * 0.3);
+      g.fillCircle(-radius * 0.15, -radius * 0.2, radius * 0.3);
+      break;
+    }
+    case 'titan': {
+      g.fillStyle(0xaa7744, alpha * 0.95);
+      g.fillCircle(0, 0, radius);
+      g.fillStyle(0x886633, alpha * 0.45);
+      g.fillCircle(-1, -1, radius * 0.35);
+      break;
+    }
+  }
+}
+
 function drawEarthMoonOrbit(
   g: Phaser.GameObjects.Graphics,
   cx: number,
@@ -230,6 +304,15 @@ function getWorld1NodeRadius(nodeStyle: MapNodeStyle, planetId?: MapPlanetId): n
   if (planetId) return PLANET_RADII[planetId];
   if (nodeStyle === 'star') return 10;
   if (nodeStyle === 'asteroid') return 7;
+  return 8;
+}
+
+function getWorld2NodeRadius(nodeStyle: MapNodeStyle, planetId?: World2PlanetId): number {
+  if (planetId) return WORLD2_PLANET_RADII[planetId];
+  if (nodeStyle === 'star') return 10;
+  if (nodeStyle === 'comet') return 7;
+  if (nodeStyle === 'asteroid') return 7;
+  if (nodeStyle === 'moon') return 6;
   return 8;
 }
 
@@ -342,30 +425,33 @@ export function createSolarSystemMap(
   }
 
   const sun = scene.add.graphics();
-  const sunOuter = worldId === 'world1' ? 40 : 32;
-  const sunCore = worldId === 'world1' ? 22 : 18;
-  sun.fillStyle(0xffaa22, 0.25);
-  sun.fillCircle(sunPos.x, sunPos.y, sunOuter);
-  sun.fillStyle(0xffcc44, 0.95);
-  sun.fillCircle(sunPos.x, sunPos.y, sunCore);
-  sun.lineStyle(1, 0xffdd66, 0.6);
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    sun.lineBetween(
-      sunPos.x + Math.cos(a) * (sunCore + 4),
-      sunPos.y + Math.sin(a) * (sunCore + 4),
-      sunPos.x + Math.cos(a) * sunOuter,
-      sunPos.y + Math.sin(a) * sunOuter,
-    );
+  if (worldId === 'world3') {
+    drawNodeShape(sun, sunPos.x, sunPos.y, 'star', FINALE_STAR_COLOR, 0.95, 9);
+  } else {
+    const sunOuter = worldId === 'world1' ? 40 : 32;
+    const sunCore = worldId === 'world1' ? 22 : 18;
+    sun.fillStyle(0xffaa22, 0.25);
+    sun.fillCircle(sunPos.x, sunPos.y, sunOuter);
+    sun.fillStyle(0xffcc44, 0.95);
+    sun.fillCircle(sunPos.x, sunPos.y, sunCore);
+    sun.lineStyle(1, 0xffdd66, 0.6);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      sun.lineBetween(
+        sunPos.x + Math.cos(a) * (sunCore + 4),
+        sunPos.y + Math.sin(a) * (sunCore + 4),
+        sunPos.x + Math.cos(a) * sunOuter,
+        sunPos.y + Math.sin(a) * sunOuter,
+      );
+    }
   }
   content.add(sun);
 
   const route = scene.add.graphics();
   const routeLevels = layout.getRouteLevels();
   route.lineStyle(2, 0x00d4ff, 0.45);
-  for (let i = 0; i < routeLevels.length - 1; i++) {
-    const from = mapToContent(layout.getMapNode(routeLevels[i]).x, layout.getMapNode(routeLevels[i]).y);
-    const to = mapToContent(layout.getMapNode(routeLevels[i + 1]).x, layout.getMapNode(routeLevels[i + 1]).y);
+
+  const drawRouteSegment = (from: { x: number; y: number }, to: { x: number; y: number }): void => {
     const dist = Phaser.Math.Distance.Between(from.x, from.y, to.x, to.y);
     const steps = Math.max(6, Math.floor(dist / 10));
     for (let s = 0; s < steps; s += 2) {
@@ -377,6 +463,23 @@ export function createSolarSystemMap(
         from.x + (to.x - from.x) * t1,
         from.y + (to.y - from.y) * t1,
       );
+    }
+  };
+
+  for (let i = 0; i < routeLevels.length - 1; i++) {
+    const fromLevel = routeLevels[i];
+    const toLevel = routeLevels[i + 1];
+    const from = mapToContent(layout.getMapNode(fromLevel).x, layout.getMapNode(fromLevel).y);
+    const to = mapToContent(layout.getMapNode(toLevel).x, layout.getMapNode(toLevel).y);
+    const waypoints = layout.getRouteWaypoints?.(fromLevel, toLevel) ?? [];
+    const points = [
+      from,
+      ...waypoints.map((point) => mapToContent(point.x, point.y)),
+      to,
+    ];
+
+    for (let p = 0; p < points.length - 1; p++) {
+      drawRouteSegment(points[p], points[p + 1]);
     }
   }
   content.add(route);
@@ -411,6 +514,10 @@ export function createSolarSystemMap(
       focusOnPosition(SECRET_ISS_MAP_POSITION.x, SECRET_ISS_MAP_POSITION.y);
       return;
     }
+    if (secretId === 'dawn') {
+      focusOnPosition(SECRET_DAWN_MAP_POSITION.x, SECRET_DAWN_MAP_POSITION.y);
+      return;
+    }
     const node = layout.getMapNode(level);
     focusOnPosition(node.x, node.y);
   };
@@ -424,6 +531,9 @@ export function createSolarSystemMap(
     if (selectedSecretId === 'iss') {
       pos = mapToContent(SECRET_ISS_MAP_POSITION.x, SECRET_ISS_MAP_POSITION.y);
       themeId = 'iss';
+    } else if (selectedSecretId === 'dawn') {
+      pos = mapToContent(SECRET_DAWN_MAP_POSITION.x, SECRET_DAWN_MAP_POSITION.y);
+      themeId = 'dawn';
     } else {
       const node = layout.getMapNode(selectedLevel);
       pos = mapToContent(node.x, node.y);
@@ -432,6 +542,13 @@ export function createSolarSystemMap(
         const w1Node = node as World1MapNodeLayout;
         ringRadius = getWorld1NodeRadius(w1Node.nodeStyle, w1Node.planetId) + 8;
         if (selectedLevel === 5) ringRadius = 32;
+      } else if (worldId === 'world2') {
+        const w2Node = node as World2MapNodeLayout;
+        ringRadius = getWorld2NodeRadius(w2Node.nodeStyle, w2Node.planetId) + 8;
+        if (selectedLevel === 20) ringRadius = 22;
+      } else if (worldId === 'world3') {
+        const w3Node = node as World3MapNodeLayout;
+        ringRadius = w3Node.bossTier === 'finale' ? 24 : w3Node.bossTier === 'mid' ? 18 : 14;
       }
     }
 
@@ -454,9 +571,21 @@ export function createSolarSystemMap(
     const isBossNode = worldId === 'world1' && level === 5;
     const isFinaleStar = nodeLayout.nodeStyle === 'star';
     const w1Node = worldId === 'world1' ? (nodeLayout as World1MapNodeLayout) : undefined;
+    const w2Node = worldId === 'world2' ? (nodeLayout as World2MapNodeLayout) : undefined;
+    const w3Node = worldId === 'world3' ? (nodeLayout as World3MapNodeLayout) : undefined;
     const nodeRadius = worldId === 'world1' && w1Node
       ? getWorld1NodeRadius(w1Node.nodeStyle, w1Node.planetId)
-      : (isFinaleStar ? 10 : nodeLayout.nodeStyle === 'moon' ? 6 : 8);
+      : worldId === 'world2' && w2Node
+        ? getWorld2NodeRadius(w2Node.nodeStyle, w2Node.planetId)
+        : worldId === 'world3' && w3Node
+          ? (w3Node.bossTier === 'finale' ? 14 : w3Node.bossTier === 'mid' ? 11 : 9)
+          : (isFinaleStar ? 10 : nodeLayout.nodeStyle === 'moon' ? 6 : 8);
+
+    if (worldId === 'world3' && w3Node?.bossTier) {
+      const tierColor = w3Node.bossTier === 'finale' ? 0xff6644 : 0xffaa44;
+      nodeGfx.lineStyle(2, tierColor, 0.7);
+      nodeGfx.strokeCircle(0, 0, nodeRadius + 6);
+    }
 
     if (isBossNode) {
       nodeGfx.fillStyle(0xff2244, 0.25);
@@ -473,6 +602,32 @@ export function createSolarSystemMap(
       } else {
         drawNodeShape(nodeGfx, 0, 0, 'asteroid', theme.planetColor, alpha, nodeRadius);
       }
+    } else if (worldId === 'world2' && w2Node) {
+      if (w2Node.planetId) {
+        drawWorld2PlanetNode(nodeGfx, w2Node.planetId, alpha, nodeRadius);
+      } else if (isFinaleStar) {
+        drawNodeShape(nodeGfx, 0, 0, 'star', FINALE_STAR_COLOR, alpha, nodeRadius);
+      } else {
+        drawNodeShape(
+          nodeGfx,
+          0,
+          0,
+          nodeLayout.nodeStyle,
+          theme.planetColor,
+          alpha,
+          nodeRadius,
+        );
+      }
+    } else if (worldId === 'world3') {
+      drawNodeShape(
+        nodeGfx,
+        0,
+        0,
+        nodeLayout.nodeStyle,
+        theme.planetColor,
+        alpha,
+        nodeRadius,
+      );
     } else {
       drawNodeShape(
         nodeGfx,
@@ -556,6 +711,44 @@ export function createSolarSystemMap(
       selectedLevel = 1;
       redrawSelection();
       onSelectLevel(1, 'iss');
+    });
+
+    content.add(secretContainer);
+  }
+
+  if (worldId === 'world1' && isSecretDawnUnlocked()) {
+    const secretPos = mapToContent(SECRET_DAWN_MAP_POSITION.x, SECRET_DAWN_MAP_POSITION.y);
+    const secretContainer = scene.add.container(secretPos.x, secretPos.y);
+
+    const secretGfx = scene.add.graphics();
+    drawMiniDawn(secretGfx);
+    secretContainer.add(secretGfx);
+
+    const secretLabel = scene.add.text(0, 16, 'DAWN', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '9px',
+      fontStyle: '700',
+      color: '#88aacc',
+    }).setOrigin(0.5);
+    secretContainer.add(secretLabel);
+
+    secretContainer.setInteractive(
+      new Phaser.Geom.Rectangle(-18, -18, 36, 36),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    secretContainer.input!.cursor = 'pointer';
+
+    secretContainer.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+      isPanning = false;
+    });
+    secretContainer.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+      playSfx('ui');
+      selectedSecretId = 'dawn';
+      selectedLevel = 6;
+      redrawSelection();
+      onSelectLevel(6, 'dawn');
     });
 
     content.add(secretContainer);

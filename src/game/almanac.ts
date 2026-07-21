@@ -23,12 +23,15 @@ import { COMET_DAMAGE, COMET_POINTS, GOLD_COMET_POINTS } from './entities/Comet'
 import { getGoldAsteroidCoinReward, getGoldCometCoinReward } from './coinDrops';
 import { BOSS_DEFINITIONS as WORLD1_BOSSES } from './world1/bosses';
 import { BOSS_DEFINITIONS as WORLD2_BOSSES } from './world2/bosses';
+import { BOSS_DEFINITIONS as WORLD3_BOSSES } from './world3/bosses';
 import { STORY_ENEMY_DEFINITIONS as WORLD1_STORY_ENEMIES, type StoryEnemyBehavior } from './world1/storyEnemyDefinitions';
 import { STORY_ENEMY_DEFINITIONS as WORLD2_STORY_ENEMIES } from './world2/storyEnemyDefinitions';
+import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from './world3/storyEnemyDefinitions';
 import { getStoryEnemyUnlockScore, getSurvivalBossUnlockScore } from './survivalSpawn';
-import { isWorld2Unlocked } from './worldProgress';
+import { isWorld2Unlocked, isWorld3Unlocked } from './worldProgress';
 
 export type AlmanacCategory = 'asteroid' | 'goldAsteroid' | 'storyEnemy' | 'enemy' | 'boss' | 'comet' | 'goldComet';
+export type AlmanacPage = 'shared' | 'world1' | 'world2' | 'world3';
 
 export interface AlmanacEntry {
   id: string;
@@ -39,7 +42,12 @@ export interface AlmanacEntry {
   subtitle?: string;
   description: string;
   stats: string;
-  worldGated?: boolean;
+  almanacPage: AlmanacPage;
+}
+
+export interface AlmanacPageInfo {
+  id: AlmanacPage;
+  label: string;
 }
 
 const ASTEROID_NAMES: Record<AsteroidSize, string> = {
@@ -72,6 +80,7 @@ function buildAsteroidEntries(): AlmanacEntry[] {
       textureScale: ASTEROID_SCALES[size],
       description: ASTEROID_DESCRIPTIONS[size],
       stats: `HP ${data.health} · DMG ${ASTEROID_DAMAGE[size]} · ${data.points} pts`,
+      almanacPage: 'shared',
     };
   });
 }
@@ -95,12 +104,12 @@ function buildGoldAsteroidEntries(): AlmanacEntry[] {
       textureScale: ASTEROID_SCALES[size],
       description: 'Rare golden rock. Destroy with lasers or by ramming it to earn coins.',
       stats: `HP ${GOLD_ASTEROID_HEALTH[size]} · DMG ${ASTEROID_DAMAGE[size]} · ${data.points} pts · +${coins} coins`,
+      almanacPage: 'shared',
     };
   });
 }
 
 const SURVIVAL_ENEMY_DESCRIPTION_SUFFIX = ' Generic survival enemy — unlocks as your score rises.';
-
 const STORY_SURVIVAL_SUFFIX = ' Also unlocks in Survival mode at higher scores.';
 
 const ENEMY_ENTRIES: AlmanacEntry[] = [
@@ -113,6 +122,7 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     subtitle: 'Survival · 1000+ score',
     description: `Eight-legged raider that fires aimed lasers.${SURVIVAL_ENEMY_DESCRIPTION_SUFFIX}`,
     stats: `HP ${SPIDER_HEALTH} · DMG ${SPIDER_BODY_DAMAGE} · ${SPIDER_POINTS} pts`,
+    almanacPage: 'shared',
   },
   {
     id: 'enemy-seeker',
@@ -122,6 +132,7 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     subtitle: 'Survival · 2000+ score',
     description: `Homing drone that accelerates toward your ship.${SURVIVAL_ENEMY_DESCRIPTION_SUFFIX}`,
     stats: `HP ${SEEKER_HEALTH} · DMG ${SEEKER_BODY_DAMAGE} · ${SEEKER_POINTS} pts`,
+    almanacPage: 'shared',
   },
   {
     id: 'enemy-wasp',
@@ -131,6 +142,7 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     subtitle: 'Survival · 4000+ score',
     description: `Zigzagging dive bomber built for ram attacks.${SURVIVAL_ENEMY_DESCRIPTION_SUFFIX}`,
     stats: `HP ${WASP_HEALTH} · DMG ${WASP_BODY_DAMAGE} · ${WASP_POINTS} pts`,
+    almanacPage: 'shared',
   },
   {
     id: 'enemy-turret',
@@ -140,6 +152,7 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     subtitle: 'Survival · 5000+ score',
     description: `Slow-floating gun platform with triple-spread shots.${SURVIVAL_ENEMY_DESCRIPTION_SUFFIX}`,
     stats: `HP ${TURRET_HEALTH} · DMG ${TURRET_BODY_DAMAGE} · ${TURRET_POINTS} pts`,
+    almanacPage: 'shared',
   },
 ];
 
@@ -157,7 +170,7 @@ const STORY_BEHAVIOR_DESCRIPTIONS: Record<StoryEnemyBehavior, string> = {
 
 function buildStoryEnemyEntries(
   definitions: Record<number, { level: number; enemyName: string; textureKey: string; health: number; bodyDamage: number; points: number; behavior: StoryEnemyBehavior }>,
-  worldId: string,
+  worldId: AlmanacPage,
   worldLabel: string,
 ): AlmanacEntry[] {
   return Object.values(definitions)
@@ -173,14 +186,14 @@ function buildStoryEnemyEntries(
         subtitle: `${worldLabel} L${enemy.level} · Survival ${unlockScore}+ score`,
         description: `${STORY_BEHAVIOR_DESCRIPTIONS[enemy.behavior]} Story levels use this enemy exclusively.${STORY_SURVIVAL_SUFFIX}`,
         stats: `HP ${enemy.health} · DMG ${enemy.bodyDamage} · ${enemy.points} pts`,
-        worldGated: worldId === 'world2',
+        almanacPage: worldId,
       };
     });
 }
 
 function buildBossEntries(
   definitions: Record<number, { level: number; bossName: string; textureKey: string; baseScale?: number; baseHealth: number; bodyDamage: number; points: number; special: { name: string } }>,
-  worldId: string,
+  worldId: AlmanacPage,
   worldLabel: string,
 ): AlmanacEntry[] {
   return Object.values(definitions)
@@ -196,7 +209,7 @@ function buildBossEntries(
         subtitle: `${worldLabel} L${boss.level} · Survival ${survivalUnlock}+ score`,
         description: `Special: ${boss.special.name}. Story: defeating ends the level. Survival: awards points and coins, then the run continues.`,
         stats: `HP ${boss.baseHealth} · DMG ${boss.bodyDamage} · ${boss.points} pts`,
-        worldGated: worldId === 'world2',
+        almanacPage: worldId,
       };
     });
 }
@@ -210,10 +223,10 @@ function buildCometEntries(): AlmanacEntry[] {
       name: 'Comet',
       textureKey: 'comet',
       textureScale: 1,
-      subtitle: 'Story L16+ · World 2 Survival',
-      description: 'Fast icy hazard with a glowing tail. Appears from Kuiper Belt onward.',
+      subtitle: 'Story L16+ · World 2+ Survival · All World 3+',
+      description: 'Fast icy hazard with a glowing tail. From Kuiper Belt onward in World 2; all levels in World 3+.',
       stats: `DMG ${COMET_DAMAGE} · ${COMET_POINTS} pts`,
-      worldGated: true,
+      almanacPage: 'shared',
     },
     {
       id: 'comet-gold',
@@ -221,10 +234,10 @@ function buildCometEntries(): AlmanacEntry[] {
       name: 'Gold Comet',
       textureKey: 'comet-gold',
       textureScale: 1,
-      subtitle: 'Story L16+ · World 2 Survival',
+      subtitle: 'Story L16+ · World 2+ Survival · All World 3+',
       description: 'Rare golden comet. Destroy to earn bonus coins.',
       stats: `DMG ${COMET_DAMAGE} · ${GOLD_COMET_POINTS} pts · +${goldCoins} coins`,
-      worldGated: true,
+      almanacPage: 'shared',
     },
   ];
 }
@@ -232,35 +245,70 @@ function buildCometEntries(): AlmanacEntry[] {
 export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   ...buildAsteroidEntries(),
   ...buildGoldAsteroidEntries(),
-  ...buildStoryEnemyEntries(WORLD1_STORY_ENEMIES, 'world1', 'Story W1'),
-  ...buildStoryEnemyEntries(WORLD2_STORY_ENEMIES, 'world2', 'Story W2'),
   ...ENEMY_ENTRIES,
-  ...buildBossEntries(WORLD1_BOSSES, 'world1', 'Story W1'),
-  ...buildBossEntries(WORLD2_BOSSES, 'world2', 'Story W2'),
   ...buildCometEntries(),
+  ...buildStoryEnemyEntries(WORLD1_STORY_ENEMIES, 'world1', 'Story W1'),
+  ...buildBossEntries(WORLD1_BOSSES, 'world1', 'Story W1'),
+  ...buildStoryEnemyEntries(WORLD2_STORY_ENEMIES, 'world2', 'Story W2'),
+  ...buildBossEntries(WORLD2_BOSSES, 'world2', 'Story W2'),
+  ...buildStoryEnemyEntries(WORLD3_STORY_ENEMIES, 'world3', 'Story W3'),
+  ...buildBossEntries(WORLD3_BOSSES, 'world3', 'Story W3'),
 ];
 
-export const ALMANAC_SECTIONS: { label: string; category: AlmanacCategory }[] = [
-  { label: 'ASTEROIDS', category: 'asteroid' },
-  { label: 'GOLD ASTEROIDS', category: 'goldAsteroid' },
-  { label: 'STORY ENEMIES', category: 'storyEnemy' },
-  { label: 'SURVIVAL ENEMIES', category: 'enemy' },
-  { label: 'BOSSES', category: 'boss' },
-  { label: 'COMETS', category: 'comet' },
-  { label: 'GOLD COMETS', category: 'goldComet' },
+const PAGE_SECTIONS: Record<AlmanacPage, { label: string; category: AlmanacCategory }[]> = {
+  shared: [
+    { label: 'ASTEROIDS', category: 'asteroid' },
+    { label: 'GOLD ASTEROIDS', category: 'goldAsteroid' },
+    { label: 'SURVIVAL ENEMIES', category: 'enemy' },
+    { label: 'COMETS', category: 'comet' },
+    { label: 'GOLD COMETS', category: 'goldComet' },
+  ],
+  world1: [
+    { label: 'STORY ENEMIES', category: 'storyEnemy' },
+    { label: 'BOSSES', category: 'boss' },
+  ],
+  world2: [
+    { label: 'STORY ENEMIES', category: 'storyEnemy' },
+    { label: 'BOSSES', category: 'boss' },
+  ],
+  world3: [
+    { label: 'STORY ENEMIES', category: 'storyEnemy' },
+    { label: 'BOSSES', category: 'boss' },
+  ],
+};
+
+export const ALMANAC_PAGES: AlmanacPageInfo[] = [
+  { id: 'shared', label: 'SHARED' },
+  { id: 'world1', label: 'WORLD 1' },
+  { id: 'world2', label: 'WORLD 2' },
+  { id: 'world3', label: 'WORLD 3' },
 ];
 
-export function isAlmanacEntryVisible(entry: AlmanacEntry): boolean {
-  if (!entry.worldGated) return true;
-  return isWorld2Unlocked();
+export function isAlmanacPageUnlocked(page: AlmanacPage): boolean {
+  if (page === 'shared' || page === 'world1') return true;
+  if (page === 'world2') return isWorld2Unlocked();
+  if (page === 'world3') return isWorld3Unlocked();
+  return false;
 }
 
-export function getVisibleAlmanacEntries(): AlmanacEntry[] {
-  return ALMANAC_ENTRIES.filter(isAlmanacEntryVisible);
+export function getVisibleEntriesForPage(page: AlmanacPage): AlmanacEntry[] {
+  if (!isAlmanacPageUnlocked(page)) return [];
+  return ALMANAC_ENTRIES.filter((entry) => entry.almanacPage === page);
 }
 
-export function getVisibleAlmanacSections(): { label: string; category: AlmanacCategory }[] {
-  return ALMANAC_SECTIONS.filter((section) =>
-    getVisibleAlmanacEntries().some((entry) => entry.category === section.category),
+export function getVisibleSectionsForPage(page: AlmanacPage): { label: string; category: AlmanacCategory }[] {
+  const entries = getVisibleEntriesForPage(page);
+  return PAGE_SECTIONS[page].filter((section) =>
+    entries.some((entry) => entry.category === section.category),
   );
+}
+
+/** @deprecated Use getVisibleEntriesForPage */
+export function getVisibleAlmanacEntries(): AlmanacEntry[] {
+  return ALMANAC_PAGES.flatMap((page) => getVisibleEntriesForPage(page.id));
+}
+
+/** @deprecated Use getVisibleSectionsForPage */
+export function getVisibleAlmanacSections(): { label: string; category: AlmanacCategory }[] {
+  return ALMANAC_PAGES.flatMap((page) => getVisibleSectionsForPage(page.id));
 }

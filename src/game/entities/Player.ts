@@ -29,6 +29,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private rainbowTween?: Phaser.Tweens.Tween;
   private glowHue = 0;
 
+  private shielded = false;
+  private shieldTimer?: Phaser.Time.TimerEvent;
+  private shieldGlow?: Phaser.GameObjects.Graphics;
+  private onShieldBreak?: () => void;
+
+  private invisible = false;
+  private invisibleTimer?: Phaser.Time.TimerEvent;
+  private invisibleBaseAlpha = 1;
+
+  private boosting = false;
+  private boostTimer?: Phaser.Time.TimerEvent;
+  private boostScoreCap = 0;
+  private boostPointsEarned = 0;
+  private onBoostCapReached?: () => void;
+  private boostGlow?: Phaser.GameObjects.Graphics;
+  private readonly boostSpeedMultiplier = 1.45;
+
   private loadout: WeaponLoadout = createDefaultLoadout();
   private ownedWeaponIds: string[] = [];
 
@@ -48,7 +65,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private applySpeedMultiplier(): void {
-    this.setMaxVelocity(this.baseMaxSpeed * this.loadout.speedMultiplier);
+    const boostMult = this.boosting ? this.boostSpeedMultiplier : 1;
+    this.setMaxVelocity(this.baseMaxSpeed * this.loadout.speedMultiplier * boostMult);
   }
 
   getOwnedWeaponIds(): string[] {
@@ -134,6 +152,132 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.invincible;
   }
 
+  isShielded(): boolean {
+    return this.shielded;
+  }
+
+  isInvisible(): boolean {
+    return this.invisible;
+  }
+
+  isBoosting(): boolean {
+    return this.boosting;
+  }
+
+  isDamageImmune(): boolean {
+    return this.invincible || this.shielded || this.invisible || this.boosting;
+  }
+
+  isGhostMode(): boolean {
+    return this.invisible;
+  }
+
+  getBoostScoreCap(): number {
+    return this.boostScoreCap;
+  }
+
+  getBoostPointsEarned(): number {
+    return this.boostPointsEarned;
+  }
+
+  addBoostPoints(amount: number): boolean {
+    if (!this.boosting || amount <= 0) return false;
+    this.boostPointsEarned += amount;
+    if (this.boostPointsEarned >= this.boostScoreCap) {
+      this.deactivateBoostMode(true);
+      return true;
+    }
+    return false;
+  }
+
+  activateShield(durationMs: number, onBreak?: () => void): void {
+    this.deactivateShield(false);
+    this.shielded = true;
+    this.onShieldBreak = onBreak;
+    this.shieldTimer = this.scene.time.delayedCall(durationMs, () => {
+      this.deactivateShield(false);
+    });
+    this.startShieldGlow();
+  }
+
+  breakShield(): void {
+    if (!this.shielded) return;
+    const callback = this.onShieldBreak;
+    this.deactivateShield(false);
+    callback?.();
+  }
+
+  deactivateShield(triggerCallback = false): void {
+    if (!this.shielded) return;
+    this.shielded = false;
+    this.shieldTimer?.remove(false);
+    this.shieldTimer = undefined;
+    if (triggerCallback) {
+      this.onShieldBreak?.();
+    }
+    this.onShieldBreak = undefined;
+    this.stopShieldGlow();
+  }
+
+  activateInvisibility(durationMs: number): void {
+    this.deactivateInvisibility();
+    this.invisible = true;
+    this.invisibleBaseAlpha = this.alpha;
+    this.setAlpha(0.35);
+    this.invisibleTimer = this.scene.time.delayedCall(durationMs, () => {
+      this.deactivateInvisibility();
+    });
+  }
+
+  deactivateInvisibility(): void {
+    if (!this.invisible) return;
+    this.invisible = false;
+    this.invisibleTimer?.remove(false);
+    this.invisibleTimer = undefined;
+    this.setAlpha(this.invisibleBaseAlpha);
+  }
+
+  activateBoostMode(options: {
+    scoreCap: number;
+    durationMs: number;
+    onCapReached?: () => void;
+  }): void {
+    this.deactivateBoostMode(false);
+    this.boosting = true;
+    this.boostScoreCap = options.scoreCap;
+    this.boostPointsEarned = 0;
+    this.onBoostCapReached = options.onCapReached;
+    this.boostTimer = this.scene.time.delayedCall(options.durationMs, () => {
+      this.deactivateBoostMode(true);
+    });
+    this.startBoostGlow();
+    this.applySpeedMultiplier();
+  }
+
+  deactivateBoostMode(triggerCallback = false): void {
+    if (!this.boosting) return;
+    this.boosting = false;
+    this.boostTimer?.remove(false);
+    this.boostTimer = undefined;
+    this.boostScoreCap = 0;
+    this.boostPointsEarned = 0;
+    if (triggerCallback) {
+      this.onBoostCapReached?.();
+    }
+    this.onBoostCapReached = undefined;
+    this.stopBoostGlow();
+    this.applySpeedMultiplier();
+  }
+
+  absorbHit(): boolean {
+    if (this.invisible || this.boosting || this.invincible) return true;
+    if (this.shielded) {
+      this.breakShield();
+      return true;
+    }
+    return false;
+  }
+
   getIsMoving(): boolean {
     return this.isMoving;
   }
@@ -209,7 +353,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.isMoving = true;
     const nx = vx / len;
     const ny = vy / len;
-    const speed = this.baseMaxSpeed * this.loadout.speedMultiplier;
+    const boostMult = this.boosting ? this.boostSpeedMultiplier : 1;
+    const speed = this.baseMaxSpeed * this.loadout.speedMultiplier * boostMult;
     this.setVelocity(nx * speed, ny * speed);
 
     const angle = Phaser.Math.RadToDeg(Math.atan2(ny, nx)) + 90;
@@ -259,6 +404,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.invincible && this.rainbowGlow) {
       this.drawRainbowGlow();
     }
+    if (this.shielded && this.shieldGlow) {
+      this.drawShieldGlow();
+    }
+    if (this.boosting && this.boostGlow) {
+      this.drawBoostGlow();
+    }
   }
 
   canFire(time: number): boolean {
@@ -293,8 +444,55 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.y = Phaser.Math.Clamp(this.y, 40, GAME_HEIGHT - 40);
   }
 
+  private startShieldGlow(): void {
+    this.stopShieldGlow();
+    this.shieldGlow = this.scene.add.graphics();
+    this.shieldGlow.setDepth(9);
+    this.drawShieldGlow();
+  }
+
+  private stopShieldGlow(): void {
+    this.shieldGlow?.destroy();
+    this.shieldGlow = undefined;
+  }
+
+  private drawShieldGlow(): void {
+    if (!this.shieldGlow) return;
+    this.shieldGlow.clear();
+    this.shieldGlow.setPosition(this.x, this.y);
+    this.shieldGlow.lineStyle(3, 0x44ddff, 0.85);
+    this.shieldGlow.strokeCircle(0, 0, 30);
+    this.shieldGlow.lineStyle(2, 0x88eeff, 0.45);
+    this.shieldGlow.strokeCircle(0, 0, 34);
+  }
+
+  private startBoostGlow(): void {
+    this.stopBoostGlow();
+    this.boostGlow = this.scene.add.graphics();
+    this.boostGlow.setDepth(9);
+    this.drawBoostGlow();
+  }
+
+  private stopBoostGlow(): void {
+    this.boostGlow?.destroy();
+    this.boostGlow = undefined;
+  }
+
+  private drawBoostGlow(): void {
+    if (!this.boostGlow) return;
+    this.boostGlow.clear();
+    this.boostGlow.setPosition(this.x, this.y);
+    this.boostGlow.fillStyle(0xffaa00, 0.12);
+    this.boostGlow.fillCircle(0, 0, 34);
+    this.boostGlow.lineStyle(2, 0xffcc44, 0.75);
+    this.boostGlow.strokeCircle(0, 0, 28);
+  }
+
   destroy(fromScene?: boolean): void {
     this.deactivateInvincibility();
+    this.deactivateShield(false);
+    this.deactivateInvisibility();
+    this.deactivateBoostMode(false);
     this.thruster?.destroy();
     this.smokeTrail?.destroy();
     super.destroy(fromScene);

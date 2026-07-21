@@ -121,6 +121,16 @@ export const BACKGROUND_THEMES: Record<string, BackgroundTheme> = {
     planetX: 0.5,
     accentColor: 0x00d4ff,
   },
+  dawn: {
+    id: 'dawn',
+    skyTop: 0x080810,
+    skyBottom: 0x182838,
+    starColor: 0xaabbcc,
+    planetColor: 0x667788,
+    planetSize: 0,
+    planetX: 0.5,
+    accentColor: 0x88aacc,
+  },
   survival: {
     id: 'survival',
     skyTop: 0x0a0e27,

@@ -79,7 +79,13 @@ import {
   unlockWorld2Story,
   unlockSecretIss,
   completeSecretIss,
+  unlockSecretDawn,
+  completeSecretDawn,
+  onLevel20Cleared,
 } from '../worldProgress';
+import { getSecretLevel, SECRET_LEVELS } from '../world1/secretLevels';
+import { getWorldIdFromLevel } from '../gameMode';
+import { getWorldNumber } from '../worlds';
 import { applyStoryBackground } from '../ui/StoryThemeBackground';
 import {
   applyAudioSettings,
@@ -101,6 +107,27 @@ import { LootBox } from '../entities/LootBox';
 import { getNextLootMilestone, LOOT_MILESTONE_STEP, shouldSpawnLootAtScore } from '../loot';
 import { rollWeaponChoices } from '../weapons';
 import { createWeaponSelectPanel } from '../ui/WeaponSelectPanel';
+import {
+  FuelTankPickup,
+  InvisibilityPickup,
+  ShieldPickup,
+} from '../entities/PowerUpPickup';
+import {
+  consumeInventoryItem,
+  getInventoryCount,
+  getPowerUpLevel,
+  isPowerUpOwned,
+} from '../playerPowerUps';
+import {
+  ENGINE_BOOST_DURATION_MS,
+  ENGINE_SCORE_CAP,
+  FUEL_TANK_BOOST_DURATION_MS,
+  getFuelTankScoreCap,
+  getInvisibilityDurationMs,
+  getShieldDurationMs,
+  HYPERDRIVE_BOOST_DURATION_MS,
+  HYPERDRIVE_SCORE_CAP,
+} from '../powerUpEffects';
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -108,6 +135,9 @@ export class GameScene extends Phaser.Scene {
   private bullets!: Phaser.Physics.Arcade.Group;
   private hearts!: Phaser.Physics.Arcade.Group;
   private powerStars!: Phaser.Physics.Arcade.Group;
+  private shieldPickups!: Phaser.Physics.Arcade.Group;
+  private invisibilityPickups!: Phaser.Physics.Arcade.Group;
+  private fuelTankPickups!: Phaser.Physics.Arcade.Group;
   private spiderShips!: Phaser.Physics.Arcade.Group;
   private seekerDrones!: Phaser.Physics.Arcade.Group;
   private kamikazeWasps!: Phaser.Physics.Arcade.Group;
@@ -184,8 +214,16 @@ export class GameScene extends Phaser.Scene {
   private warpPanels!: Phaser.Physics.Arcade.Group;
   private comets!: Phaser.Physics.Arcade.Group;
   private wormholeSpawned = false;
+  private pendingSecretId?: string;
   private warpPanelSpawned = false;
   private cometSpawnTimer = 0;
+  private shieldSpawnTimer = 0;
+  private invisibilitySpawnTimer = 0;
+  private fuelTankSpawnTimer = 0;
+  private engineHudBtn?: Phaser.GameObjects.Container;
+  private hyperdriveHudBtn?: Phaser.GameObjects.Container;
+  private engineKey?: Phaser.Input.Keyboard.Key;
+  private hyperdriveKey?: Phaser.Input.Keyboard.Key;
 
   private touchTarget: Phaser.Math.Vector2 | null = null;
   private isDragging = false;
@@ -260,8 +298,16 @@ export class GameScene extends Phaser.Scene {
     this.survivalBossesDefeated = 0;
     this.survivalBossCooldownTimer = 0;
     this.wormholeSpawned = false;
+    this.pendingSecretId = undefined;
     this.warpPanelSpawned = false;
     this.cometSpawnTimer = 0;
+    this.shieldSpawnTimer = 0;
+    this.invisibilitySpawnTimer = 0;
+    this.fuelTankSpawnTimer = 0;
+    this.engineHudBtn?.destroy();
+    this.engineHudBtn = undefined;
+    this.hyperdriveHudBtn?.destroy();
+    this.hyperdriveHudBtn = undefined;
 
     this.physics.world.setBounds(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
@@ -338,6 +384,9 @@ export class GameScene extends Phaser.Scene {
     });
     this.hearts = this.physics.add.group();
     this.powerStars = this.physics.add.group();
+    this.shieldPickups = this.physics.add.group();
+    this.invisibilityPickups = this.physics.add.group();
+    this.fuelTankPickups = this.physics.add.group();
     this.spiderShips = this.physics.add.group();
     this.seekerDrones = this.physics.add.group();
     this.kamikazeWasps = this.physics.add.group();
@@ -414,6 +463,7 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setScrollFactor(0).setDepth(hudTextDepth);
     this.createPauseButton();
     this.updateFireModeUI();
+    this.createSurvivalPowerUpHud();
 
     if (this.sys.game.device.input.touch) {
       this.moveHint = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 24, 'Drag to move', {
@@ -498,6 +548,11 @@ export class GameScene extends Phaser.Scene {
         if (this.isGameOver || this.isChoosingWeapon) return;
         this.togglePause();
       });
+
+      this.engineKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+      this.hyperdriveKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.H);
+      this.engineKey.on('down', () => this.tryActivateEngine());
+      this.hyperdriveKey.on('down', () => this.tryActivateHyperdrive());
     }
 
     this.dragIndicator = this.add.graphics().setDepth(50).setScrollFactor(0);
@@ -565,6 +620,30 @@ export class GameScene extends Phaser.Scene {
       this.player,
       this.powerStars,
       this.onPlayerCollectPowerStar as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.shieldPickups,
+      this.onPlayerCollectShield as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.invisibilityPickups,
+      this.onPlayerCollectInvisibility as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.fuelTankPickups,
+      this.onPlayerCollectFuelTank as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
       undefined,
       this,
     );
@@ -837,6 +916,7 @@ export class GameScene extends Phaser.Scene {
     laserObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
+    if (this.player.isGhostMode()) return;
     const laser = laserObj as Phaser.Physics.Arcade.Sprite;
     const fromX = laser.x;
     const fromY = laser.y;
@@ -886,9 +966,10 @@ export class GameScene extends Phaser.Scene {
     bossObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
+    if (this.player.isGhostMode() || this.player.isBoosting() || this.player.isInvincible()) return;
 
     const boss = bossObj as BossShip;
-    if (this.player.isInvincible()) return;
+    if (this.player.absorbHit()) return;
 
     this.takeDamage(boss.bodyDamage);
   }
@@ -899,12 +980,17 @@ export class GameScene extends Phaser.Scene {
     explosionCount: number,
   ): void {
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
+    if (this.player.isGhostMode()) return;
 
     const { x, y } = enemy;
 
-    if (this.player.isInvincible()) {
+    if (this.player.isInvincible() || this.player.isBoosting()) {
       enemy.destroy();
-      this.addScore(enemy.points);
+      if (this.player.isBoosting()) {
+        this.addBoostScore(enemy.points);
+      } else {
+        this.addScore(enemy.points);
+      }
       this.spawnExplosion(x, y, explosionCount);
       this.tryAwardEnemyCoins(x, y);
       return;
@@ -1049,25 +1135,34 @@ export class GameScene extends Phaser.Scene {
     asteroidObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     if (this.isGameOver || this.isPaused) return;
+    if (this.player.isGhostMode()) return;
     const asteroid = asteroidObj as Asteroid;
     const explosionCount = asteroid.size === 'lg' ? 12 : asteroid.size === 'md' ? 8 : 5;
 
     if (asteroid.isGold) {
       const { x, y, points, coinReward, size } = asteroid;
       asteroid.destroy();
-      this.addScore(points);
+      if (this.player.isBoosting()) {
+        this.addBoostScore(points);
+      } else {
+        this.addScore(points);
+      }
       this.awardCoins(coinReward, x, y);
       this.spawnExplosion(x, y, explosionCount);
 
-      if (!this.player.isInvincible()) {
+      if (!this.player.isDamageImmune()) {
         this.takeDamage(ASTEROID_DAMAGE[size]);
       }
       return;
     }
 
-    if (this.player.isInvincible()) {
+    if (this.player.isInvincible() || this.player.isBoosting()) {
       asteroid.destroy();
-      this.addScore(asteroid.points);
+      if (this.player.isBoosting()) {
+        this.addBoostScore(asteroid.points);
+      } else {
+        this.addScore(asteroid.points);
+      }
       this.spawnExplosion(asteroid.x, asteroid.y, explosionCount);
       return;
     }
@@ -1173,29 +1268,44 @@ export class GameScene extends Phaser.Scene {
     this.checkSecretMilestones();
   }
 
+  private addBoostScore(points: number): void {
+    if (!this.player.isBoosting() || points <= 0) {
+      this.addScore(points);
+      return;
+    }
+
+    const remaining = this.player.getBoostScoreCap() - this.player.getBoostPointsEarned();
+    if (remaining <= 0) return;
+
+    const awarded = Math.min(points, remaining);
+    this.addScore(awarded);
+    this.player.addBoostPoints(awarded);
+  }
+
   private checkSecretMilestones(): void {
     if (this.isGameOver || this.isPaused) return;
 
-    if (
-      this.gameMode === 'story' &&
-      !this.secretId &&
-      this.storyLevel === 1 &&
-      this.worldId === 'world1' &&
-      this.score >= 5000 &&
-      !this.wormholeSpawned
-    ) {
-      this.wormholeSpawned = true;
-      this.spawnWormhole();
+    if (this.gameMode === 'story' && !this.secretId && this.worldId === 'world1') {
+      for (const secret of Object.values(SECRET_LEVELS)) {
+        if (
+          this.storyLevel === secret.entryLevel
+          && this.score >= secret.scoreThreshold
+          && !this.wormholeSpawned
+        ) {
+          this.wormholeSpawned = true;
+          this.pendingSecretId = secret.id;
+          this.spawnWormhole();
+          break;
+        }
+      }
     }
 
-    if (
-      this.gameMode === 'story' &&
-      this.secretId === 'iss' &&
-      this.score >= 5000 &&
-      !this.warpPanelSpawned
-    ) {
-      this.warpPanelSpawned = true;
-      this.spawnWarpPanel();
+    if (this.gameMode === 'story' && this.secretId) {
+      const secret = getSecretLevel(this.secretId);
+      if (secret && this.score >= secret.scoreThreshold && !this.warpPanelSpawned) {
+        this.warpPanelSpawned = true;
+        this.spawnWarpPanel();
+      }
     }
   }
 
@@ -1244,12 +1354,18 @@ export class GameScene extends Phaser.Scene {
     wormholeObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     if (this.isGameOver || this.isPaused || this.secretId) return;
+    const secretId = this.pendingSecretId;
+    if (!secretId) return;
+
     const wormhole = wormholeObj as Wormhole;
     wormhole.destroy();
-    unlockSecretIss();
+
+    if (secretId === 'iss') unlockSecretIss();
+    else if (secretId === 'dawn') unlockSecretDawn();
+
     this.cameras.main.fadeOut(400, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
-      this.scene.start('GameScene', { mode: 'story', secretId: 'iss', worldId: 'world1', level: 1 });
+      this.scene.start('GameScene', { mode: 'story', secretId, worldId: 'world1', level: 1 });
     });
   }
 
@@ -1257,14 +1373,18 @@ export class GameScene extends Phaser.Scene {
     _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
     panelObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
-    if (this.isGameOver || this.isPaused || this.secretId !== 'iss') return;
+    if (this.isGameOver || this.isPaused || !this.secretId) return;
     const panel = panelObj as WarpPanel;
     panel.destroy();
     this.triggerSecretVictory();
   }
 
   private triggerSecretVictory(): void {
-    completeSecretIss();
+    if (this.secretId === 'iss') {
+      completeSecretIss();
+    } else if (this.secretId === 'dawn') {
+      completeSecretDawn();
+    }
     this.triggerVictory(true);
   }
 
@@ -1284,7 +1404,8 @@ export class GameScene extends Phaser.Scene {
     _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
     cometObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
-    if (this.isGameOver || this.isPaused || this.player.isInvincible()) return;
+    if (this.isGameOver || this.isPaused) return;
+    if (this.player.isGhostMode() || this.player.isBoosting() || this.player.isInvincible()) return;
     const comet = cometObj as Comet;
     comet.destroy();
     this.takeDamage(comet.bodyDamage);
@@ -1389,7 +1510,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private takeLaserDamage(amount: number, fromX: number, fromY: number): void {
-    if (this.player.isInvincible() || this.isHitStunned) return;
+    if (this.player.isGhostMode() || this.isHitStunned) return;
+    if (this.player.absorbHit()) return;
 
     this.hp = Math.max(0, this.hp - amount);
     this.healthBar.setHp(this.hp);
@@ -1413,7 +1535,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private takeDamage(amount: number): void {
-    if (this.player.isInvincible()) return;
+    if (this.player.absorbHit()) return;
 
     this.hp = Math.max(0, this.hp - amount);
     this.healthBar.setHp(this.hp);
@@ -1580,7 +1702,11 @@ export class GameScene extends Phaser.Scene {
       unlockWorld2Story();
     }
 
-    if (isSecretClear) {
+    if (this.storyLevel === 20 && !this.secretId) {
+      onLevel20Cleared();
+    }
+
+    if (isSecretClear && this.secretId === 'iss') {
       unlockLevel(11);
     }
 
@@ -1598,8 +1724,10 @@ export class GameScene extends Phaser.Scene {
 
     const levelMeta = getLevelMeta(this.worldId, this.storyLevel, this.secretId);
     let victoryTitle: string;
-    if (isSecretClear) {
+    if (isSecretClear && this.secretId === 'iss') {
       victoryTitle = 'ISS CLEAR!';
+    } else if (isSecretClear && this.secretId === 'dawn') {
+      victoryTitle = 'DAWN CLEAR!';
     } else if (this.storyLevel === getMaxLevelSlots()) {
       victoryTitle = 'STORY COMPLETE!';
     } else {
@@ -1634,7 +1762,7 @@ export class GameScene extends Phaser.Scene {
             this.scene.start('GameScene', {
               mode: 'story',
               level: nextLevel,
-              worldId: nextLevel >= 11 ? 'world2' : this.worldId,
+              worldId: getWorldIdFromLevel(nextLevel),
             });
           });
         },
@@ -2050,6 +2178,188 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  private spawnShieldPickup(): void {
+    if (this.isGameOver || this.isPaused || !isPowerUpOwned('shield')) return;
+    if (this.shieldPickups.countActive(true) >= 1) return;
+
+    const { x, y } = ShieldPickup.randomSpawnPosition();
+    const pickup = new ShieldPickup(this, x, y);
+    this.shieldPickups.add(pickup);
+  }
+
+  private spawnInvisibilityPickup(): void {
+    if (this.isGameOver || this.isPaused || !isPowerUpOwned('invisibility')) return;
+    if (this.invisibilityPickups.countActive(true) >= 1) return;
+
+    const { x, y } = InvisibilityPickup.randomSpawnPosition();
+    const pickup = new InvisibilityPickup(this, x, y);
+    this.invisibilityPickups.add(pickup);
+  }
+
+  private spawnFuelTankPickup(): void {
+    if (this.isGameOver || this.isPaused || this.gameMode !== 'survival') return;
+    if (!isPowerUpOwned('fuelTank')) return;
+    if (this.fuelTankPickups.countActive(true) >= 1) return;
+
+    const { x, y } = FuelTankPickup.randomSpawnPosition();
+    const pickup = new FuelTankPickup(this, x, y);
+    this.fuelTankPickups.add(pickup);
+  }
+
+  private onPlayerCollectShield(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    pickupObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused) return;
+    (pickupObj as ShieldPickup).destroy();
+    const level = getPowerUpLevel('shield');
+    this.player.activateShield(getShieldDurationMs(level));
+    this.spawnPowerStarCollectEffect(this.player.x, this.player.y);
+  }
+
+  private onPlayerCollectInvisibility(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    pickupObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused) return;
+    (pickupObj as InvisibilityPickup).destroy();
+    const level = getPowerUpLevel('invisibility');
+    this.player.activateInvisibility(getInvisibilityDurationMs(level));
+    this.spawnPowerStarCollectEffect(this.player.x, this.player.y);
+  }
+
+  private onPlayerCollectFuelTank(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    pickupObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused || this.gameMode !== 'survival') return;
+    (pickupObj as FuelTankPickup).destroy();
+    const level = getPowerUpLevel('fuelTank');
+    this.player.activateBoostMode({
+      scoreCap: getFuelTankScoreCap(level),
+      durationMs: FUEL_TANK_BOOST_DURATION_MS,
+    });
+    this.cameras.main.flash(120, 255, 204, 0, false);
+  }
+
+  private createSurvivalPowerUpHud(): void {
+    this.engineHudBtn?.destroy();
+    this.hyperdriveHudBtn?.destroy();
+    this.engineHudBtn = undefined;
+    this.hyperdriveHudBtn = undefined;
+
+    if (this.gameMode !== 'survival') return;
+
+    const engineCount = getInventoryCount('engine');
+    const hyperCount = getInventoryCount('hyperdrive');
+    if (engineCount === 0 && hyperCount === 0) return;
+
+    let y = GAME_HEIGHT - 24;
+    if (this.fireButton) y = GAME_HEIGHT - 56;
+
+    if (engineCount > 0) {
+      this.engineHudBtn = this.createPowerUpTriggerButton(
+        GAME_WIDTH - 16,
+        y,
+        `ENG x${engineCount}`,
+        0xffcc00,
+        () => this.tryActivateEngine(),
+      );
+      y -= 40;
+    }
+
+    if (hyperCount > 0) {
+      this.hyperdriveHudBtn = this.createPowerUpTriggerButton(
+        GAME_WIDTH - 16,
+        y,
+        `HYP x${hyperCount}`,
+        0x00d4ff,
+        () => this.tryActivateHyperdrive(),
+      );
+    }
+  }
+
+  private createPowerUpTriggerButton(
+    x: number,
+    y: number,
+    label: string,
+    color: number,
+    onClick: () => void,
+  ): Phaser.GameObjects.Container {
+    const btn = this.add.container(x, y).setScrollFactor(0).setDepth(100);
+    const bg = this.add.graphics();
+    const width = 104;
+    const height = 28;
+    const drawBg = (alpha: number) => {
+      bg.clear();
+      bg.fillStyle(color, alpha);
+      bg.fillRoundedRect(-width, -height / 2, width, height, 8);
+      bg.lineStyle(1, color, 0.9);
+      bg.strokeRoundedRect(-width, -height / 2, width, height, 8);
+    };
+    drawBg(0.18);
+
+    const text = this.add.text(-width / 2, 0, label, {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '10px',
+      fontStyle: '700',
+      color: `#${color.toString(16).padStart(6, '0')}`,
+    }).setOrigin(0.5);
+
+    btn.add([bg, text]);
+    btn.setSize(width, height);
+    btn.setInteractive(
+      new Phaser.Geom.Rectangle(-width, -height / 2, width, height),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    btn.input!.cursor = 'pointer';
+    btn.on('pointerover', () => drawBg(0.32));
+    btn.on('pointerout', () => drawBg(0.18));
+    btn.on('pointerup', () => {
+      playSfx('ui');
+      onClick();
+    });
+    return btn;
+  }
+
+  private refreshSurvivalPowerUpHud(): void {
+    this.createSurvivalPowerUpHud();
+  }
+
+  private canActivateInventoryPowerUp(): boolean {
+    return !this.isGameOver
+      && !this.isPaused
+      && !this.isChoosingWeapon
+      && !this.player.isBoosting()
+      && !this.player.isGhostMode();
+  }
+
+  private tryActivateEngine(): void {
+    if (!this.canActivateInventoryPowerUp()) return;
+    if (getInventoryCount('engine') <= 0) return;
+    if (!consumeInventoryItem('engine')) return;
+
+    this.player.activateBoostMode({
+      scoreCap: ENGINE_SCORE_CAP,
+      durationMs: ENGINE_BOOST_DURATION_MS,
+    });
+    this.cameras.main.flash(120, 255, 204, 0, false);
+    this.refreshSurvivalPowerUpHud();
+  }
+
+  private tryActivateHyperdrive(): void {
+    if (!this.canActivateInventoryPowerUp()) return;
+    if (getInventoryCount('hyperdrive') <= 0) return;
+    if (!consumeInventoryItem('hyperdrive')) return;
+
+    this.player.activateBoostMode({
+      scoreCap: HYPERDRIVE_SCORE_CAP,
+      durationMs: HYPERDRIVE_BOOST_DURATION_MS,
+    });
+    this.cameras.main.flash(160, 0, 212, 255, false);
+    this.refreshSurvivalPowerUpHud();
+  }
+
   private fireEnemyLaser(x: number, y: number, angle: number, options?: EnemyLaserOptions): void {
     spawnEnemyLaser(this.enemyLasers, x, y, angle, options);
   }
@@ -2314,6 +2624,24 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
+    this.shieldPickups.children.each((child) => {
+      const pickup = child as ShieldPickup;
+      if (pickup.isOffScreen()) pickup.destroy();
+      return true;
+    });
+
+    this.invisibilityPickups.children.each((child) => {
+      const pickup = child as InvisibilityPickup;
+      if (pickup.isOffScreen()) pickup.destroy();
+      return true;
+    });
+
+    this.fuelTankPickups.children.each((child) => {
+      const pickup = child as FuelTankPickup;
+      if (pickup.isOffScreen()) pickup.destroy();
+      return true;
+    });
+
     this.enemyLasers.children.each((child) => {
       const laser = child as Phaser.Physics.Arcade.Sprite;
       if (isEnemyLaserOffScreen(laser)) laser.destroy();
@@ -2393,6 +2721,7 @@ export class GameScene extends Phaser.Scene {
 
   private shouldSpawnComets(): boolean {
     if (this.secretId) return false;
+    if (getWorldNumber(this.worldId) >= 3) return true;
     if (this.gameMode === 'story') {
       return this.storyLevel >= 16;
     }
@@ -2512,6 +2841,24 @@ export class GameScene extends Phaser.Scene {
     if (this.powerStarSpawnTimer >= this.powerStarSpawnInterval) {
       this.powerStarSpawnTimer = 0;
       this.spawnPowerStar();
+    }
+
+    this.shieldSpawnTimer += delta;
+    if (this.shieldSpawnTimer >= 45000) {
+      this.shieldSpawnTimer = 0;
+      this.spawnShieldPickup();
+    }
+
+    this.invisibilitySpawnTimer += delta;
+    if (this.invisibilitySpawnTimer >= 55000) {
+      this.invisibilitySpawnTimer = 0;
+      this.spawnInvisibilityPickup();
+    }
+
+    this.fuelTankSpawnTimer += delta;
+    if (this.gameMode === 'survival' && this.fuelTankSpawnTimer >= 50000) {
+      this.fuelTankSpawnTimer = 0;
+      this.spawnFuelTankPickup();
     }
 
     if (this.gameMode === 'story') {

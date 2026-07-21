@@ -2,7 +2,8 @@
 import { playSfx } from '../audioManager';
 import type { WorldMeta } from '../worlds';
 import type { GameMode } from '../gameMode';
-import { getBackgroundTheme } from '../world1/backgrounds';
+import { getBackgroundTheme } from '../levelResolver';
+import { isLevel20Complete, isSecretDawnComplete } from '../worldProgress';
 
 const CARD_WIDTH = 170;
 const CARD_HEIGHT = 130;
@@ -17,7 +18,7 @@ function drawWorldIllustration(
   unlocked: boolean,
 ): void {
   const alpha = unlocked ? 1 : 0.35;
-  const theme = getBackgroundTheme(world.cardTheme);
+  const theme = getBackgroundTheme(world.id, world.cardTheme);
 
   g.fillGradientStyle(
     theme.skyTop,
@@ -86,7 +87,7 @@ export function createWorldOverviewCard(
 ): Phaser.GameObjects.Container {
   const { x, y, world, onClick } = config;
   const unlocked = !world.locked;
-  const theme = getBackgroundTheme(world.cardTheme);
+  const theme = getBackgroundTheme(world.id, world.cardTheme);
   const container = scene.add.container(x, y);
 
   const bg = scene.add.graphics();
@@ -131,13 +132,34 @@ export function createWorldOverviewCard(
   }
 
   if (world.locked) {
-    const lockLabel = scene.add.text(0, 8, 'LOCKED', {
+    const lockLabel = scene.add.text(0, -4, 'LOCKED', {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '11px',
       fontStyle: '900',
       color: '#445566',
     }).setOrigin(0.5);
     container.add(lockLabel);
+
+    if (world.id === 'world3') {
+      const l20 = isLevel20Complete();
+      const dawn = isSecretDawnComplete();
+      const orLabel = scene.add.text(0, 10, 'Clear either:', {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '7px',
+        color: '#667788',
+      }).setOrigin(0.5);
+      const req1 = scene.add.text(0, 22, `${l20 ? '✓' : '○'} Oort Cloud (Lv 20)`, {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '7px',
+        color: l20 ? '#66aa66' : '#667788',
+      }).setOrigin(0.5);
+      const req2 = scene.add.text(0, 34, `${dawn ? '✓' : '○'} Dawn secret`, {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '7px',
+        color: dawn ? '#66aa66' : '#667788',
+      }).setOrigin(0.5);
+      container.add([orLabel, req1, req2]);
+    }
   }
 
   return container;

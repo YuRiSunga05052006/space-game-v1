@@ -7,6 +7,10 @@ import { BOSS_DEFINITIONS as WORLD2_BOSSES } from '../world2/bosses';
 import { drawBossAppearance as drawWorld2Boss, getBossAppearancePalette as getWorld2BossPalette } from '../world2/bossAppearances';
 import { STORY_ENEMY_DEFINITIONS as WORLD2_STORY_ENEMIES } from '../world2/storyEnemyDefinitions';
 import { drawStoryEnemyAppearance as drawWorld2StoryEnemy, getStoryEnemyAppearancePalette as getWorld2StoryEnemyPalette } from '../world2/storyEnemyAppearances';
+import { BOSS_DEFINITIONS as WORLD3_BOSSES } from '../world3/bosses';
+import { drawBossAppearance as drawWorld3Boss, getBossAppearancePalette as getWorld3BossPalette } from '../world3/bossAppearances';
+import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from '../world3/storyEnemyDefinitions';
+import { drawStoryEnemyAppearance as drawWorld3StoryEnemy, getStoryEnemyAppearancePalette as getWorld3StoryEnemyPalette } from '../world3/storyEnemyAppearances';
 import { PLAYER_SKINS } from '../playerSkins';
 import { drawRocketSkin } from '../rocketAppearances';
 
@@ -17,6 +21,7 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     this.load.image('shop-skins-tab-icon', '/assets/shop-skins-tab.png');
+    this.load.image('shop-powerups-tab-icon', '/assets/shop-powerups-tab.png');
   }
 
   create(): void {
@@ -46,6 +51,7 @@ export class BootScene extends Phaser.Scene {
     this.createWormholeTexture();
     this.createWarpPanelTexture();
     this.createCometTextures();
+    this.createPowerUpPickupTextures();
   }
 
   private createRocketSkinTextures(): void {
@@ -331,6 +337,13 @@ export class BootScene extends Phaser.Scene {
       g.generateTexture(definition.textureKey, 64, 64);
       g.destroy();
     }
+    for (const definition of Object.values(WORLD3_BOSSES)) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      const palette = getWorld3BossPalette(definition.themeId);
+      drawWorld3Boss(g, definition.appearanceId, palette);
+      g.generateTexture(definition.textureKey, 64, 64);
+      g.destroy();
+    }
   }
 
   private createStoryEnemyTextures(): void {
@@ -345,6 +358,13 @@ export class BootScene extends Phaser.Scene {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
       const palette = getWorld2StoryEnemyPalette(definition.themeId);
       drawWorld2StoryEnemy(g, definition.appearanceId, palette);
+      g.generateTexture(definition.textureKey, 32, 36);
+      g.destroy();
+    }
+    for (const definition of Object.values(WORLD3_STORY_ENEMIES)) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      const palette = getWorld3StoryEnemyPalette(definition.themeId);
+      drawWorld3StoryEnemy(g, definition.appearanceId, palette);
       g.generateTexture(definition.textureKey, 32, 36);
       g.destroy();
     }
@@ -397,5 +417,59 @@ export class BootScene extends Phaser.Scene {
     };
     drawComet('comet', 0x88aaff, 0x4466aa);
     drawComet('comet-gold', 0xffcc44, 0xcc8822);
+  }
+
+  private createPowerUpPickupTextures(): void {
+    const shield = this.make.graphics({ x: 0, y: 0 }, false);
+    shield.fillStyle(0x113344, 0.9);
+    shield.fillCircle(16, 16, 14);
+    shield.lineStyle(3, 0x44ddff, 1);
+    shield.strokeCircle(16, 16, 12);
+    shield.fillStyle(0x88eeff, 0.8);
+    shield.fillTriangle(16, 8, 22, 18, 10, 18);
+    shield.generateTexture('shield-pickup', 32, 32);
+    shield.destroy();
+
+    const invis = this.make.graphics({ x: 0, y: 0 }, false);
+    invis.fillStyle(0x221144, 0.55);
+    invis.fillCircle(16, 16, 14);
+    invis.lineStyle(2, 0xaa88ff, 0.9);
+    invis.strokeCircle(16, 16, 12);
+    invis.fillStyle(0xddccff, 0.35);
+    invis.fillCircle(16, 16, 6);
+    invis.generateTexture('invisibility-pickup', 32, 32);
+    invis.destroy();
+
+    const fuel = this.make.graphics({ x: 0, y: 0 }, false);
+    fuel.fillStyle(0x334411, 0.95);
+    fuel.fillRoundedRect(6, 8, 20, 18, 4);
+    fuel.fillStyle(0x88cc22, 0.95);
+    fuel.fillRoundedRect(8, 10, 16, 14, 3);
+    fuel.fillStyle(0xcccccc, 0.95);
+    fuel.fillRect(24, 12, 4, 10);
+    fuel.fillStyle(0xffee44, 0.9);
+    fuel.fillRect(10, 13, 4, 8);
+    fuel.generateTexture('fuel-tank-pickup', 32, 32);
+    fuel.destroy();
+
+    const engine = this.make.graphics({ x: 0, y: 0 }, false);
+    engine.fillStyle(0x553300, 0.95);
+    engine.fillRoundedRect(8, 10, 16, 14, 3);
+    engine.fillStyle(0xffaa00, 0.95);
+    engine.fillTriangle(16, 6, 24, 24, 8, 24);
+    engine.fillStyle(0xffee88, 0.9);
+    engine.fillCircle(16, 18, 4);
+    engine.generateTexture('engine-powerup', 32, 32);
+    engine.destroy();
+
+    const hyper = this.make.graphics({ x: 0, y: 0 }, false);
+    hyper.fillStyle(0x113355, 0.95);
+    hyper.fillRoundedRect(6, 8, 20, 18, 4);
+    hyper.fillStyle(0x00d4ff, 0.95);
+    hyper.fillTriangle(16, 4, 26, 24, 6, 24);
+    hyper.lineStyle(2, 0x88eeff, 0.9);
+    hyper.strokeCircle(16, 16, 10);
+    hyper.generateTexture('hyperdrive-powerup', 32, 32);
+    hyper.destroy();
   }
 }

@@ -64,6 +64,7 @@ export const MAP_WIDTH_TO_HEIGHT = 780 / 560;
 
 /** Offset from Earth: ISS sits slightly top-left. */
 export const SECRET_ISS_OFFSET = { dx: -0.028, dy: -0.032 * MAP_WIDTH_TO_HEIGHT };
+export const SECRET_DAWN_OFFSET = { dx: 0.024, dy: -0.028 * MAP_WIDTH_TO_HEIGHT };
 
 /** Angle on Earth's sub-orbit placing the Moon slightly bottom-right. */
 export const MOON_ORBIT_ANGLE = Math.PI / 4;
@@ -174,6 +175,15 @@ export const SECRET_ISS_MAP_POSITION = (() => {
   return {
     x: earth.x + SECRET_ISS_OFFSET.dx,
     y: earth.y + SECRET_ISS_OFFSET.dy,
+  };
+})();
+
+/** Secret Level 2 (Dawn) — near Ceres Approach (Level 9). */
+export const SECRET_DAWN_MAP_POSITION = (() => {
+  const ceres = WORLD1_MAP_NODES[8];
+  return {
+    x: ceres.x + SECRET_DAWN_OFFSET.dx,
+    y: ceres.y + SECRET_DAWN_OFFSET.dy,
   };
 })();
 
