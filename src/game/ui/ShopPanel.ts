@@ -10,11 +10,15 @@ import {
   type PlayerSkinDefinition,
 } from '../playerSkins';
 import {
+  getDeathBombChargePrice,
   getInventoryCount,
   getPowerUpCardAction,
   getPowerUpActionPrice,
   getPowerUpLevel,
+  getUpgradePrice,
+  isDeathBombUnlocked,
   POWER_UPS,
+  purchaseDeathBombCharge,
   purchaseInventoryItem,
   purchasePowerUp,
   type PowerUpDefinition,
@@ -28,6 +32,7 @@ const SCROLL_TOP = 150;
 const SCROLL_HEIGHT = 500;
 const CARD_HEIGHT = 108;
 const CARD_GAP = 10;
+const DEATH_BOMB_CARD_EXTRA = 14;
 const TAB_Y = 108;
 const TAB_WIDTH = 120;
 const TAB_GAP = 12;
@@ -73,7 +78,7 @@ function getPowerUpActionLabel(def: PowerUpDefinition, action: PowerUpCardAction
     case 'buy':
       return price === null ? 'LOCKED' : `BUY ${price}`;
     case 'upgrade': {
-      const level = getPowerUpLevel(def.id as 'shield' | 'invisibility' | 'fuelTank');
+      const level = getPowerUpLevel(def.id as 'shield' | 'invisibility' | 'fuelTank' | 'deathBomb');
       return price === null ? 'LOCKED' : `UP Lv ${level + 1}`;
     }
     case 'buyInventory':
@@ -290,6 +295,140 @@ function createPowerUpCard(
   return card;
 }
 
+function createDeathBombCard(
+  scene: Phaser.Scene,
+  y: number,
+  onRebuild: () => void,
+): Phaser.GameObjects.Container {
+  const def = POWER_UPS.find((p) => p.id === 'deathBomb')!;
+  const card = scene.add.container(0, y);
+  const cardH = CARD_HEIGHT - CARD_GAP + DEATH_BOMB_CARD_EXTRA;
+  const level = getPowerUpLevel('deathBomb');
+  const charges = getInventoryCount('deathBomb');
+  const upgradeAction = getPowerUpCardAction(def);
+  const upgradePrice = getUpgradePrice('deathBomb');
+  const chargePrice = getDeathBombChargePrice();
+  const unlocked = isDeathBombUnlocked();
+
+  const bg = scene.add.graphics();
+  bg.fillStyle(0x12182a, 0.95);
+  bg.fillRoundedRect(16, 0, GAME_WIDTH - 32, cardH, 8);
+  bg.lineStyle(1, 0x223344, 0.9);
+  bg.strokeRoundedRect(16, 0, GAME_WIDTH - 32, cardH, 8);
+  card.add(bg);
+
+  const preview = scene.add.image(52, cardH / 2, def.textureKey);
+  preview.setDisplaySize(36, 36);
+  card.add(preview);
+
+  const textX = 92;
+  card.add(scene.add.text(textX, 8, def.name, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '13px',
+    fontStyle: '700',
+    color: '#00d4ff',
+  }));
+
+  card.add(scene.add.text(textX, 24, def.modeTag, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '8px',
+    fontStyle: '700',
+    color: '#667788',
+  }));
+
+  const descWrapWidth = GAME_WIDTH - textX - 32;
+  card.add(scene.add.text(textX, 36, def.description, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '9px',
+    color: '#8899aa',
+    wordWrap: { width: descWrapWidth },
+    lineSpacing: 2,
+  }));
+
+  const statusLabel = level === 0
+    ? 'Not unlocked'
+    : `Level ${level} · ${charges} charge${charges === 1 ? '' : 's'}`;
+  card.add(scene.add.text(textX, cardH - 38, statusLabel, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '9px',
+    fontStyle: '700',
+    color: '#ffcc00',
+  }));
+
+  const actionBtnW = 72;
+  const actionBtnHalfW = actionBtnW / 2;
+  const actionBtnH = 32;
+  const actionBtnHalfH = actionBtnH / 2;
+  const actionRowY = cardH - 20;
+  const actionRight = GAME_WIDTH - 32;
+
+  const addActionButton = (
+    centerX: number,
+    label: string,
+    enabled: boolean,
+    onClick: () => void,
+  ) => {
+    const actionColor = enabled ? 0xffcc00 : 0x556677;
+    const actionBtn = scene.add.container(centerX, actionRowY);
+    const actionBg = scene.add.graphics();
+    const drawActionBg = (fillAlpha: number) => {
+      actionBg.clear();
+      actionBg.fillStyle(actionColor, enabled ? fillAlpha : 0.12);
+      actionBg.fillRoundedRect(-actionBtnHalfW, -actionBtnHalfH, actionBtnW, actionBtnH, 8);
+      actionBg.lineStyle(1, actionColor, enabled ? 0.9 : 0.35);
+      actionBg.strokeRoundedRect(-actionBtnHalfW, -actionBtnHalfH, actionBtnW, actionBtnH, 8);
+    };
+    drawActionBg(0.2);
+
+    const actionText = scene.add.text(0, 0, label, {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '8px',
+      fontStyle: '700',
+      color: `#${actionColor.toString(16).padStart(6, '0')}`,
+    }).setOrigin(0.5);
+
+    actionBtn.add([actionBg, actionText]);
+    if (enabled) {
+      actionBtn.setInteractive(
+        new Phaser.Geom.Rectangle(-actionBtnHalfW, -actionBtnHalfH, actionBtnW, actionBtnH),
+        Phaser.Geom.Rectangle.Contains,
+      );
+      actionBtn.input!.cursor = 'pointer';
+      actionBtn.on('pointerover', () => drawActionBg(0.35));
+      actionBtn.on('pointerout', () => drawActionBg(0.2));
+      actionBtn.on('pointerup', () => {
+        playSfx('ui');
+        onClick();
+      });
+    }
+    card.add(actionBtn);
+  };
+
+  const upgradeLabel = upgradeAction === 'max'
+    ? 'MAX'
+    : upgradeAction === 'buy'
+      ? `UNLOCK ${upgradePrice ?? ''}`
+      : `UP ${upgradePrice ?? ''}`;
+
+  const canUpgrade = upgradeAction !== 'max' && upgradePrice !== null && getCoins() >= upgradePrice;
+  const chargeCenterX = actionRight - actionBtnHalfW;
+  const upgradeCenterX = chargeCenterX - actionBtnW - 8;
+
+  addActionButton(upgradeCenterX, upgradeLabel.trim(), canUpgrade, () => {
+    if (!purchasePowerUp('deathBomb')) return;
+    onRebuild();
+  });
+
+  const chargeLabel = chargePrice !== null ? `+1 (${chargePrice})` : '+1';
+  const canBuyCharge = unlocked && chargePrice !== null && getCoins() >= chargePrice;
+  addActionButton(chargeCenterX, chargeLabel, canBuyCharge, () => {
+    if (!purchaseDeathBombCharge()) return;
+    onRebuild();
+  });
+
+  return card;
+}
+
 export function createShopPanel(
   scene: Phaser.Scene,
   depth: number,
@@ -369,6 +508,11 @@ export function createShopPanel(
       }
     } else {
       for (const def of POWER_UPS) {
+        if (def.id === 'deathBomb') {
+          content.add(createDeathBombCard(scene, y, rebuildContent));
+          y += CARD_HEIGHT + DEATH_BOMB_CARD_EXTRA;
+          continue;
+        }
         const handleAction = () => {
           const action = getPowerUpCardAction(def);
           let ok = false;

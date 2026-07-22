@@ -15,6 +15,18 @@ export function getEscalationLevel(score: number): number {
   return Math.floor((score - ESCALATION_START_SCORE) / ESCALATION_STEP_SCORE) + 1;
 }
 
+/** Survival: extra concurrent enemy ships (+1 per step, capped). */
+export const SURVIVAL_ENEMY_COUNT_STEP_SCORE = 2500;
+export const SURVIVAL_ENEMY_COUNT_BONUS_CAP = 3;
+
+export function getSurvivalEnemyCountBonus(score: number): number {
+  if (score <= 0) return 0;
+  return Math.min(
+    SURVIVAL_ENEMY_COUNT_BONUS_CAP,
+    Math.floor(score / SURVIVAL_ENEMY_COUNT_STEP_SCORE),
+  );
+}
+
 export const HEART_SPAWN_MS: Record<DifficultyTier, number> = {
   easy: 10000,
   medium: 15000,

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { assetUrl } from '../assetUrl';
 import { BOSS_DEFINITIONS as WORLD1_BOSSES } from '../world1/bosses';
 import { drawBossAppearance as drawWorld1Boss, getBossAppearancePalette as getWorld1BossPalette } from '../world1/bossAppearances';
 import { STORY_ENEMY_DEFINITIONS as WORLD1_STORY_ENEMIES } from '../world1/storyEnemyDefinitions';
@@ -20,8 +21,8 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.image('shop-skins-tab-icon', '/assets/shop-skins-tab.png');
-    this.load.image('shop-powerups-tab-icon', '/assets/shop-powerups-tab.png');
+    this.load.image('shop-skins-tab-icon', assetUrl('assets/shop-skins-tab.png'));
+    this.load.image('shop-powerups-tab-icon', assetUrl('assets/shop-powerups-tab.png'));
   }
 
   create(): void {
@@ -471,5 +472,19 @@ export class BootScene extends Phaser.Scene {
     hyper.strokeCircle(16, 16, 10);
     hyper.generateTexture('hyperdrive-powerup', 32, 32);
     hyper.destroy();
+
+    const bomb = this.make.graphics({ x: 0, y: 0 }, false);
+    bomb.fillStyle(0x221111, 0.95);
+    bomb.fillCircle(16, 18, 9);
+    bomb.fillStyle(0x442222, 0.95);
+    bomb.fillRect(14, 8, 4, 6);
+    bomb.fillStyle(0xff6600, 0.95);
+    bomb.fillCircle(16, 7, 3);
+    bomb.lineStyle(2, 0xff4466, 0.85);
+    bomb.strokeCircle(16, 16, 13);
+    bomb.lineStyle(1, 0xff8899, 0.5);
+    bomb.strokeCircle(16, 16, 11);
+    bomb.generateTexture('death-bomb-powerup', 32, 32);
+    bomb.destroy();
   }
 }

@@ -45,6 +45,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private onBoostCapReached?: () => void;
   private boostGlow?: Phaser.GameObjects.Graphics;
   private readonly boostSpeedMultiplier = 1.45;
+  private mercyInvincibleUntil = 0;
 
   private loadout: WeaponLoadout = createDefaultLoadout();
   private ownedWeaponIds: string[] = [];
@@ -165,7 +166,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   isDamageImmune(): boolean {
-    return this.invincible || this.shielded || this.invisible || this.boosting;
+    return this.invincible || this.shielded || this.invisible || this.boosting || this.isMercyInvincible();
+  }
+
+  isMercyInvincible(): boolean {
+    return this.scene.time.now < this.mercyInvincibleUntil;
+  }
+
+  grantMercyInvincibility(durationMs: number): void {
+    this.mercyInvincibleUntil = Math.max(
+      this.mercyInvincibleUntil,
+      this.scene.time.now + durationMs,
+    );
+  }
+
+  clearMercyInvincibility(): void {
+    this.mercyInvincibleUntil = 0;
   }
 
   isGhostMode(): boolean {
@@ -239,17 +255,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   activateBoostMode(options: {
     scoreCap: number;
-    durationMs: number;
-    onCapReached?: () => void;
+    durationMs?: number;
+    onEnd?: () => void;
   }): void {
     this.deactivateBoostMode(false);
     this.boosting = true;
     this.boostScoreCap = options.scoreCap;
     this.boostPointsEarned = 0;
-    this.onBoostCapReached = options.onCapReached;
-    this.boostTimer = this.scene.time.delayedCall(options.durationMs, () => {
-      this.deactivateBoostMode(true);
-    });
+    this.onBoostCapReached = options.onEnd;
+    this.boostTimer?.remove(false);
+    this.boostTimer = undefined;
+    if (options.durationMs != null && options.durationMs > 0) {
+      this.boostTimer = this.scene.time.delayedCall(options.durationMs, () => {
+        this.deactivateBoostMode(true);
+      });
+    }
     this.startBoostGlow();
     this.applySpeedMultiplier();
   }
@@ -270,7 +290,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   absorbHit(): boolean {
-    if (this.invisible || this.boosting || this.invincible) return true;
+    if (this.invisible || this.boosting || this.invincible || this.isMercyInvincible()) return true;
     if (this.shielded) {
       this.breakShield();
       return true;
@@ -493,6 +513,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.deactivateShield(false);
     this.deactivateInvisibility();
     this.deactivateBoostMode(false);
+    this.clearMercyInvincibility();
     this.thruster?.destroy();
     this.smokeTrail?.destroy();
     super.destroy(fromScene);

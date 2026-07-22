@@ -1,3 +1,4 @@
+import { assetUrl } from './assetUrl';
 import { getMusicVolume, getSoundVolume } from './settings';
 
 export type SfxType = 'shoot' | 'explosion' | 'hit' | 'ui';
@@ -14,6 +15,8 @@ let explosionBuffer: AudioBuffer | null = null;
 let explosionLoadPromise: Promise<AudioBuffer | null> | null = null;
 let buttonClickBuffer: AudioBuffer | null = null;
 let buttonClickLoadPromise: Promise<AudioBuffer | null> | null = null;
+let laserBuffer: AudioBuffer | null = null;
+let laserLoadPromise: Promise<AudioBuffer | null> | null = null;
 let rocketEngineBuffer: AudioBuffer | null = null;
 let rocketEngineLoadPromise: Promise<AudioBuffer | null> | null = null;
 let rocketEngineSource: AudioBufferSourceNode | null = null;
@@ -26,13 +29,15 @@ let invincibilityThemeGain: GainNode | null = null;
 let invincibilityThemePlaying = false;
 let invincibilityThemeDesired = false;
 
-const EXPLOSION_URL = '/assets/explosion.mp3';
-const BUTTON_CLICK_URL = '/assets/button-click.mp3';
-const ROCKET_ENGINE_URL = '/assets/rocket-engine.mp3';
-const INVINCIBILITY_THEME_URL = '/assets/invincibility-theme.mp3';
+const EXPLOSION_URL = assetUrl('assets/explosion.mp3');
+const BUTTON_CLICK_URL = assetUrl('assets/button-click.mp3');
+const LASER_URL = assetUrl('assets/laser.mp3');
+const ROCKET_ENGINE_URL = assetUrl('assets/rocket-engine.mp3');
+const INVINCIBILITY_THEME_URL = assetUrl('assets/invincibility-theme.mp3');
 const ROCKET_ENGINE_VOLUME = 0.45;
-const INVINCIBILITY_THEME_VOLUME = 0.7;
+const INVINCIBILITY_THEME_VOLUME = 0.35;
 const BUTTON_CLICK_VOLUME = 0.85;
+const LASER_VOLUME = 0.45;
 
 function ensureContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -50,11 +55,23 @@ function ensureContext(): AudioContext | null {
     applyAudioSettings();
   }
 
-  if (ctx.state === 'suspended') {
-    void ctx.resume();
+  return ctx;
+}
+
+/** Browsers require a user gesture before audio runs; Tauri/WebView is more lenient. */
+async function getRunningAudioContext(): Promise<AudioContext | null> {
+  const audioCtx = ensureContext();
+  if (!audioCtx) return null;
+
+  if (audioCtx.state === 'suspended') {
+    try {
+      await audioCtx.resume();
+    } catch {
+      return null;
+    }
   }
 
-  return ctx;
+  return audioCtx.state === 'running' ? audioCtx : null;
 }
 
 function getEffectiveMusicGain(): number {
@@ -66,10 +83,12 @@ function getEffectiveSfxGain(): number {
   return getSoundVolume() / 100;
 }
 
-export function initAudio(): void {
-  ensureContext();
+export async function initAudio(): Promise<void> {
+  const audioCtx = await getRunningAudioContext();
+  if (!audioCtx) return;
   preloadExplosionSfx();
   preloadButtonClickSfx();
+  preloadLaserSfx();
   preloadRocketEngineSfx();
   preloadInvincibilityTheme();
 }
@@ -81,7 +100,7 @@ function loadExplosionBuffer(): Promise<AudioBuffer | null> {
 
   if (!explosionLoadPromise) {
     explosionLoadPromise = (async () => {
-      const audioCtx = ensureContext();
+      const audioCtx = await getRunningAudioContext();
       if (!audioCtx) return null;
 
       try {
@@ -111,7 +130,7 @@ function loadButtonClickBuffer(): Promise<AudioBuffer | null> {
 
   if (!buttonClickLoadPromise) {
     buttonClickLoadPromise = (async () => {
-      const audioCtx = ensureContext();
+      const audioCtx = await getRunningAudioContext();
       if (!audioCtx) return null;
 
       try {
@@ -134,6 +153,36 @@ export function preloadButtonClickSfx(): void {
   void loadButtonClickBuffer();
 }
 
+function loadLaserBuffer(): Promise<AudioBuffer | null> {
+  if (laserBuffer) {
+    return Promise.resolve(laserBuffer);
+  }
+
+  if (!laserLoadPromise) {
+    laserLoadPromise = (async () => {
+      const audioCtx = await getRunningAudioContext();
+      if (!audioCtx) return null;
+
+      try {
+        const response = await fetch(LASER_URL);
+        if (!response.ok) return null;
+
+        const arrayBuffer = await response.arrayBuffer();
+        laserBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        return laserBuffer;
+      } catch {
+        return null;
+      }
+    })();
+  }
+
+  return laserLoadPromise;
+}
+
+export function preloadLaserSfx(): void {
+  void loadLaserBuffer();
+}
+
 function loadRocketEngineBuffer(): Promise<AudioBuffer | null> {
   if (rocketEngineBuffer) {
     return Promise.resolve(rocketEngineBuffer);
@@ -141,7 +190,7 @@ function loadRocketEngineBuffer(): Promise<AudioBuffer | null> {
 
   if (!rocketEngineLoadPromise) {
     rocketEngineLoadPromise = (async () => {
-      const audioCtx = ensureContext();
+      const audioCtx = await getRunningAudioContext();
       if (!audioCtx) return null;
 
       try {
@@ -188,11 +237,14 @@ function stopRocketEngineNodes(): void {
 }
 
 export function startRocketEngineSfx(): void {
-  const audioCtx = ensureContext();
-  if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
+  if (getSoundVolume() <= 0) return;
   if (rocketEnginePlaying) return;
 
-  void loadRocketEngineBuffer().then((buffer) => {
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
+    if (rocketEnginePlaying) return;
+
+    void loadRocketEngineBuffer().then((buffer) => {
     if (!buffer || !ctx || !sfxGain || getSoundVolume() <= 0) return;
     if (rocketEnginePlaying) return;
 
@@ -211,6 +263,7 @@ export function startRocketEngineSfx(): void {
     rocketEngineSource = source;
     rocketEngineGain = gain;
     rocketEnginePlaying = true;
+    });
   });
 }
 
@@ -233,7 +286,7 @@ function loadInvincibilityThemeBuffer(): Promise<AudioBuffer | null> {
 
   if (!invincibilityThemeLoadPromise) {
     invincibilityThemeLoadPromise = (async () => {
-      const audioCtx = ensureContext();
+      const audioCtx = await getRunningAudioContext();
       if (!audioCtx) return null;
 
       try {
@@ -280,14 +333,18 @@ function stopInvincibilityThemeNodes(): void {
 }
 
 function beginInvincibilityTheme(): void {
-  const audioCtx = ensureContext();
-  if (!audioCtx || !musicGain || !invincibilityThemeDesired) return;
+  if (!invincibilityThemeDesired) return;
   if (getMusicVolume() <= 0) return;
   if (invincibilityThemePlaying) return;
 
-  stopMusic();
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx || !musicGain || !invincibilityThemeDesired) return;
+    if (getMusicVolume() <= 0) return;
+    if (invincibilityThemePlaying) return;
 
-  void loadInvincibilityThemeBuffer().then((buffer) => {
+    stopMusic();
+
+    void loadInvincibilityThemeBuffer().then((buffer) => {
     if (!buffer || !ctx || !musicGain || !invincibilityThemeDesired) return;
     if (getMusicVolume() <= 0) return;
     if (invincibilityThemePlaying) return;
@@ -307,6 +364,7 @@ function beginInvincibilityTheme(): void {
     invincibilityThemeSource = source;
     invincibilityThemeGain = gain;
     invincibilityThemePlaying = true;
+    });
   });
 }
 
@@ -347,11 +405,14 @@ function playBufferedSample(
 }
 
 export function playExplosionSfx(): void {
-  const audioCtx = ensureContext();
-  if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
+  if (getSoundVolume() <= 0) return;
 
-  void loadExplosionBuffer().then((buffer) => {
-    playBufferedSample(buffer, 0.9, sfxGain!, () => playSfx('explosion'));
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
+
+    void loadExplosionBuffer().then((buffer) => {
+      playBufferedSample(buffer, 0.9, sfxGain!, () => playSfx('explosion'));
+    });
   });
 }
 
@@ -374,14 +435,14 @@ function playUiClickFallback(audioCtx: AudioContext, output: AudioNode, now: num
  * - 'music' channel → Music slider only (still works when Sound is muted)
  */
 export function playUiClick(channel: UiClickChannel = 'sound'): void {
-  const audioCtx = ensureContext();
-  if (!audioCtx) return;
-
   const sliderVolume = channel === 'music' ? getMusicVolume() : getSoundVolume();
   if (sliderVolume <= 0) return;
 
-  void loadButtonClickBuffer().then((buffer) => {
-    if (!ctx) return;
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx || !ctx) return;
+
+    void loadButtonClickBuffer().then((buffer) => {
+      if (!ctx) return;
 
     const liveVolume = channel === 'music' ? getMusicVolume() : getSoundVolume();
     if (liveVolume <= 0) return;
@@ -401,6 +462,7 @@ export function playUiClick(channel: UiClickChannel = 'sound'): void {
     }
 
     playUiClickFallback(ctx, master, ctx.currentTime);
+    });
   });
 }
 
@@ -431,32 +493,41 @@ export function applyAudioSettings(): void {
   }
 }
 
+function playShootOscillatorFallback(audioCtx: AudioContext, output: GainNode, now: number): void {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(920, now);
+  osc.frequency.exponentialRampToValueAtTime(640, now + 0.05);
+  gain.gain.setValueAtTime(0.08, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+  osc.connect(gain);
+  gain.connect(output);
+  osc.start(now);
+  osc.stop(now + 0.06);
+}
+
 export function playSfx(type: SfxType): void {
-  const audioCtx = ensureContext();
-  if (!audioCtx) return;
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx) return;
 
-  if (type === 'ui') {
-    playUiClick('sound');
-    return;
-  }
+    if (type === 'ui') {
+      playUiClick('sound');
+      return;
+    }
 
-  if (!sfxGain || getSoundVolume() <= 0) return;
+    if (!sfxGain || getSoundVolume() <= 0) return;
 
-  const now = audioCtx.currentTime;
-  const output = sfxGain;
+    const now = audioCtx.currentTime;
+    const output = sfxGain;
 
   if (type === 'shoot') {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(920, now);
-    osc.frequency.exponentialRampToValueAtTime(640, now + 0.05);
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-    osc.connect(gain);
-    gain.connect(output);
-    osc.start(now);
-    osc.stop(now + 0.06);
+    void loadLaserBuffer().then((buffer) => {
+      if (!ctx || !sfxGain) return;
+      playBufferedSample(buffer, LASER_VOLUME, sfxGain, () => {
+        playShootOscillatorFallback(audioCtx, output, now);
+      });
+    });
     return;
   }
 
@@ -499,6 +570,7 @@ export function playSfx(type: SfxType): void {
     osc.start(now);
     osc.stop(now + 0.11);
   }
+  });
 }
 
 function stopMusicNodes(): void {
@@ -519,9 +591,12 @@ function stopMusicNodes(): void {
 }
 
 export function startMusic(): void {
-  const audioCtx = ensureContext();
-  if (!audioCtx || !musicGain || musicPlaying || getMusicVolume() <= 0) return;
+  if (musicPlaying || getMusicVolume() <= 0) return;
   if (invincibilityThemeDesired) return;
+
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx || !musicGain || musicPlaying || getMusicVolume() <= 0) return;
+    if (invincibilityThemeDesired) return;
 
   const pad1 = audioCtx.createOscillator();
   const pad2 = audioCtx.createOscillator();
@@ -563,6 +638,7 @@ export function startMusic(): void {
 
   musicPlaying = true;
   applyAudioSettings();
+  });
 }
 
 export function stopMusic(): void {

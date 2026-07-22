@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { playSfx } from '../audioManager';
+import { playSfx, initAudio } from '../audioManager';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 
 export interface MenuButtonConfig {
@@ -48,9 +48,12 @@ export function createMenuButton(
 
   container.on('pointerover', () => drawBg(0.3, 1));
   container.on('pointerout', () => drawBg(0.15, 0.8));
-  container.on('pointerup', (_pointer: Phaser.Input.Pointer) => {
-    playSfx('ui');
-    config.onClick();
+  container.on('pointerup', () => {
+    void (async () => {
+      await initAudio();
+      playSfx('ui');
+      config.onClick();
+    })();
   });
 
   return {

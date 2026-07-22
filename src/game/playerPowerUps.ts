@@ -4,8 +4,8 @@ import { MAX_POWER_UP_LEVEL } from './powerUpEffects';
 const LEVELS_KEY = 'star-blaster-powerup-levels';
 const INVENTORY_KEY = 'star-blaster-powerup-inventory';
 
-export type UpgradablePowerUpId = 'shield' | 'invisibility' | 'fuelTank';
-export type InventoryPowerUpId = 'engine' | 'hyperdrive';
+export type UpgradablePowerUpId = 'shield' | 'invisibility' | 'fuelTank' | 'deathBomb';
+export type InventoryPowerUpId = 'engine' | 'hyperdrive' | 'deathBomb';
 export type PowerUpId = UpgradablePowerUpId | InventoryPowerUpId;
 
 export interface PowerUpDefinition {
@@ -14,7 +14,7 @@ export interface PowerUpDefinition {
   textureKey: string;
   description: string;
   modeTag: string;
-  kind: 'upgradable' | 'inventory';
+  kind: 'upgradable' | 'inventory' | 'hybrid';
   buyPrices?: number[];
   inventoryPrice?: number;
 }
@@ -65,17 +65,27 @@ export const POWER_UPS: PowerUpDefinition[] = [
     kind: 'inventory',
     inventoryPrice: 450,
   },
+  {
+    id: 'deathBomb',
+    name: 'Death Bomb',
+    textureKey: 'death-bomb-powerup',
+    description: 'Arm before a fatal hit. Your explosion damages or destroys nearby enemies and obstacles.',
+    modeTag: 'Story + Survival',
+    kind: 'hybrid',
+    buyPrices: [220, 110, 135, 160, 185],
+    inventoryPrice: 300,
+  },
 ];
 
 type LevelState = Record<UpgradablePowerUpId, number>;
 type InventoryState = Record<InventoryPowerUpId, number>;
 
 function defaultLevels(): LevelState {
-  return { shield: 0, invisibility: 0, fuelTank: 0 };
+  return { shield: 0, invisibility: 0, fuelTank: 0, deathBomb: 0 };
 }
 
 function defaultInventory(): InventoryState {
-  return { engine: 0, hyperdrive: 0 };
+  return { engine: 0, hyperdrive: 0, deathBomb: 0 };
 }
 
 function readLevels(): LevelState {
@@ -87,6 +97,7 @@ function readLevels(): LevelState {
       shield: clampLevel(parsed.shield),
       invisibility: clampLevel(parsed.invisibility),
       fuelTank: clampLevel(parsed.fuelTank),
+      deathBomb: clampLevel(parsed.deathBomb),
     };
   } catch {
     return defaultLevels();
@@ -109,6 +120,7 @@ function readInventory(): InventoryState {
     return {
       engine: Math.max(0, Math.floor(parsed.engine ?? 0)),
       hyperdrive: Math.max(0, Math.floor(parsed.hyperdrive ?? 0)),
+      deathBomb: Math.max(0, Math.floor(parsed.deathBomb ?? 0)),
     };
   } catch {
     return defaultInventory();
@@ -142,6 +154,15 @@ export function isPowerUpOwned(id: UpgradablePowerUpId): boolean {
 
 export function getInventoryCount(id: InventoryPowerUpId): number {
   return readInventory()[id];
+}
+
+export function isDeathBombUnlocked(): boolean {
+  return getPowerUpLevel('deathBomb') >= 1;
+}
+
+export function purchaseDeathBombCharge(): boolean {
+  if (!isDeathBombUnlocked()) return false;
+  return purchaseInventoryItem('deathBomb');
 }
 
 export function getUpgradePrice(id: UpgradablePowerUpId): number | null {
@@ -192,6 +213,12 @@ export type PowerUpCardAction = 'buy' | 'upgrade' | 'max' | 'buyInventory';
 
 export function getPowerUpCardAction(def: PowerUpDefinition): PowerUpCardAction {
   if (def.kind === 'inventory') return 'buyInventory';
+  if (def.kind === 'hybrid') {
+    const level = getPowerUpLevel('deathBomb');
+    if (level >= MAX_POWER_UP_LEVEL) return 'max';
+    if (level === 0) return 'buy';
+    return 'upgrade';
+  }
   const level = getPowerUpLevel(def.id as UpgradablePowerUpId);
   if (level >= MAX_POWER_UP_LEVEL) return 'max';
   if (level === 0) return 'buy';
@@ -199,6 +226,15 @@ export function getPowerUpCardAction(def: PowerUpDefinition): PowerUpCardAction 
 }
 
 export function getPowerUpActionPrice(def: PowerUpDefinition): number | null {
+  if (def.kind === 'inventory' || def.kind === 'hybrid') {
+    if (def.kind === 'hybrid') return getUpgradePrice('deathBomb');
+  }
   if (def.kind === 'inventory') return def.inventoryPrice ?? null;
   return getUpgradePrice(def.id as UpgradablePowerUpId);
+}
+
+export function getDeathBombChargePrice(): number | null {
+  const def = getPowerUpDefinition('deathBomb');
+  if (!def?.inventoryPrice || !isDeathBombUnlocked()) return null;
+  return def.inventoryPrice;
 }

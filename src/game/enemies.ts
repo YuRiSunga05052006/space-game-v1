@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { getEscalationLevel } from './difficulty';
+import { getEscalationLevel, getSurvivalEnemyCountBonus } from './difficulty';
 
 export type EnemyKind = 'spider' | 'seeker' | 'wasp' | 'turret';
 
@@ -31,6 +31,13 @@ const ENEMY_BASE_MAX: Record<EnemyKind, number> = {
   turret: 1,
 };
 
+const ENEMY_SURVIVAL_MAX: Record<EnemyKind, number> = {
+  spider: 5,
+  seeker: 4,
+  wasp: 5,
+  turret: 3,
+};
+
 /** Minimum ms between any enemy spawn attempt. */
 export const ENEMY_SPAWN_TICK_MS = 2500;
 
@@ -51,11 +58,30 @@ export function getEnemySpawnMs(kind: EnemyKind, score: number): number {
   return Math.max(ENEMY_MIN_INTERVAL[kind], base - reduction);
 }
 
-export function getMaxOnScreen(kind: EnemyKind, score: number): number {
+export function getMaxOnScreen(kind: EnemyKind, score: number, survival = false): number {
   if (!getUnlockedEnemyKinds(score).includes(kind)) return 0;
 
-  const level = getEscalationLevel(score);
   let max = ENEMY_BASE_MAX[kind];
+
+  if (survival) {
+    const bonus = getSurvivalEnemyCountBonus(score);
+    switch (kind) {
+      case 'spider':
+      case 'wasp':
+        max += bonus;
+        break;
+      case 'seeker':
+        max += Math.ceil(bonus / 2);
+        break;
+      case 'turret':
+        if (score >= 7000) max += 1;
+        max += Math.floor(bonus / 2);
+        break;
+    }
+    return Math.min(max, ENEMY_SURVIVAL_MAX[kind]);
+  }
+
+  const level = getEscalationLevel(score);
 
   switch (kind) {
     case 'spider':
@@ -95,11 +121,12 @@ function getEnemyWeight(kind: EnemyKind, score: number): number {
 export function pickEnemyToSpawn(
   score: number,
   counts: Record<EnemyKind, number>,
+  survival = false,
 ): EnemyKind | null {
   const unlocked = getUnlockedEnemyKinds(score);
   if (unlocked.length === 0) return null;
 
-  const candidates = unlocked.filter((kind) => counts[kind] < getMaxOnScreen(kind, score));
+  const candidates = unlocked.filter((kind) => counts[kind] < getMaxOnScreen(kind, score, survival));
   if (candidates.length === 0) return null;
 
   const weighted: EnemyKind[] = [];

@@ -1,4 +1,8 @@
 import Phaser from 'phaser';
+import {
+  clampCollectibleHorizontalBody,
+  randomCollectibleSpawnPosition,
+} from '../collectibleSpawn';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 
 export const HEART_HEAL = 2;
@@ -13,7 +17,7 @@ export class Heart extends Phaser.Physics.Arcade.Sprite {
     this.setCircle(10);
     this.setDepth(6);
     this.setVelocity(
-      Phaser.Math.Between(-30, 30),
+      Phaser.Math.Between(-18, 18),
       Phaser.Math.Between(25, 55),
     );
 
@@ -28,10 +32,12 @@ export class Heart extends Phaser.Physics.Arcade.Sprite {
   }
 
   static randomSpawnPosition(): { x: number; y: number } {
-    return {
-      x: Phaser.Math.Between(40, GAME_WIDTH - 40),
-      y: Phaser.Math.Between(-60, GAME_HEIGHT * 0.5),
-    };
+    return randomCollectibleSpawnPosition();
+  }
+
+  preUpdate(time: number, delta: number): void {
+    super.preUpdate(time, delta);
+    clampCollectibleHorizontalBody(this);
   }
 
   isOffScreen(): boolean {

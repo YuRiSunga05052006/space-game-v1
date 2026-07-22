@@ -348,7 +348,7 @@ export class MenuScene extends Phaser.Scene {
     const message = this.add.text(
       GAME_WIDTH / 2,
       GAME_HEIGHT / 2,
-      'Thanks for Playing!\nClose this tab to exit.',
+      'Thanks for Playing!',
       {
         fontFamily: 'Orbitron, sans-serif',
         fontSize: '16px',

@@ -116,18 +116,24 @@ import {
   consumeInventoryItem,
   getInventoryCount,
   getPowerUpLevel,
+  isDeathBombUnlocked,
   isPowerUpOwned,
 } from '../playerPowerUps';
+import { detonateDeathBomb } from '../deathBomb';
 import {
-  ENGINE_BOOST_DURATION_MS,
   ENGINE_SCORE_CAP,
-  FUEL_TANK_BOOST_DURATION_MS,
   getFuelTankScoreCap,
   getInvisibilityDurationMs,
   getShieldDurationMs,
-  HYPERDRIVE_BOOST_DURATION_MS,
   HYPERDRIVE_SCORE_CAP,
+  POST_SCORE_BOOST_INVISIBILITY_MS,
+  POST_SCORE_BOOST_MERCY_INVINCIBILITY_MS,
 } from '../powerUpEffects';
+import { BoostPointMeter } from '../ui/BoostPointMeter';
+import { updateBoostVacuum, type BoostVacuumAbsorbPayload } from '../boostVacuum';
+
+const STAR_BOOST_SPEED_MULTIPLIER = 2.75;
+const SURVIVAL_INVENTORY_BOOST_WINDOW_MS = 5000;
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -234,6 +240,11 @@ export class GameScene extends Phaser.Scene {
   private moveHint?: Phaser.GameObjects.Text;
   private stars: Phaser.GameObjects.Image[] = [];
   private starSpeeds: number[] = [];
+  private starSpeedBoostMultiplier = 1;
+  private boostPointMeter!: BoostPointMeter;
+  private inventoryBoostWindowClosed = false;
+  private deathBombArmed = false;
+  private deathBombHudBtn?: Phaser.GameObjects.Container;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -308,8 +319,12 @@ export class GameScene extends Phaser.Scene {
     this.engineHudBtn = undefined;
     this.hyperdriveHudBtn?.destroy();
     this.hyperdriveHudBtn = undefined;
-
-    this.physics.world.setBounds(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    this.inventoryBoostWindowClosed = false;
+    this.deathBombArmed = false;
+    this.deathBombHudBtn?.destroy();
+    this.deathBombHudBtn = undefined;
+    this.starSpeedBoostMultiplier = 1;
+    this.boostPointMeter?.destroy();
 
     this.createStarfield();
     if (this.gameMode === 'story') {
@@ -365,9 +380,10 @@ export class GameScene extends Phaser.Scene {
 
   private updateStarfield(delta: number): void {
     const dt = delta / 1000;
+    const speedMult = this.starSpeedBoostMultiplier;
     for (let i = 0; i < this.stars.length; i++) {
       const star = this.stars[i];
-      star.y += this.starSpeeds[i] * dt;
+      star.y += this.starSpeeds[i] * speedMult * dt;
       if (star.y > GAME_HEIGHT + 10) {
         star.y = -10;
         star.x = Phaser.Math.Between(0, GAME_WIDTH);
@@ -454,6 +470,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.healthBar = new HealthBar(this, GAME_WIDTH / 2, 58);
+    this.boostPointMeter = new BoostPointMeter(this, GAME_WIDTH / 2, 78);
     this.bossHealthBar = new BossHealthBar(this, 96);
     this.weaponHudText = this.add.text(GAME_WIDTH / 2, 112, '', {
       fontFamily: 'Orbitron, sans-serif',
@@ -464,6 +481,14 @@ export class GameScene extends Phaser.Scene {
     this.createPauseButton();
     this.updateFireModeUI();
     this.createSurvivalPowerUpHud();
+    this.createDeathBombHud();
+    if (this.gameMode === 'survival') {
+      this.time.delayedCall(SURVIVAL_INVENTORY_BOOST_WINDOW_MS, () => {
+        this.inventoryBoostWindowClosed = true;
+        this.engineHudBtn?.setVisible(false);
+        this.hyperdriveHudBtn?.setVisible(false);
+      });
+    }
 
     if (this.sys.game.device.input.touch) {
       this.moveHint = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 24, 'Drag to move', {
@@ -1280,6 +1305,40 @@ export class GameScene extends Phaser.Scene {
     const awarded = Math.min(points, remaining);
     this.addScore(awarded);
     this.player.addBoostPoints(awarded);
+    if (this.player.isBoosting()) {
+      this.boostPointMeter.update(this.player.getBoostPointsEarned(), this.player.getBoostScoreCap());
+    }
+  }
+
+  private startScoreBoost(scoreCap: number, flashDuration = 120, flashRgb = { r: 255, g: 204, b: 0 }): void {
+    this.starSpeedBoostMultiplier = STAR_BOOST_SPEED_MULTIPLIER;
+    this.player.activateBoostMode({
+      scoreCap,
+      onEnd: () => this.endScoreBoost(),
+    });
+    this.boostPointMeter.show(scoreCap);
+    this.cameras.main.flash(flashDuration, flashRgb.r, flashRgb.g, flashRgb.b, false);
+  }
+
+  private endScoreBoost(): void {
+    this.starSpeedBoostMultiplier = 1;
+    this.boostPointMeter.hide();
+    this.applyPostScoreBoostInvisibility();
+  }
+
+  private applyPostScoreBoostInvisibility(): void {
+    if (this.isGameOver || this.isPaused) return;
+    this.player.grantMercyInvincibility(POST_SCORE_BOOST_MERCY_INVINCIBILITY_MS);
+    this.player.activateInvisibility(POST_SCORE_BOOST_INVISIBILITY_MS);
+  }
+
+  private onBoostVacuumAbsorb(payload: BoostVacuumAbsorbPayload): void {
+    this.addBoostScore(payload.points);
+    if (payload.coinReward != null && payload.coinReward > 0) {
+      this.awardCoins(payload.coinReward, payload.x, payload.y);
+    }
+    this.spawnExplosion(payload.x, payload.y, payload.explosionCount);
+    this.tryAwardEnemyCoins(payload.x, payload.y);
   }
 
   private checkSecretMilestones(): void {
@@ -1575,6 +1634,13 @@ export class GameScene extends Phaser.Scene {
 
     const deathX = this.player.x;
     const deathY = this.player.y;
+
+    if (this.deathBombArmed && getInventoryCount('deathBomb') > 0) {
+      if (consumeInventoryItem('deathBomb')) {
+        this.detonateDeathBombAt(deathX, deathY);
+      }
+      this.deathBombArmed = false;
+    }
 
     this.physics.pause();
     this.player.hideForDeath();
@@ -2160,7 +2226,7 @@ export class GameScene extends Phaser.Scene {
     const heart = new Heart(this, x, y);
     this.hearts.add(heart);
     heart.setVelocity(
-      Phaser.Math.Between(-30, 30),
+      Phaser.Math.Between(-18, 18),
       Phaser.Math.Between(25, 55),
     );
   }
@@ -2173,7 +2239,7 @@ export class GameScene extends Phaser.Scene {
     const star = new PowerStar(this, x, y);
     this.powerStars.add(star);
     star.setVelocity(
-      Phaser.Math.Between(-25, 25),
+      Phaser.Math.Between(-18, 18),
       Phaser.Math.Between(20, 45),
     );
   }
@@ -2235,11 +2301,7 @@ export class GameScene extends Phaser.Scene {
     if (this.isGameOver || this.isPaused || this.gameMode !== 'survival') return;
     (pickupObj as FuelTankPickup).destroy();
     const level = getPowerUpLevel('fuelTank');
-    this.player.activateBoostMode({
-      scoreCap: getFuelTankScoreCap(level),
-      durationMs: FUEL_TANK_BOOST_DURATION_MS,
-    });
-    this.cameras.main.flash(120, 255, 204, 0, false);
+    this.startScoreBoost(getFuelTankScoreCap(level));
   }
 
   private createSurvivalPowerUpHud(): void {
@@ -2248,7 +2310,7 @@ export class GameScene extends Phaser.Scene {
     this.engineHudBtn = undefined;
     this.hyperdriveHudBtn = undefined;
 
-    if (this.gameMode !== 'survival') return;
+    if (this.gameMode !== 'survival' || this.inventoryBoostWindowClosed) return;
 
     const engineCount = getInventoryCount('engine');
     const hyperCount = getInventoryCount('hyperdrive');
@@ -2279,12 +2341,94 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private createDeathBombHud(): void {
+    this.deathBombHudBtn?.destroy();
+    this.deathBombHudBtn = undefined;
+
+    if (!isDeathBombUnlocked() || this.deathBombArmed) return;
+
+    const charges = getInventoryCount('deathBomb');
+    let y = GAME_HEIGHT - 24;
+    if (this.fireButton) y = GAME_HEIGHT - 56;
+
+    const label = charges > 0 ? `BOMB x${charges}` : 'BOMB 0';
+    const enabled = charges > 0;
+    this.deathBombHudBtn = this.createPowerUpTriggerButton(
+      16 + 104,
+      y,
+      label,
+      0xff4466,
+      () => this.tryArmDeathBomb(),
+      enabled,
+    );
+  }
+
+  private canArmDeathBomb(): boolean {
+    return !this.isGameOver && !this.isPaused && !this.isChoosingWeapon;
+  }
+
+  private tryArmDeathBomb(): void {
+    if (!this.canArmDeathBomb()) return;
+    if (getInventoryCount('deathBomb') <= 0) return;
+    this.deathBombArmed = true;
+    this.deathBombHudBtn?.destroy();
+    this.deathBombHudBtn = undefined;
+  }
+
+  private detonateDeathBombAt(x: number, y: number): void {
+    const level = getPowerUpLevel('deathBomb');
+    detonateDeathBomb(
+      x,
+      y,
+      level,
+      {
+        asteroids: this.asteroids,
+        comets: this.comets,
+        spiderShips: this.spiderShips,
+        seekerDrones: this.seekerDrones,
+        kamikazeWasps: this.kamikazeWasps,
+        plasmaTurrets: this.plasmaTurrets,
+        storyEnemies: this.storyEnemies,
+        bossShips: this.bossShips,
+      },
+      {
+        onAsteroidDestroyed: (ax, ay, points, coinReward, explosionCount) => {
+          this.finalizeAsteroidRewards(ax, ay, points, coinReward, explosionCount);
+        },
+        onEnemyDestroyed: (ex, ey, points, explosionCount) => {
+          this.addScore(points);
+          this.spawnExplosion(ex, ey, explosionCount);
+          this.tryAwardEnemyCoins(ex, ey);
+        },
+        onBossDamaged: (bx, by) => {
+          this.spawnExplosion(bx, by, 4);
+        },
+        spawnBlastRing: (bx, by, radius) => {
+          const ring = this.add.graphics().setDepth(95);
+          ring.lineStyle(3, 0xff6644, 0.95);
+          ring.strokeCircle(bx, by, 8);
+          ring.lineStyle(2, 0xffaa66, 0.7);
+          ring.strokeCircle(bx, by, radius * 0.55);
+          ring.lineStyle(1, 0xffcc88, 0.45);
+          ring.strokeCircle(bx, by, radius);
+          this.tweens.add({
+            targets: ring,
+            alpha: 0,
+            duration: 450,
+            onComplete: () => ring.destroy(),
+          });
+        },
+      },
+    );
+  }
+
   private createPowerUpTriggerButton(
     x: number,
     y: number,
     label: string,
     color: number,
     onClick: () => void,
+    interactive = true,
   ): Phaser.GameObjects.Container {
     const btn = this.add.container(x, y).setScrollFactor(0).setDepth(100);
     const bg = this.add.graphics();
@@ -2292,38 +2436,37 @@ export class GameScene extends Phaser.Scene {
     const height = 28;
     const drawBg = (alpha: number) => {
       bg.clear();
-      bg.fillStyle(color, alpha);
+      bg.fillStyle(color, interactive ? alpha : alpha * 0.35);
       bg.fillRoundedRect(-width, -height / 2, width, height, 8);
-      bg.lineStyle(1, color, 0.9);
+      bg.lineStyle(1, color, interactive ? 0.9 : 0.35);
       bg.strokeRoundedRect(-width, -height / 2, width, height, 8);
     };
     drawBg(0.18);
 
+    const textColor = interactive ? color : 0x556677;
     const text = this.add.text(-width / 2, 0, label, {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '10px',
       fontStyle: '700',
-      color: `#${color.toString(16).padStart(6, '0')}`,
+      color: `#${textColor.toString(16).padStart(6, '0')}`,
     }).setOrigin(0.5);
 
     btn.add([bg, text]);
     btn.setSize(width, height);
-    btn.setInteractive(
-      new Phaser.Geom.Rectangle(-width, -height / 2, width, height),
-      Phaser.Geom.Rectangle.Contains,
-    );
-    btn.input!.cursor = 'pointer';
-    btn.on('pointerover', () => drawBg(0.32));
-    btn.on('pointerout', () => drawBg(0.18));
-    btn.on('pointerup', () => {
-      playSfx('ui');
-      onClick();
-    });
+    if (interactive) {
+      btn.setInteractive(
+        new Phaser.Geom.Rectangle(-width, -height / 2, width, height),
+        Phaser.Geom.Rectangle.Contains,
+      );
+      btn.input!.cursor = 'pointer';
+      btn.on('pointerover', () => drawBg(0.32));
+      btn.on('pointerout', () => drawBg(0.18));
+      btn.on('pointerup', () => {
+        playSfx('ui');
+        onClick();
+      });
+    }
     return btn;
-  }
-
-  private refreshSurvivalPowerUpHud(): void {
-    this.createSurvivalPowerUpHud();
   }
 
   private canActivateInventoryPowerUp(): boolean {
@@ -2335,29 +2478,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryActivateEngine(): void {
+    if (this.inventoryBoostWindowClosed) return;
     if (!this.canActivateInventoryPowerUp()) return;
     if (getInventoryCount('engine') <= 0) return;
     if (!consumeInventoryItem('engine')) return;
 
-    this.player.activateBoostMode({
-      scoreCap: ENGINE_SCORE_CAP,
-      durationMs: ENGINE_BOOST_DURATION_MS,
-    });
-    this.cameras.main.flash(120, 255, 204, 0, false);
-    this.refreshSurvivalPowerUpHud();
+    this.startScoreBoost(ENGINE_SCORE_CAP);
+    this.engineHudBtn?.setVisible(false);
+    this.hyperdriveHudBtn?.setVisible(false);
   }
 
   private tryActivateHyperdrive(): void {
+    if (this.inventoryBoostWindowClosed) return;
     if (!this.canActivateInventoryPowerUp()) return;
     if (getInventoryCount('hyperdrive') <= 0) return;
     if (!consumeInventoryItem('hyperdrive')) return;
 
-    this.player.activateBoostMode({
-      scoreCap: HYPERDRIVE_SCORE_CAP,
-      durationMs: HYPERDRIVE_BOOST_DURATION_MS,
-    });
-    this.cameras.main.flash(160, 0, 212, 255, false);
-    this.refreshSurvivalPowerUpHud();
+    this.startScoreBoost(HYPERDRIVE_SCORE_CAP, 160, { r: 0, g: 212, b: 255 });
+    this.engineHudBtn?.setVisible(false);
+    this.hyperdriveHudBtn?.setVisible(false);
   }
 
   private fireEnemyLaser(x: number, y: number, angle: number, options?: EnemyLaserOptions): void {
@@ -2785,6 +2924,27 @@ export class GameScene extends Phaser.Scene {
 
     this.updateStarfield(delta);
 
+    if (this.player.isBoosting()) {
+      updateBoostVacuum(
+        this.player,
+        {
+          asteroids: this.asteroids,
+          comets: this.comets,
+          spiderShips: this.spiderShips,
+          seekerDrones: this.seekerDrones,
+          kamikazeWasps: this.kamikazeWasps,
+          plasmaTurrets: this.plasmaTurrets,
+          storyEnemies: this.storyEnemies,
+        },
+        delta,
+        (payload) => this.onBoostVacuumAbsorb(payload),
+      );
+      this.boostPointMeter.update(
+        this.player.getBoostPointsEarned(),
+        this.player.getBoostScoreCap(),
+      );
+    }
+
     if (!this.isHitStunned) {
       this.handleKeyboardMovement();
       this.handleTouchMovement();
@@ -2887,7 +3047,7 @@ export class GameScene extends Phaser.Scene {
         const enemyInterval = getEnemySpawnInterval(this.score);
         if (this.enemySpawnTimer >= enemyInterval) {
           this.enemySpawnTimer = 0;
-          const kind = pickEnemyToSpawn(this.score, this.getEnemyCounts());
+          const kind = pickEnemyToSpawn(this.score, this.getEnemyCounts(), true);
           if (kind) this.spawnEnemy(kind);
         }
       }

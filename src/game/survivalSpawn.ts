@@ -1,5 +1,5 @@
 ﻿import Phaser from 'phaser';
-import { getEscalationLevel } from './difficulty';
+import { getEscalationLevel, getSurvivalEnemyCountBonus } from './difficulty';
 import { getStoryEnemyDefinition as getW1StoryEnemy } from './world1/storyEnemyDefinitions';
 import { getStoryEnemyDefinition as getW2StoryEnemy } from './world2/storyEnemyDefinitions';
 import { getStoryEnemyDefinition as getW3StoryEnemy } from './world3/storyEnemyDefinitions';
@@ -95,9 +95,11 @@ export function getUnlockedStoryEnemyLevels(score: number, worldId = 'world1'): 
   return levels;
 }
 
+const STORY_ENEMY_SURVIVAL_EXTRA_CAP = 2;
+
 export function getMaxStoryEnemiesOnScreen(level: number, score: number, worldId = 'world1'): number {
   const base = getStoryEnemyDef(worldId, level).maxOnScreen;
-  const bonus = Math.floor(getEscalationLevel(score) / 2);
+  const bonus = Math.min(STORY_ENEMY_SURVIVAL_EXTRA_CAP, getSurvivalEnemyCountBonus(score));
   return base + bonus;
 }
 
