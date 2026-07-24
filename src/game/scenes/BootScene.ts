@@ -52,6 +52,8 @@ export class BootScene extends Phaser.Scene {
     this.createWormholeTexture();
     this.createWarpPanelTexture();
     this.createCometTextures();
+    this.createMineTextures();
+    this.createMineCarrierTexture();
     this.createPowerUpPickupTextures();
   }
 
@@ -418,6 +420,81 @@ export class BootScene extends Phaser.Scene {
     };
     drawComet('comet', 0x88aaff, 0x4466aa);
     drawComet('comet-gold', 0xffcc44, 0xcc8822);
+  }
+
+  private createMineTextures(): void {
+    const drawMine = (key: string, size: number, body: number, horn: number, highlight: number) => {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      const cx = size / 2;
+      const cy = size / 2;
+      const radius = size * 0.28;
+      const hornLen = size * 0.38;
+      const hornW = Math.max(2, size * 0.06);
+
+      g.fillStyle(horn, 1);
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2 - Math.PI / 2;
+        const tipX = cx + Math.cos(angle) * hornLen;
+        const tipY = cy + Math.sin(angle) * hornLen;
+        const px = -Math.sin(angle) * hornW;
+        const py = Math.cos(angle) * hornW;
+        g.fillTriangle(
+          tipX,
+          tipY,
+          cx + Math.cos(angle) * radius * 0.55 + px,
+          cy + Math.sin(angle) * radius * 0.55 + py,
+          cx + Math.cos(angle) * radius * 0.55 - px,
+          cy + Math.sin(angle) * radius * 0.55 - py,
+        );
+      }
+
+      g.fillStyle(body, 1);
+      g.fillCircle(cx, cy, radius);
+      g.fillStyle(highlight, 0.55);
+      g.fillCircle(cx - radius * 0.28, cy - radius * 0.28, radius * 0.35);
+      g.fillStyle(0x111111, 0.85);
+      g.fillCircle(cx, cy, radius * 0.18);
+      g.generateTexture(key, size, size);
+      g.destroy();
+    };
+
+    // Gray/blue match Mine Carrier (36px); purple matches a big boss (64px); red sits between.
+    drawMine('mine-gray', 36, 0x8a8f98, 0x5c616a, 0xc8ccd4);
+    drawMine('mine-blue', 36, 0x3a78c8, 0x24508a, 0x88c0ff);
+    drawMine('mine-red', 50, 0xc23a3a, 0x7a1f1f, 0xff8888);
+    drawMine('mine-purple', 64, 0x7a3ab8, 0x4a1f78, 0xd0a0ff);
+  }
+
+  private createMineCarrierTexture(): void {
+    const g = this.make.graphics({ x: 0, y: 0 }, false);
+    const cx = 18;
+    const cy = 18;
+    g.fillStyle(0x3a4558, 1);
+    g.fillRoundedRect(4, 8, 28, 18, 4);
+    g.fillStyle(0x5a6a82, 1);
+    g.fillRoundedRect(8, 4, 20, 10, 3);
+    g.fillStyle(0x2a88cc, 1);
+    g.fillCircle(cx - 7, cy + 2, 5);
+    g.fillCircle(cx + 7, cy + 2, 5);
+    g.fillStyle(0x88c0ff, 0.7);
+    g.fillCircle(cx - 7, cy + 1, 2);
+    g.fillCircle(cx + 7, cy + 1, 2);
+    g.fillStyle(0x8899aa, 1);
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      g.fillTriangle(
+        cx + Math.cos(angle) * 16,
+        cy + Math.sin(angle) * 14,
+        cx + Math.cos(angle) * 8 + Math.cos(angle + 1.2) * 2,
+        cy + Math.sin(angle) * 7 + Math.sin(angle + 1.2) * 2,
+        cx + Math.cos(angle) * 8 + Math.cos(angle - 1.2) * 2,
+        cy + Math.sin(angle) * 7 + Math.sin(angle - 1.2) * 2,
+      );
+    }
+    g.fillStyle(0xff6644, 1);
+    g.fillCircle(cx, cy - 2, 2);
+    g.generateTexture('mine-carrier', 36, 36);
+    g.destroy();
   }
 
   private createPowerUpPickupTextures(): void {

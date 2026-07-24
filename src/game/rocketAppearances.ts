@@ -10,7 +10,70 @@ export type RocketSkinAppearanceId =
   | 'neon'
   | 'amber'
   | 'sapphire'
-  | 'obsidian';
+  | 'obsidian'
+  | 'electricRainbow';
+
+export const RAINBOW_CYCLE_COLORS = [
+  0xff2244,
+  0xff8800,
+  0xffee00,
+  0x44ff66,
+  0x00eeff,
+  0x4488ff,
+  0xaa44ff,
+  0xff66cc,
+] as const;
+
+/** @deprecated Use RAINBOW_CYCLE_COLORS */
+export const RAINBOW_EXHAUST_COLORS = RAINBOW_CYCLE_COLORS;
+
+export const RAINBOW_CYCLE_MS = 2400;
+
+function lerpChannel(a: number, b: number, t: number): number {
+  return Math.round(a + (b - a) * t);
+}
+
+export function lerpColor(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff;
+  const ag = (a >> 8) & 0xff;
+  const ab = a & 0xff;
+  const br = (b >> 16) & 0xff;
+  const bg = (b >> 8) & 0xff;
+  const bb = b & 0xff;
+  return (
+    (lerpChannel(ar, br, t) << 16)
+    | (lerpChannel(ag, bg, t) << 8)
+    | lerpChannel(ab, bb, t)
+  );
+}
+
+function shadeColor(hex: number, factor: number): number {
+  const r = Math.min(255, Math.round(((hex >> 16) & 0xff) * factor));
+  const g = Math.min(255, Math.round(((hex >> 8) & 0xff) * factor));
+  const b = Math.min(255, Math.round((hex & 0xff) * factor));
+  return (r << 16) | (g << 8) | b;
+}
+
+function brightenColor(hex: number, factor: number): number {
+  const r = Math.min(255, Math.round(((hex >> 16) & 0xff) * factor));
+  const g = Math.min(255, Math.round(((hex >> 8) & 0xff) * factor));
+  const b = Math.min(255, Math.round((hex & 0xff) * factor));
+  return (r << 16) | (g << 8) | b;
+}
+
+export function getRainbowCyclePhase(timeMs: number): number {
+  const len = RAINBOW_CYCLE_COLORS.length;
+  return ((timeMs % RAINBOW_CYCLE_MS) / RAINBOW_CYCLE_MS) * len;
+}
+
+export function sampleRainbowColor(phase: number): number {
+  const len = RAINBOW_CYCLE_COLORS.length;
+  const wrapped = ((phase % len) + len) % len;
+  const i0 = Math.floor(wrapped) % len;
+  const i1 = (i0 + 1) % len;
+  const frac = wrapped - Math.floor(wrapped);
+  return lerpColor(RAINBOW_CYCLE_COLORS[i0], RAINBOW_CYCLE_COLORS[i1], frac);
+}
 
 export interface RocketSkinPalette {
   hull: number;
@@ -18,6 +81,7 @@ export interface RocketSkinPalette {
   exhaustPrimary: number;
   exhaustSecondary: number;
   outline?: number;
+  exhaustRainbow?: readonly number[];
 }
 
 const PALETTES: Record<RocketSkinAppearanceId, RocketSkinPalette> = {
@@ -82,6 +146,13 @@ const PALETTES: Record<RocketSkinAppearanceId, RocketSkinPalette> = {
     exhaustSecondary: 0x66ff88,
     outline: 0xffffff,
   },
+  electricRainbow: {
+    hull: 0x120818,
+    accent: 0xff66cc,
+    exhaustPrimary: 0xff2244,
+    exhaustSecondary: 0xffee00,
+    exhaustRainbow: RAINBOW_EXHAUST_COLORS,
+  },
 };
 
 export function getRocketSkinPalette(appearanceId: RocketSkinAppearanceId): RocketSkinPalette {
@@ -90,6 +161,9 @@ export function getRocketSkinPalette(appearanceId: RocketSkinAppearanceId): Rock
 
 export function getThrusterTints(appearanceId: RocketSkinAppearanceId): number[] {
   const p = getRocketSkinPalette(appearanceId);
+  if (p.exhaustRainbow) {
+    return [...p.exhaustRainbow];
+  }
   return [p.exhaustPrimary, p.exhaustSecondary, p.exhaustPrimary];
 }
 
@@ -104,10 +178,37 @@ export const ROCKET_ENGINE_Y = 52;
 /** Offset from sprite origin (center) to engine nozzle in pixels. */
 export const ROCKET_ENGINE_OFFSET_Y = ROCKET_ENGINE_Y - ROCKET_TEXTURE_HEIGHT / 2;
 
+export function drawElectricRainbowRocket(
+  g: Phaser.GameObjects.Graphics,
+  bodyColor: number,
+  engineColor: number,
+  originX = 0,
+  originY = 0,
+): void {
+  const hull = shadeColor(bodyColor, 0.38);
+  const accent = bodyColor;
+  const exhaustPrimary = engineColor;
+  const exhaustSecondary = brightenColor(engineColor, 1.28);
+
+  g.fillStyle(hull, 1);
+  g.fillTriangle(originX + 16, originY + 0, originX + 0, originY + 40, originX + 32, originY + 40);
+  g.fillStyle(accent, 1);
+  g.fillTriangle(originX + 16, originY + 8, originX + 6, originY + 36, originX + 26, originY + 36);
+  g.fillStyle(exhaustPrimary, 1);
+  g.fillTriangle(originX + 10, originY + 40, originX + 16, originY + 52, originX + 22, originY + 40);
+  g.fillStyle(exhaustSecondary, 1);
+  g.fillTriangle(originX + 13, originY + 42, originX + 16, originY + 50, originX + 19, originY + 42);
+}
+
 export function drawRocketSkin(
   g: Phaser.GameObjects.Graphics,
   appearanceId: RocketSkinAppearanceId,
 ): void {
+  if (appearanceId === 'electricRainbow') {
+    drawElectricRainbowRocket(g, RAINBOW_CYCLE_COLORS[0], RAINBOW_CYCLE_COLORS[0]);
+    return;
+  }
+
   const p = getRocketSkinPalette(appearanceId);
 
   if (p.outline !== undefined) {

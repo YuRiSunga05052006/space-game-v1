@@ -1,5 +1,6 @@
 export {
   getSurvivalHighScore,
+  getBestSurvivalHighScore,
   updateSurvivalHighScore,
   formatSurvivalHighScoreLabel,
 } from './survivalHighScore';

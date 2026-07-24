@@ -1,11 +1,15 @@
 import Phaser from 'phaser';
 import type { Asteroid } from './entities/Asteroid';
 import type { Comet } from './entities/Comet';
+import type { Mine } from './entities/Mine';
+import type { MineCarrier } from './entities/MineCarrier';
 import { getDeathBombDamage, getDeathBombRadius } from './powerUpEffects';
 
 export interface DeathBombGroups {
   asteroids: Phaser.Physics.Arcade.Group;
   comets: Phaser.Physics.Arcade.Group;
+  mines: Phaser.Physics.Arcade.Group;
+  mineCarriers: Phaser.Physics.Arcade.Group;
   spiderShips: Phaser.Physics.Arcade.Group;
   seekerDrones: Phaser.Physics.Arcade.Group;
   kamikazeWasps: Phaser.Physics.Arcade.Group;
@@ -25,6 +29,10 @@ export interface DeathBombCallbacks {
   onEnemyDestroyed: (x: number, y: number, points: number, explosionCount: number) => void;
   onBossDamaged: (x: number, y: number, damage: number) => void;
   spawnBlastRing: (x: number, y: number, radius: number) => void;
+  /** Death bomb destroys a mine — caller should detonate its blast chain. */
+  onMineTriggered: (mine: Mine) => void;
+  /** Death bomb kills a Mine Carrier — caller should spawn a blue mine. */
+  onMineCarrierDefeated: (x: number, y: number, points: number) => void;
 }
 
 function withinRadius(
@@ -117,6 +125,24 @@ export function detonateDeathBomb(
     const { x, y, points, coinReward } = comet;
     comet.destroy();
     callbacks.onAsteroidDestroyed(x, y, points, coinReward, 10);
+  });
+
+  const minesToTrigger: Mine[] = [];
+  forEachActive(groups.mines, (sprite) => {
+    if (!withinRadius(sprite.x, sprite.y, cx, cy, radius)) return;
+    minesToTrigger.push(sprite as Mine);
+  });
+  for (const mine of minesToTrigger) {
+    callbacks.onMineTriggered(mine);
+  }
+
+  forEachActive(groups.mineCarriers, (sprite) => {
+    if (!withinRadius(sprite.x, sprite.y, cx, cy, radius)) return;
+    const carrier = sprite as MineCarrier;
+    const { x, y, points } = carrier;
+    if (carrier.takeDamage(damage)) {
+      callbacks.onMineCarrierDefeated(x, y, points);
+    }
   });
 
   const enemyGroups: { group: Phaser.Physics.Arcade.Group; explosionCount: number }[] = [

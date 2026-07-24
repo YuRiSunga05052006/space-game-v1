@@ -18,6 +18,13 @@ import {
   TURRET_HEALTH,
   TURRET_POINTS,
 } from './entities/PlasmaTurret';
+import {
+  MINE_CARRIER_BLAST_RADIUS,
+  MINE_CARRIER_BODY_DAMAGE,
+  MINE_CARRIER_HEALTH,
+  MINE_CARRIER_POINTS,
+} from './entities/MineCarrier';
+import { MINE_DATA, type MineVariant } from './entities/Mine';
 import { ASTEROID_DAMAGE, ASTEROID_DATA, GOLD_ASTEROID_HEALTH, GOLD_ASTEROID_TEXTURES, type AsteroidSize } from './entities/Asteroid';
 import { COMET_DAMAGE, COMET_POINTS, GOLD_COMET_POINTS } from './entities/Comet';
 import { getGoldAsteroidCoinReward, getGoldCometCoinReward } from './coinDrops';
@@ -28,9 +35,18 @@ import { STORY_ENEMY_DEFINITIONS as WORLD1_STORY_ENEMIES, type StoryEnemyBehavio
 import { STORY_ENEMY_DEFINITIONS as WORLD2_STORY_ENEMIES } from './world2/storyEnemyDefinitions';
 import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from './world3/storyEnemyDefinitions';
 import { getStoryEnemyUnlockScore, getSurvivalBossUnlockScore } from './survivalSpawn';
+import { MINE_CARRIER_UNLOCK_SCORE } from './enemies';
 import { isWorld2Unlocked, isWorld3Unlocked } from './worldProgress';
 
-export type AlmanacCategory = 'asteroid' | 'goldAsteroid' | 'storyEnemy' | 'enemy' | 'boss' | 'comet' | 'goldComet';
+export type AlmanacCategory =
+  | 'asteroid'
+  | 'goldAsteroid'
+  | 'storyEnemy'
+  | 'enemy'
+  | 'boss'
+  | 'comet'
+  | 'goldComet'
+  | 'mine';
 export type AlmanacPage = 'shared' | 'world1' | 'world2' | 'world3';
 
 export interface AlmanacEntry {
@@ -43,6 +59,8 @@ export interface AlmanacEntry {
   description: string;
   stats: string;
   almanacPage: AlmanacPage;
+  /** When true, only shown on Shared after World 3 unlock. */
+  requiresWorld3?: boolean;
 }
 
 export interface AlmanacPageInfo {
@@ -154,7 +172,67 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     stats: `HP ${TURRET_HEALTH} · DMG ${TURRET_BODY_DAMAGE} · ${TURRET_POINTS} pts`,
     almanacPage: 'shared',
   },
+  {
+    id: 'enemy-mine-carrier',
+    category: 'enemy',
+    name: 'Mine Carrier',
+    textureKey: 'mine-carrier',
+    textureScale: 1.1,
+    subtitle: `Story W3 L27+ · Survival W3 ${MINE_CARRIER_UNLOCK_SCORE}+ score`,
+    description:
+      'Does not fire lasers. Rams explode in a blast that damages you, enemies, obstacles, and can chain mines and other carriers. Defeating one leaves a Blue Mine behind.',
+    stats: `HP ${MINE_CARRIER_HEALTH} · Blast DMG ${MINE_CARRIER_BODY_DAMAGE} · R ${MINE_CARRIER_BLAST_RADIUS} · ${MINE_CARRIER_POINTS} pts`,
+    almanacPage: 'shared',
+    requiresWorld3: true,
+  },
 ];
+
+const MINE_NAMES: Record<MineVariant, string> = {
+  gray: 'Gray Mine',
+  blue: 'Blue Mine',
+  red: 'Red Mine',
+  purple: 'Purple Mine',
+};
+
+const MINE_SUBTITLES: Record<MineVariant, string> = {
+  gray: 'Story W3 L21+ · All Survival · ISS & Dawn',
+  blue: 'Story W3 L21+ · All Survival · ISS & Dawn',
+  red: 'Survival W3 · 6000+ score',
+  purple: 'Survival W3 · 9000+ score',
+};
+
+const MINE_DESCRIPTIONS: Record<MineVariant, string> = {
+  gray:
+    'Small naval mine. Immune to lasers. Player collision detonates it, damaging you, enemies, and obstacles, and can chain other mines (not Mine Carriers).',
+  blue:
+    'Small naval mine. Immune to lasers. Player collision pushes it instead of detonating. Explodes on enemy contact — damages enemies and obstacles and can chain mines/carriers, but never damages you.',
+  red:
+    'Medium naval mine. Immune to lasers. Player collision detonates a moderate blast that can chain mines and Mine Carriers. Does not appear in Story Mode yet.',
+  purple:
+    'Large naval mine. Immune to lasers. Player collision detonates a massive blast that can chain mines and Mine Carriers. Does not appear in Story Mode yet.',
+};
+
+function buildMineEntries(): AlmanacEntry[] {
+  const variants: MineVariant[] = ['gray', 'blue', 'red', 'purple'];
+  return variants.map((variant) => {
+    const data = MINE_DATA[variant];
+    const dmgLabel = data.damagesPlayer ? `DMG ${data.playerDamage}` : 'DMG 0 (safe)';
+    const isWorld3Exclusive = variant === 'red' || variant === 'purple';
+    return {
+      id: `mine-${variant}`,
+      category: 'mine' as const,
+      name: MINE_NAMES[variant],
+      textureKey: data.texture,
+      textureScale: variant === 'purple' ? 0.7 : variant === 'red' ? 0.85 : 1.1,
+      subtitle: MINE_SUBTITLES[variant],
+      description: MINE_DESCRIPTIONS[variant],
+      stats: `${dmgLabel} · R ${data.blastRadius} · ${data.points} pts`,
+      almanacPage: 'shared' as const,
+      // Gray/Blue always listed; Red/Purple unlock with World 3.
+      requiresWorld3: isWorld3Exclusive,
+    };
+  });
+}
 
 const STORY_BEHAVIOR_DESCRIPTIONS: Record<StoryEnemyBehavior, string> = {
   driftLaser: 'Drifts inward and fires aimed lasers.',
@@ -246,6 +324,7 @@ export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   ...buildAsteroidEntries(),
   ...buildGoldAsteroidEntries(),
   ...ENEMY_ENTRIES,
+  ...buildMineEntries(),
   ...buildCometEntries(),
   ...buildStoryEnemyEntries(WORLD1_STORY_ENEMIES, 'world1', 'Story W1'),
   ...buildBossEntries(WORLD1_BOSSES, 'world1', 'Story W1'),
@@ -260,6 +339,7 @@ const PAGE_SECTIONS: Record<AlmanacPage, { label: string; category: AlmanacCateg
     { label: 'ASTEROIDS', category: 'asteroid' },
     { label: 'GOLD ASTEROIDS', category: 'goldAsteroid' },
     { label: 'SURVIVAL ENEMIES', category: 'enemy' },
+    { label: 'MINES', category: 'mine' },
     { label: 'COMETS', category: 'comet' },
     { label: 'GOLD COMETS', category: 'goldComet' },
   ],
@@ -293,7 +373,12 @@ export function isAlmanacPageUnlocked(page: AlmanacPage): boolean {
 
 export function getVisibleEntriesForPage(page: AlmanacPage): AlmanacEntry[] {
   if (!isAlmanacPageUnlocked(page)) return [];
-  return ALMANAC_ENTRIES.filter((entry) => entry.almanacPage === page);
+  const world3Unlocked = isWorld3Unlocked();
+  return ALMANAC_ENTRIES.filter((entry) => {
+    if (entry.almanacPage !== page) return false;
+    if (entry.requiresWorld3 && !world3Unlocked) return false;
+    return true;
+  });
 }
 
 export function getVisibleSectionsForPage(page: AlmanacPage): { label: string; category: AlmanacCategory }[] {

@@ -1,4 +1,6 @@
-﻿const STORAGE_PREFIX = 'star-blaster-survival-high-score';
+﻿import { WORLDS, getWorldNumber } from './worlds';
+
+const STORAGE_PREFIX = 'star-blaster-survival-high-score';
 const LEGACY_KEY = 'star-blaster-high-score';
 
 function getStorageKey(worldId = 'world1'): string {
@@ -28,6 +30,15 @@ export function getSurvivalHighScore(worldId = 'world1'): number {
   }
 }
 
+export function getBestSurvivalHighScore(): number {
+  migrateLegacyScore();
+  let best = 0;
+  for (const world of WORLDS) {
+    best = Math.max(best, getSurvivalHighScore(world.id));
+  }
+  return best;
+}
+
 export function updateSurvivalHighScore(score: number, worldId = 'world1'): number {
   const current = getSurvivalHighScore(worldId);
   if (score <= current) return current;
@@ -39,7 +50,14 @@ export function updateSurvivalHighScore(score: number, worldId = 'world1'): numb
   return score;
 }
 
-export function formatSurvivalHighScoreLabel(worldId = 'world1'): string {
-  const label = worldId === 'world2' ? 'WORLD 2 SURVIVAL HIGH SCORE' : 'SURVIVAL HIGH SCORE';
+export function formatSurvivalHighScoreLabel(worldId?: string): string {
+  if (worldId === undefined) {
+    return `SURVIVAL HIGH SCORE ${getBestSurvivalHighScore()}`;
+  }
+
+  const worldNum = getWorldNumber(worldId);
+  const label = worldId === 'world1'
+    ? 'SURVIVAL HIGH SCORE'
+    : `WORLD ${worldNum} SURVIVAL HIGH SCORE`;
   return `${label} ${getSurvivalHighScore(worldId)}`;
 }

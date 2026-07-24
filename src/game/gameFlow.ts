@@ -1,4 +1,4 @@
-import { updateSurvivalHighScore, getSurvivalHighScore, formatSurvivalHighScoreLabel } from './survivalHighScore';
+import { updateSurvivalHighScore, getSurvivalHighScore, getBestSurvivalHighScore, formatSurvivalHighScoreLabel } from './survivalHighScore';
 import type { GameMode } from './gameMode';
 
 export function goToTitleScreen(scene: Phaser.Scene): void {
@@ -42,9 +42,13 @@ export function saveScoreAndGoToTitle(scene: Phaser.Scene, score: number, mode: 
   goToTitleScreen(scene);
 }
 
-export function formatHighScoreLabel(worldId = 'world1'): string {
+export function formatHighScoreLabel(worldId?: string): string {
   return formatSurvivalHighScoreLabel(worldId);
 }
 
-export { getSurvivalHighScore as getHighScore, updateSurvivalHighScore as updateHighScore };
+export {
+  getSurvivalHighScore as getHighScore,
+  getBestSurvivalHighScore,
+  updateSurvivalHighScore as updateHighScore,
+};
 export { quitGame } from './quitGame';

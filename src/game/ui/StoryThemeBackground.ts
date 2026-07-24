@@ -121,6 +121,104 @@ function drawIssBackground(
   drawIssStation(g, cx, cy, scale);
 }
 
+function drawCeres(g: Phaser.GameObjects.Graphics, px: number, py: number, r: number): void {
+  g.fillStyle(0x778899, 0.25);
+  g.fillCircle(px, py, r + 12);
+  g.fillStyle(0x778899, 0.92);
+  g.fillCircle(px, py, r);
+
+  g.fillStyle(0x5a6670, 0.45);
+  g.fillCircle(px - r * 0.35, py + r * 0.15, r * 0.18);
+  g.fillCircle(px + r * 0.25, py - r * 0.2, r * 0.12);
+  g.fillCircle(px + r * 0.05, py + r * 0.35, r * 0.09);
+
+  g.fillStyle(0xffffff, 0.1);
+  g.fillCircle(px - r * 0.28, py - r * 0.3, r * 0.22);
+}
+
+function drawDawnSolarWing(
+  g: Phaser.GameObjects.Graphics,
+  startX: number,
+  y: number,
+  scale: number,
+  flip: boolean,
+): void {
+  const dir = flip ? -1 : 1;
+  const mastLen = 58 * scale;
+
+  g.lineStyle(2 * scale, 0x999999, 0.9);
+  g.lineBetween(startX, y, startX + dir * mastLen, y);
+
+  for (let i = 0; i < 5; i++) {
+    const panelX = startX + dir * (6 + i * 11) * scale;
+    g.fillStyle(0x777777, 0.95);
+    g.fillRect(panelX - 5 * scale, y - 22 * scale, 10 * scale, 44 * scale);
+    g.fillStyle(0x3a5a8a, 0.88);
+    g.fillRect(panelX - 4 * scale, y - 20 * scale, 8 * scale, 40 * scale);
+    g.fillStyle(0xd4a843, 0.75);
+    g.fillRect(panelX - 3 * scale, y - 18 * scale, 6 * scale, 36 * scale);
+    g.lineStyle(1, 0xdddddd, 0.45);
+    g.strokeRect(panelX - 4 * scale, y - 20 * scale, 8 * scale, 40 * scale);
+  }
+}
+
+function drawDawnSpacecraft(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  scale: number,
+): void {
+  const s = scale;
+
+  drawDawnSolarWing(g, cx - 52 * s, cy, s, true);
+  drawDawnSolarWing(g, cx + 52 * s, cy, s, false);
+
+  g.fillStyle(0x8899aa, 0.95);
+  g.fillRect(cx - 48 * s, cy - 2.5 * s, 96 * s, 5 * s);
+  g.lineStyle(1, 0xbbbbcc, 0.7);
+  g.strokeRect(cx - 48 * s, cy - 2.5 * s, 96 * s, 5 * s);
+
+  g.fillStyle(0xaabbcc, 1);
+  g.fillRoundedRect(cx - 14 * s, cy - 12 * s, 28 * s, 24 * s, 4 * s);
+  g.fillStyle(0x778899, 0.55);
+  g.fillRect(cx - 10 * s, cy - 8 * s, 6 * s, 16 * s);
+  g.fillRect(cx + 2 * s, cy - 8 * s, 6 * s, 16 * s);
+
+  g.fillStyle(0x6688aa, 0.9);
+  g.fillRect(cx - 52 * s, cy - 3 * s, 6 * s, 6 * s);
+  g.fillRect(cx + 46 * s, cy - 3 * s, 6 * s, 6 * s);
+
+  g.fillStyle(0x88aacc, 0.85);
+  g.fillCircle(cx, cy - 18 * s, 7 * s);
+  g.lineStyle(1.5 * s, 0xccddee, 0.75);
+  g.strokeCircle(cx, cy - 18 * s, 7 * s);
+
+  g.fillStyle(0x99bbdd, 0.6);
+  g.fillCircle(cx + 22 * s, cy + 2 * s, 3 * s);
+  g.fillStyle(0xaaddff, 0.35);
+  g.fillEllipse(cx + 30 * s, cy + 2 * s, 10 * s, 4 * s);
+}
+
+function drawDawnBackground(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+): void {
+  const ceresR = width * 0.22;
+  const ceresX = width * 0.78;
+  const ceresY = height * 0.42;
+  drawCeres(g, ceresX, ceresY, ceresR);
+
+  const cx = width * 0.38;
+  const cy = height * 0.28;
+  const scale = width / 390;
+
+  g.fillStyle(0x000000, 0.12);
+  g.fillEllipse(cx, cy, 180 * scale, 32 * scale);
+
+  drawDawnSpacecraft(g, cx, cy, scale);
+}
+
 export function applyStoryBackground(
   scene: Phaser.Scene,
   width: number,
@@ -134,6 +232,8 @@ export function applyStoryBackground(
   const planet = scene.add.graphics().setDepth(-2);
   if (theme.id === 'iss') {
     drawIssBackground(planet, width, height);
+  } else if (theme.id === 'dawn') {
+    drawDawnBackground(planet, width, height);
   } else if (theme.planetSize > 0) {
     const px = width * theme.planetX;
     const py = height * 0.38;

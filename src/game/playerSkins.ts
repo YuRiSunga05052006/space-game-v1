@@ -12,6 +12,7 @@ export interface PlayerSkinDefinition {
   appearanceId: RocketSkinAppearanceId;
   price: number;
   description: string;
+  special?: true;
 }
 
 export const PLAYER_SKINS: PlayerSkinDefinition[] = [
@@ -95,6 +96,15 @@ export const PLAYER_SKINS: PlayerSkinDefinition[] = [
     price: 300,
     description: 'Royal blue plating with sky-blue flames tipped in gold.',
   },
+  {
+    id: 'electricRainbow',
+    name: 'Electric Neon Rainbow',
+    textureKey: 'rocket-electric-rainbow',
+    appearanceId: 'electricRainbow',
+    price: 500,
+    special: true,
+    description: 'Rainbow neon hull and prismatic exhaust. Special: +75% gold asteroid/comet spawns in Survival.',
+  },
 ];
 
 function getSkinById(id: string): PlayerSkinDefinition | undefined {
@@ -171,4 +181,8 @@ export function purchaseSkin(id: string): boolean {
 export function getEquippedSkinTextureKey(): string {
   const equipped = getEquippedSkinId();
   return getSkinById(equipped)?.textureKey ?? 'rocket-classic';
+}
+
+export function hasSurvivalGoldSpawnBonus(): boolean {
+  return getEquippedSkinId() === 'electricRainbow';
 }

@@ -3,10 +3,8 @@
 export type MapPlanetId = 'jupiter' | 'saturn' | 'uranus' | 'neptune' | 'titan';
 
 export interface World2Orbit {
-  /** Semi-axis as a fraction of map width from the sun. */
-  rx: number;
-  /** Semi-axis as a fraction of map height from the sun. */
-  ry: number;
+  /** Radius as a fraction of map width from the sun (circular orbit). */
+  radius: number;
 }
 
 export interface MapNodeLayout {
@@ -22,32 +20,33 @@ export interface MapNodeLayout {
 /** Sun anchor — bottom-right of the map. */
 export const SUN_POSITION = { x: 0.88, y: 0.78 };
 
-/** Inner decorative rings + four gas-giant orbits (Jupiter → Neptune). */
+/** Must match SolarSystemMap CONTENT_WIDTH / CONTENT_HEIGHT. */
+export const MAP_WIDTH_TO_HEIGHT = 780 / 560;
+
+/** Four gas-giant orbits (Jupiter → Neptune), inner decorative rings removed. */
 export const WORLD2_ORBITS: World2Orbit[] = [
-  { rx: 0.042, ry: 0.036 },
-  { rx: 0.072, ry: 0.060 },
-  { rx: 0.100, ry: 0.084 },
-  { rx: 0.128, ry: 0.100 },
-  { rx: 0.188, ry: 0.180 },
-  { rx: 0.238, ry: 0.228 },
-  { rx: 0.298, ry: 0.285 },
+  { radius: 0.11 },
+  { radius: 0.17 },
+  { radius: 0.23 },
+  { radius: 0.29 },
 ];
 
-const JUPITER_ORBIT = 3;
-const SATURN_ORBIT = 4;
-const URANUS_ORBIT = 5;
-const NEPTUNE_ORBIT = 6;
+const JUPITER_ORBIT = 0;
+const SATURN_ORBIT = 1;
+const URANUS_ORBIT = 2;
+const NEPTUNE_ORBIT = 3;
 
-/** Jupiter & Saturn stacked vertically above the sun (12 o'clock). */
-const INNER_GIANT_ANGLE = -Math.PI / 2;
-const URANUS_ANGLE = -1.15;
-const NEPTUNE_ANGLE = -1.95;
+/** Distinct angles so orbit strokes and planets do not stack on one radial line. */
+const JUPITER_ANGLE = -Math.PI / 2;
+const SATURN_ANGLE = -1.32;
+const URANUS_ANGLE = -1.72;
+const NEPTUNE_ANGLE = -2.18;
 
 export function positionOnOrbit(orbitIndex: number, angle: number): { x: number; y: number } {
   const orbit = WORLD2_ORBITS[orbitIndex];
   return {
-    x: SUN_POSITION.x + orbit.rx * Math.cos(angle),
-    y: SUN_POSITION.y + orbit.ry * Math.sin(angle),
+    x: SUN_POSITION.x + orbit.radius * Math.cos(angle),
+    y: SUN_POSITION.y + orbit.radius * MAP_WIDTH_TO_HEIGHT * Math.sin(angle),
   };
 }
 
@@ -63,8 +62,8 @@ interface NodeDef {
 }
 
 const NODE_DEFS: NodeDef[] = [
-  { level: 11, orbitIndex: JUPITER_ORBIT, angle: INNER_GIANT_ANGLE, nodeStyle: 'planet', planetId: 'jupiter' },
-  { level: 12, orbitIndex: SATURN_ORBIT, angle: INNER_GIANT_ANGLE, nodeStyle: 'planet', planetId: 'saturn' },
+  { level: 11, orbitIndex: JUPITER_ORBIT, angle: JUPITER_ANGLE, nodeStyle: 'planet', planetId: 'jupiter' },
+  { level: 12, orbitIndex: SATURN_ORBIT, angle: SATURN_ANGLE, nodeStyle: 'planet', planetId: 'saturn' },
   { level: 13, x: 0.92, y: 0.56, nodeStyle: 'moon', planetId: 'titan' },
   { level: 14, orbitIndex: URANUS_ORBIT, angle: URANUS_ANGLE, nodeStyle: 'planet', planetId: 'uranus' },
   { level: 15, orbitIndex: NEPTUNE_ORBIT, angle: NEPTUNE_ANGLE, nodeStyle: 'planet', planetId: 'neptune' },

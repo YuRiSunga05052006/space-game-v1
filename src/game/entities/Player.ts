@@ -2,7 +2,13 @@ import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { startInvincibilityTheme, stopInvincibilityTheme } from '../audioManager';
 import { getEquippedSkinTextureKey, getEquippedSkinId, PLAYER_SKINS } from '../playerSkins';
-import { getThrusterTints, ROCKET_ENGINE_OFFSET_Y } from '../rocketAppearances';
+import {
+  drawElectricRainbowRocket,
+  getRainbowCyclePhase,
+  getThrusterTints,
+  ROCKET_ENGINE_OFFSET_Y,
+  sampleRainbowColor,
+} from '../rocketAppearances';
 import {
   buildFirePattern,
   computePlayerPowerScore,
@@ -27,6 +33,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private invincibleTimer?: Phaser.Time.TimerEvent;
   private rainbowGlow?: Phaser.GameObjects.Graphics;
   private rainbowTween?: Phaser.Tweens.Tween;
+  private rainbowShipGfx?: Phaser.GameObjects.Graphics;
+  private readonly electricRainbowSkin: boolean;
   private glowHue = 0;
 
   private shielded = false;
@@ -55,12 +63,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
+    this.electricRainbowSkin = getEquippedSkinId() === 'electricRainbow';
+
     this.setCollideWorldBounds(true);
     this.setDrag(0);
     this.applySpeedMultiplier();
     this.setSize(20, 36);
     this.setOffset(6, 8);
     this.setDepth(10);
+
+    if (this.electricRainbowSkin) {
+      this.rainbowShipGfx = scene.add.graphics();
+      this.rainbowShipGfx.setDepth(10);
+      this.setAlpha(0);
+    }
 
     this.createThruster();
   }
@@ -109,16 +125,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private createThruster(): void {
     const equippedSkin = PLAYER_SKINS.find((skin) => skin.id === getEquippedSkinId());
+    const electricRainbow = equippedSkin?.appearanceId === 'electricRainbow';
     const tint = equippedSkin
       ? getThrusterTints(equippedSkin.appearanceId)
       : [0xff6b35, 0xffcc00, 0xff4400];
 
-    this.thruster = this.scene.add.particles(0, 0, 'particle', {
+    const particleConfig: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig = {
       speed: { min: 60, max: 140 },
       scale: { start: 1.4, end: 0.1 },
       alpha: { start: 0.95, end: 0 },
       lifespan: 700,
-      tint,
       angle: {
         onEmit: () => {
           const exhaustDeg = Phaser.Math.RadToDeg(this.rotation) + 90;
@@ -126,21 +142,56 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         },
       },
       frequency: -1,
-    });
+    };
+
+    if (electricRainbow) {
+      particleConfig.tint = {
+        onEmit: () => sampleRainbowColor(getRainbowCyclePhase(this.scene.time.now)),
+      };
+    } else {
+      particleConfig.tint = tint;
+    }
+
+    this.thruster = this.scene.add.particles(0, 0, 'particle', particleConfig);
     this.thruster.setDepth(9);
 
-    this.smokeTrail = this.scene.add.particles(0, 0, 'smoke-particle', {
+    const smokeConfig: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig = {
       speed: { min: 0, max: 2 },
       scale: { start: 0.85, end: 0.3 },
       alpha: { start: 0.28, end: 0 },
       lifespan: 900,
-      tint,
       rotate: {
         onEmit: () => Phaser.Math.RadToDeg(this.rotation) + 90 + Phaser.Math.FloatBetween(-8, 8),
       },
       frequency: -1,
-    });
+    };
+
+    if (electricRainbow) {
+      smokeConfig.tint = {
+        onEmit: () => sampleRainbowColor(getRainbowCyclePhase(this.scene.time.now)),
+      };
+    } else {
+      smokeConfig.tint = tint;
+    }
+
+    this.smokeTrail = this.scene.add.particles(0, 0, 'smoke-particle', smokeConfig);
     this.smokeTrail.setDepth(8);
+  }
+
+  private updateRainbowShip(): void {
+    if (!this.rainbowShipGfx || !this.active) return;
+
+    const phase = getRainbowCyclePhase(this.scene.time.now);
+    const bodyColor = sampleRainbowColor(phase);
+    const engineColor = sampleRainbowColor(phase);
+
+    this.rainbowShipGfx.clear();
+    this.rainbowShipGfx.setPosition(this.x, this.y);
+    this.rainbowShipGfx.setRotation(this.rotation);
+    this.rainbowShipGfx.setVisible(true);
+    this.rainbowShipGfx.setAlpha(this.invisible ? this.alpha : 1);
+
+    drawElectricRainbowRocket(this.rainbowShipGfx, bodyColor, engineColor, -16, -26);
   }
 
   private getEngineWorldPosition(): { x: number; y: number } {
@@ -240,6 +291,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.invisible = true;
     this.invisibleBaseAlpha = this.alpha;
     this.setAlpha(0.35);
+    this.rainbowShipGfx?.setAlpha(0.35);
     this.invisibleTimer = this.scene.time.delayedCall(durationMs, () => {
       this.deactivateInvisibility();
     });
@@ -251,6 +303,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.invisibleTimer?.remove(false);
     this.invisibleTimer = undefined;
     this.setAlpha(this.invisibleBaseAlpha);
+    this.rainbowShipGfx?.setAlpha(this.electricRainbowSkin ? 1 : this.invisibleBaseAlpha);
   }
 
   activateBoostMode(options: {
@@ -389,6 +442,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   hideForDeath(): void {
     this.stopMove();
     this.setVisible(false);
+    this.rainbowShipGfx?.setVisible(false);
     this.thruster?.setVisible(false);
     this.smokeTrail?.setVisible(false);
     if (this.body) {
@@ -397,6 +451,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   updateThruster(_time: number, _delta: number): void {
+    if (this.electricRainbowSkin) {
+      this.updateRainbowShip();
+    }
+
     if (this.isMoving && this.thruster) {
       const engine = this.getEngineWorldPosition();
       this.thruster.setPosition(engine.x, engine.y);
@@ -516,6 +574,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.clearMercyInvincibility();
     this.thruster?.destroy();
     this.smokeTrail?.destroy();
+    this.rainbowShipGfx?.destroy();
     super.destroy(fromScene);
   }
 }

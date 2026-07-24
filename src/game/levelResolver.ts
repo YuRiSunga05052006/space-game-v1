@@ -1,4 +1,5 @@
 ﻿import { getWorldIdFromLevel } from './gameMode';
+import { getWorldNumber } from './worlds';
 import { getWorld1Level } from './world1/levels';
 import { getWorld2Level } from './world2/levels';
 import { getWorld3Level } from './world3/levels';
@@ -6,6 +7,7 @@ import { getSecretLevel, type SecretLevelDefinition } from './world1/secretLevel
 import { getBackgroundTheme as getWorld1Theme, type BackgroundTheme } from './world1/backgrounds';
 import { getBackgroundTheme as getWorld2Theme } from './world2/backgrounds';
 import { getBackgroundTheme as getWorld3Theme } from './world3/backgrounds';
+import { getWorldCardTheme } from './worldCardThemes';
 import { getBossDefinition as getWorld1Boss } from './world1/bosses';
 import { getBossDefinition as getWorld2Boss } from './world2/bosses';
 import { getBossDefinition as getWorld3Boss } from './world3/bosses';
@@ -102,6 +104,14 @@ export function getBackgroundTheme(worldId: string, themeId: string): Background
   if (themeId === 'iss' || themeId === 'dawn') {
     return getWorld1Theme(themeId);
   }
+  if (
+    worldId === 'world5'
+    || worldId === 'world6'
+    || worldId === 'world7'
+    || worldId === 'world8'
+  ) {
+    return getWorldCardTheme(worldId);
+  }
   if (worldId === 'world3') {
     return getWorld3Theme(themeId);
   }
@@ -109,6 +119,21 @@ export function getBackgroundTheme(worldId: string, themeId: string): Background
     return getWorld2Theme(themeId);
   }
   return getWorld1Theme(themeId);
+}
+
+const SURVIVAL_WORLD_THEME_IDS: Record<string, string> = {
+  world1: 'earth',
+  world2: 'jupiter',
+  world3: 'sirius',
+};
+
+export function getSurvivalBackgroundTheme(worldId: string): BackgroundTheme {
+  const themeId = SURVIVAL_WORLD_THEME_IDS[worldId] ?? SURVIVAL_WORLD_THEME_IDS.world1;
+  return getBackgroundTheme(worldId, themeId);
+}
+
+export function getSurvivalHudLabel(worldId: string): string {
+  return `WORLD ${getWorldNumber(worldId)} SURVIVAL`;
 }
 
 export function getBossDefinition(worldId: string, level: number): BossDefinition {

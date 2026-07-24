@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import type { Player } from './entities/Player';
 import type { Asteroid } from './entities/Asteroid';
 import type { Comet } from './entities/Comet';
+import type { Mine } from './entities/Mine';
+import type { MineCarrier } from './entities/MineCarrier';
 
 const ABSORB_RADIUS = 40;
 const PULL_ACCEL = 480;
@@ -13,11 +15,14 @@ export interface BoostVacuumAbsorbPayload {
   y: number;
   explosionCount: number;
   coinReward?: number;
+  spawnBlueMine?: boolean;
 }
 
 export interface BoostVacuumGroups {
   asteroids: Phaser.Physics.Arcade.Group;
   comets: Phaser.Physics.Arcade.Group;
+  mines: Phaser.Physics.Arcade.Group;
+  mineCarriers: Phaser.Physics.Arcade.Group;
   spiderShips: Phaser.Physics.Arcade.Group;
   seekerDrones: Phaser.Physics.Arcade.Group;
   kamikazeWasps: Phaser.Physics.Arcade.Group;
@@ -107,6 +112,33 @@ export function updateBoostVacuum(
         coinReward: comet.coinReward > 0 ? comet.coinReward : undefined,
       });
       comet.destroy();
+    }
+  });
+
+  forEachActive(groups.mines, (sprite) => {
+    if (pullToward(sprite, px, py, delta)) {
+      const mine = sprite as Mine;
+      onAbsorb({
+        points: mine.points,
+        x: mine.x,
+        y: mine.y,
+        explosionCount: 8,
+      });
+      mine.destroy();
+    }
+  });
+
+  forEachActive(groups.mineCarriers, (sprite) => {
+    if (pullToward(sprite, px, py, delta)) {
+      const carrier = sprite as MineCarrier;
+      onAbsorb({
+        points: carrier.points,
+        x: carrier.x,
+        y: carrier.y,
+        explosionCount: 8,
+        spawnBlueMine: true,
+      });
+      carrier.destroy();
     }
   });
 

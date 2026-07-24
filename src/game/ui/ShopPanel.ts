@@ -27,6 +27,11 @@ import {
 import { MAX_POWER_UP_LEVEL } from '../powerUpEffects';
 import { createMenuButton } from './MenuButtons';
 import { playSfx } from '../audioManager';
+import {
+  drawElectricRainbowRocket,
+  getRainbowCyclePhase,
+  sampleRainbowColor,
+} from '../rocketAppearances';
 
 const SCROLL_TOP = 150;
 const SCROLL_HEIGHT = 500;
@@ -100,6 +105,7 @@ function createSkinCard(
   skin: PlayerSkinDefinition,
   y: number,
   onAction: () => void,
+  rainbowPreviews?: Phaser.GameObjects.Graphics[],
 ): Phaser.GameObjects.Container {
   const card = scene.add.container(0, y);
   const cardH = CARD_HEIGHT - CARD_GAP;
@@ -119,11 +125,20 @@ function createSkinCard(
   drawBg();
   card.add(bg);
 
-  const preview = scene.add.image(52, cardH / 2, skin.textureKey);
-  preview.setScale(1.4);
+  const preview = skin.id === 'electricRainbow'
+    ? (() => {
+      const previewGfx = scene.add.graphics();
+      previewGfx.setPosition(52, cardH / 2);
+      previewGfx.setScale(1.4);
+      rainbowPreviews?.push(previewGfx);
+      return previewGfx;
+    })()
+    : scene.add.image(52, cardH / 2, skin.textureKey).setScale(1.4);
   card.add(preview);
 
   const textX = 92;
+  const descY = skin.special ? 40 : 30;
+
   card.add(scene.add.text(textX, 12, skin.name, {
     fontFamily: 'Orbitron, sans-serif',
     fontSize: '13px',
@@ -131,7 +146,16 @@ function createSkinCard(
     color: '#00d4ff',
   }));
 
-  card.add(scene.add.text(textX, 30, skin.description, {
+  if (skin.special) {
+    card.add(scene.add.text(textX, 28, 'SPECIAL · Survival bonus', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '8px',
+      fontStyle: '700',
+      color: '#667788',
+    }));
+  }
+
+  card.add(scene.add.text(textX, descY, skin.description, {
     fontFamily: 'Orbitron, sans-serif',
     fontSize: '9px',
     color: '#8899aa',
@@ -480,6 +504,24 @@ export function createShopPanel(
   let dragStartY = 0;
   let scrollStartY = 0;
   let maxScroll = 0;
+  const rainbowPreviews: Phaser.GameObjects.Graphics[] = [];
+
+  const updateRainbowPreviews = (): void => {
+    if (rainbowPreviews.length === 0) return;
+    const phase = getRainbowCyclePhase(scene.time.now);
+    const bodyColor = sampleRainbowColor(phase);
+    const engineColor = sampleRainbowColor(phase);
+    for (const gfx of rainbowPreviews) {
+      if (!gfx.active) continue;
+      gfx.clear();
+      drawElectricRainbowRocket(gfx, bodyColor, engineColor, -16, -26);
+    }
+  };
+
+  const onShopUpdate = (): void => {
+    updateRainbowPreviews();
+  };
+  scene.events.on(Phaser.Scenes.Events.UPDATE, onShopUpdate);
 
   const applyScroll = () => {
     content.setY(SCROLL_TOP - scrollY);
@@ -487,6 +529,7 @@ export function createShopPanel(
 
   const rebuildContent = () => {
     content.removeAll(true);
+    rainbowPreviews.length = 0;
     coinsText.setText(formatCoinsLabel());
 
     let y = 0;
@@ -503,7 +546,7 @@ export function createShopPanel(
           }
           rebuildContent();
         };
-        content.add(createSkinCard(scene, skin, y, handleAction));
+        content.add(createSkinCard(scene, skin, y, handleAction, rainbowPreviews));
         y += CARD_HEIGHT;
       }
     } else {
@@ -532,6 +575,7 @@ export function createShopPanel(
     scrollY = 0;
     maxScroll = Math.max(0, y - SCROLL_HEIGHT);
     applyScroll();
+    updateRainbowPreviews();
   };
 
   const drawTabs = () => {
@@ -628,6 +672,7 @@ export function createShopPanel(
   root.add(backBtn);
 
   const destroy = () => {
+    scene.events.off(Phaser.Scenes.Events.UPDATE, onShopUpdate);
     scene.input.off('pointerdown', onPointerDown);
     scene.input.off('pointermove', onPointerMove);
     scene.input.off('pointerup', stopDragging);

@@ -50,7 +50,7 @@ export class WorldSelectScene extends Phaser.Scene {
     const rowGap = 20;
     const gridW = cardW * 2 + colGap;
     const startX = GAME_WIDTH / 2 - gridW / 2 + cardW / 2;
-    const startY = 168 + cardH / 2;
+    const startY = 158 + cardH / 2;
 
     WORLDS.forEach((world, index) => {
       const col = index % 2;
@@ -80,7 +80,13 @@ export class WorldSelectScene extends Phaser.Scene {
       });
     });
 
-    const backY = startY + 2 * (cardH + rowGap) + 24;
+    const rowCount = Math.ceil(WORLDS.length / 2);
+    const lastRowCenterY = startY + (rowCount - 1) * (cardH + rowGap);
+    const backButtonHalfH = 24;
+    const backY = Math.min(
+      lastRowCenterY + cardH / 2 + 28 + backButtonHalfH,
+      GAME_HEIGHT - backButtonHalfH - 12,
+    );
     const { container: backBtn } = createMenuButton(this, {
       label: 'BACK',
       y: backY,

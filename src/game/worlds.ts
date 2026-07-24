@@ -60,6 +60,42 @@ export const WORLDS: WorldMeta[] = [
     levelCount: 0,
     cardTheme: 'beltFinale',
   },
+  {
+    id: 'world5',
+    number: 5,
+    title: 'Stellar Maze 1',
+    subtitle: 'Labyrinth sector I',
+    locked: true,
+    levelCount: 0,
+    cardTheme: 'stellarMaze1',
+  },
+  {
+    id: 'world6',
+    number: 6,
+    title: 'Stellar Maze 2',
+    subtitle: 'Labyrinth sector II',
+    locked: true,
+    levelCount: 0,
+    cardTheme: 'stellarMaze2',
+  },
+  {
+    id: 'world7',
+    number: 7,
+    title: 'Galactic Center',
+    subtitle: 'Heart of the galaxy',
+    locked: true,
+    levelCount: 0,
+    cardTheme: 'galacticCenter',
+  },
+  {
+    id: 'world8',
+    number: 8,
+    title: 'Degenerate Era',
+    subtitle: 'Final stronghold · far future',
+    locked: true,
+    levelCount: 0,
+    cardTheme: 'degenerateEra',
+  },
 ];
 
 export function getWorld(id: string): WorldMeta | undefined {
