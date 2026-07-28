@@ -219,6 +219,41 @@ function drawDawnBackground(
   drawDawnSpacecraft(g, cx, cy, scale);
 }
 
+function drawGalileanBackground(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const px = width * theme.planetX;
+  const py = height * 0.4;
+  const r = theme.planetSize / 2;
+
+  g.fillStyle(theme.planetColor, 0.3);
+  g.fillCircle(px, py, r + 10);
+  g.fillStyle(theme.planetColor, 0.92);
+  g.fillCircle(px, py, r);
+  g.fillStyle(0xaa5522, 0.45);
+  g.fillEllipse(px, py - r * 0.1, r * 1.7, r * 0.35);
+  g.fillStyle(0xffffff, 0.12);
+  g.fillCircle(px - r * 0.25, py - r * 0.28, r * 0.32);
+
+  const moons: { color: number; ox: number; oy: number; size: number }[] = [
+    { color: 0xff6644, ox: -0.42, oy: -0.55, size: 7 }, // Io
+    { color: 0xaaddff, ox: -0.18, oy: -0.72, size: 8 }, // Europa
+    { color: 0x8899aa, ox: 0.12, oy: -0.68, size: 11 }, // Ganymede
+    { color: 0x776655, ox: 0.38, oy: -0.48, size: 9 }, // Callisto
+  ];
+  for (const moon of moons) {
+    const mx = px + moon.ox * r * 2.2;
+    const my = py + moon.oy * r * 1.6;
+    g.fillStyle(moon.color, 0.95);
+    g.fillCircle(mx, my, moon.size);
+    g.fillStyle(0xffffff, 0.2);
+    g.fillCircle(mx - moon.size * 0.25, my - moon.size * 0.25, moon.size * 0.35);
+  }
+}
+
 export function applyStoryBackground(
   scene: Phaser.Scene,
   width: number,
@@ -234,6 +269,8 @@ export function applyStoryBackground(
     drawIssBackground(planet, width, height);
   } else if (theme.id === 'dawn') {
     drawDawnBackground(planet, width, height);
+  } else if (theme.id === 'galilean') {
+    drawGalileanBackground(planet, width, height, theme);
   } else if (theme.planetSize > 0) {
     const px = width * theme.planetX;
     const py = height * 0.38;

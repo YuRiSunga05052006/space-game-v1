@@ -31,7 +31,12 @@ export function rollEnemyCoinDrop(): number | null {
 }
 
 export const COMET_SPAWN_CHANCE = 0.03;
+/** Higher chance from Story L16+ (Kuiper Belt onward) and World 3+. */
+export const COMET_SPAWN_CHANCE_FREQUENT = 0.06;
+export const COMET_SPAWN_INTERVAL_MS = 3500;
+export const COMET_SPAWN_INTERVAL_FREQUENT_MS = 2200;
 export const GOLD_COMET_SPAWN_CHANCE = 0.005;
+export const GOLD_COMET_SPAWN_CHANCE_FREQUENT = 0.01;
 export const MAX_COMETS_ON_SCREEN = 2;
 export const GOLD_COMET_COIN_REWARD = 15;
 
@@ -42,8 +47,17 @@ export function getGoldCometCoinReward(): number {
   return GOLD_COMET_COIN_REWARD;
 }
 
-export function getGoldCometSpawnChance(survivalBonus: boolean): number {
+export function getGoldCometSpawnChance(survivalBonus: boolean, frequent = false): number {
+  const base = frequent ? GOLD_COMET_SPAWN_CHANCE_FREQUENT : GOLD_COMET_SPAWN_CHANCE;
   return survivalBonus
-    ? GOLD_COMET_SPAWN_CHANCE * SPECIAL_SKIN_GOLD_SPAWN_MULTIPLIER
-    : GOLD_COMET_SPAWN_CHANCE;
+    ? base * SPECIAL_SKIN_GOLD_SPAWN_MULTIPLIER
+    : base;
+}
+
+export function getCometSpawnChance(frequent: boolean): number {
+  return frequent ? COMET_SPAWN_CHANCE_FREQUENT : COMET_SPAWN_CHANCE;
+}
+
+export function getCometSpawnIntervalMs(frequent: boolean): number {
+  return frequent ? COMET_SPAWN_INTERVAL_FREQUENT_MS : COMET_SPAWN_INTERVAL_MS;
 }

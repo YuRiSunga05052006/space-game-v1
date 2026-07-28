@@ -130,7 +130,10 @@ export function detonateDeathBomb(
   const minesToTrigger: Mine[] = [];
   forEachActive(groups.mines, (sprite) => {
     if (!withinRadius(sprite.x, sprite.y, cx, cy, radius)) return;
-    minesToTrigger.push(sprite as Mine);
+    const mine = sprite as Mine;
+    // Dormant blue mines stay inert until the player kicks them.
+    if (mine.isDormantBlue) return;
+    minesToTrigger.push(mine);
   });
   for (const mine of minesToTrigger) {
     callbacks.onMineTriggered(mine);

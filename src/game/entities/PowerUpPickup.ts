@@ -14,6 +14,7 @@ export abstract class PowerUpPickup extends Phaser.Physics.Arcade.Sprite {
 
     this.setCircle(12);
     this.setDepth(7);
+    // Same drift profile as PowerStar / Heart collectibles.
     this.setVelocity(
       Phaser.Math.Between(-18, 18),
       Phaser.Math.Between(20, 45),
@@ -21,8 +22,8 @@ export abstract class PowerUpPickup extends Phaser.Physics.Arcade.Sprite {
 
     scene.tweens.add({
       targets: this,
-      scale: { from: 0.85, to: 1.15 },
-      duration: 550,
+      scale: { from: 0.85, to: 1.2 },
+      duration: 500,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',

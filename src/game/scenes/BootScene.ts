@@ -7,6 +7,7 @@ import { drawStoryEnemyAppearance as drawWorld1StoryEnemy, getStoryEnemyAppearan
 import { BOSS_DEFINITIONS as WORLD2_BOSSES } from '../world2/bosses';
 import { drawBossAppearance as drawWorld2Boss, getBossAppearancePalette as getWorld2BossPalette } from '../world2/bossAppearances';
 import { STORY_ENEMY_DEFINITIONS as WORLD2_STORY_ENEMIES } from '../world2/storyEnemyDefinitions';
+import { GALILEAN_MOON_ENEMIES } from '../world2/galileanEnemies';
 import { drawStoryEnemyAppearance as drawWorld2StoryEnemy, getStoryEnemyAppearancePalette as getWorld2StoryEnemyPalette } from '../world2/storyEnemyAppearances';
 import { BOSS_DEFINITIONS as WORLD3_BOSSES } from '../world3/bosses';
 import { drawBossAppearance as drawWorld3Boss, getBossAppearancePalette as getWorld3BossPalette } from '../world3/bossAppearances';
@@ -51,6 +52,7 @@ export class BootScene extends Phaser.Scene {
     this.createStoryEnemyTextures();
     this.createWormholeTexture();
     this.createWarpPanelTexture();
+    this.createFinishPanelTexture();
     this.createCometTextures();
     this.createMineTextures();
     this.createMineCarrierTexture();
@@ -364,6 +366,13 @@ export class BootScene extends Phaser.Scene {
       g.generateTexture(definition.textureKey, 32, 36);
       g.destroy();
     }
+    for (const definition of Object.values(GALILEAN_MOON_ENEMIES)) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      const palette = getWorld2StoryEnemyPalette(definition.themeId);
+      drawWorld2StoryEnemy(g, definition.appearanceId, palette);
+      g.generateTexture(definition.textureKey, 32, 36);
+      g.destroy();
+    }
     for (const definition of Object.values(WORLD3_STORY_ENEMIES)) {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
       const palette = getWorld3StoryEnemyPalette(definition.themeId);
@@ -401,6 +410,23 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(0xffffff, 0.9);
     g.fillTriangle(s / 2, 14, s / 2 - 8, s - 14, s / 2 + 8, s - 14);
     g.generateTexture('warp-panel', s, s);
+    g.destroy();
+  }
+
+  private createFinishPanelTexture(): void {
+    const g = this.make.graphics({ x: 0, y: 0 }, false);
+    const s = 48;
+    g.fillStyle(0x224400, 0.55);
+    g.fillRoundedRect(0, 0, s, s, 6);
+    g.lineStyle(3, 0x88ff44, 0.95);
+    g.strokeRoundedRect(4, 4, s - 8, s - 8, 4);
+    g.fillStyle(0x66cc33, 0.45);
+    g.fillRoundedRect(10, 10, s - 20, s - 20, 3);
+    g.fillStyle(0xffee88, 0.95);
+    g.fillCircle(s / 2, s / 2, 8);
+    g.fillStyle(0xffffff, 0.9);
+    g.fillTriangle(s / 2, 16, s / 2 - 7, s - 16, s / 2 + 7, s - 16);
+    g.generateTexture('finish-panel', s, s);
     g.destroy();
   }
 

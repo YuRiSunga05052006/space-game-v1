@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import { playSfx } from '../audioManager';
 import { isLevelUnlocked } from '../storyProgress';
 import { getLevelMeta, getBackgroundTheme, getMapLayout } from '../levelResolver';
-import { isSecretIssUnlocked, isSecretDawnUnlocked } from '../worldProgress';
+import { isSecretIssUnlocked, isSecretDawnUnlocked, isSecretGalileanUnlocked, isSecretGalileanComplete } from '../worldProgress';
 import type { MapNodeStyle, MapPlanetId, MapNodeLayout as World1MapNodeLayout } from '../world1/mapLayout';
 import { SECRET_ISS_MAP_POSITION, SECRET_DAWN_MAP_POSITION } from '../world1/mapLayout';
 import type { MapPlanetId as World2PlanetId, MapNodeLayout as World2MapNodeLayout } from '../world2/mapLayout';
+import { SECRET_GALILEAN_MAP_POSITION, getWorld2GalileanNeptuneRoute } from '../world2/mapLayout';
 import type { MapNodeLayout as World3MapNodeLayout } from '../world3/mapLayout';
 
 const FINALE_STAR_COLOR = 0xffdd66;
@@ -68,6 +69,22 @@ function drawMiniIss(g: Phaser.GameObjects.Graphics): void {
   g.fillRect(21, -3, 3, 6);
   g.fillStyle(0xa8c8e8, 0.75);
   g.fillCircle(-1, -8, 3);
+}
+
+function drawMiniGalilean(g: Phaser.GameObjects.Graphics): void {
+  // Moons only — Jupiter is already the Level 11 planet node.
+  const moons = [
+    { color: 0xff6644, x: -16, y: -12, r: 3 }, // Io
+    { color: 0xaaddff, x: -5, y: -18, r: 3.5 }, // Europa
+    { color: 0x8899aa, x: 8, y: -16, r: 4.5 }, // Ganymede
+    { color: 0x776655, x: 18, y: -8, r: 3.5 }, // Callisto
+  ];
+  for (const moon of moons) {
+    g.fillStyle(moon.color, 0.95);
+    g.fillCircle(moon.x, moon.y, moon.r);
+    g.fillStyle(0xffffff, 0.25);
+    g.fillCircle(moon.x - moon.r * 0.25, moon.y - moon.r * 0.25, moon.r * 0.35);
+  }
 }
 
 function drawAsteroidBeltDonut(
@@ -482,6 +499,15 @@ export function createSolarSystemMap(
       drawRouteSegment(points[p], points[p + 1]);
     }
   }
+
+  if (worldId === 'world2' && isSecretGalileanComplete()) {
+    const alt = getWorld2GalileanNeptuneRoute();
+    route.lineStyle(2, 0x88ff44, 0.55);
+    drawRouteSegment(
+      mapToContent(alt.from.x, alt.from.y),
+      mapToContent(alt.to.x, alt.to.y),
+    );
+  }
   content.add(route);
 
   const clampPan = (): void => {
@@ -518,6 +544,10 @@ export function createSolarSystemMap(
       focusOnPosition(SECRET_DAWN_MAP_POSITION.x, SECRET_DAWN_MAP_POSITION.y);
       return;
     }
+    if (secretId === 'galilean') {
+      focusOnPosition(SECRET_GALILEAN_MAP_POSITION.x, SECRET_GALILEAN_MAP_POSITION.y);
+      return;
+    }
     const node = layout.getMapNode(level);
     focusOnPosition(node.x, node.y);
   };
@@ -534,6 +564,10 @@ export function createSolarSystemMap(
     } else if (selectedSecretId === 'dawn') {
       pos = mapToContent(SECRET_DAWN_MAP_POSITION.x, SECRET_DAWN_MAP_POSITION.y);
       themeId = 'dawn';
+    } else if (selectedSecretId === 'galilean') {
+      pos = mapToContent(SECRET_GALILEAN_MAP_POSITION.x, SECRET_GALILEAN_MAP_POSITION.y);
+      themeId = 'galilean';
+      ringRadius = 18;
     } else {
       const node = layout.getMapNode(selectedLevel);
       pos = mapToContent(node.x, node.y);
@@ -749,6 +783,46 @@ export function createSolarSystemMap(
       selectedLevel = 6;
       redrawSelection();
       onSelectLevel(6, 'dawn');
+    });
+
+    content.add(secretContainer);
+  }
+
+  if (worldId === 'world2' && isSecretGalileanUnlocked()) {
+    // Anchor on Jupiter so the four moons read as its satellites.
+    const jupiterNode = layout.getMapNode(11);
+    const jupiterPos = mapToContent(jupiterNode.x, jupiterNode.y);
+    const secretContainer = scene.add.container(jupiterPos.x, jupiterPos.y);
+
+    const secretGfx = scene.add.graphics();
+    drawMiniGalilean(secretGfx);
+    secretContainer.add(secretGfx);
+
+    const secretLabel = scene.add.text(0, -28, 'GALILEAN', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '8px',
+      fontStyle: '700',
+      color: '#ffcc66',
+    }).setOrigin(0.5);
+    secretContainer.add(secretLabel);
+
+    secretContainer.setInteractive(
+      new Phaser.Geom.Rectangle(-22, -34, 44, 36),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    secretContainer.input!.cursor = 'pointer';
+
+    secretContainer.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+      isPanning = false;
+    });
+    secretContainer.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+      playSfx('ui');
+      selectedSecretId = 'galilean';
+      selectedLevel = 11;
+      redrawSelection();
+      onSelectLevel(11, 'galilean');
     });
 
     content.add(secretContainer);

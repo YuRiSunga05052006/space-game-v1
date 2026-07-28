@@ -11,7 +11,11 @@ export type StoryEnemyAppearanceId =
   | 'frostRaider'
   | 'shadowWeaver'
   | 'sednoidPhantom'
-  | 'cometHerald';
+  | 'cometHerald'
+  | 'ioMagma'
+  | 'europaIce'
+  | 'ganymedeColossus'
+  | 'callistoStalker';
 
 export interface StoryEnemyAppearancePalette {
   hull: number;
@@ -139,6 +143,52 @@ const DRAWERS: Record<StoryEnemyAppearanceId, (g: Phaser.GameObjects.Graphics, p
     g.fillTriangle(CX - 12, CY, CX + 2, CY - 6, CX + 2, CY + 6);
     g.fillStyle(p.glow, 0.3);
     g.fillTriangle(CX - 16, CY, CX - 4, CY - 4, CX - 4, CY + 4);
+  },
+  ioMagma: (g, p) => {
+    g.fillStyle(p.hullDark, 1);
+    g.fillCircle(CX, CY, 10);
+    g.fillStyle(p.hull, 1);
+    g.fillCircle(CX, CY, 7);
+    g.fillStyle(p.glow, 0.95);
+    g.fillCircle(CX - 3, CY - 3, 3);
+    g.fillCircle(CX + 4, CY + 2, 2);
+    g.lineStyle(2, p.trim, 0.85);
+    g.lineBetween(CX, CY + 8, CX - 4, CY + 14);
+    g.lineBetween(CX, CY + 8, CX + 4, CY + 14);
+  },
+  europaIce: (g, p) => {
+    g.fillStyle(p.hull, 1);
+    g.fillCircle(CX, CY, 9);
+    g.fillStyle(p.core, 0.35);
+    g.fillCircle(CX - 2, CY - 2, 5);
+    g.lineStyle(1.5, p.trim, 0.9);
+    g.lineBetween(CX - 7, CY - 2, CX + 7, CY + 3);
+    g.lineBetween(CX - 5, CY + 5, CX + 6, CY - 4);
+    g.fillStyle(p.glow, 0.85);
+    g.fillCircle(CX, CY - 5, 2);
+  },
+  ganymedeColossus: (g, p) => {
+    g.fillStyle(p.hullDark, 1);
+    g.fillCircle(CX, CY, 13);
+    g.fillStyle(p.hull, 1);
+    g.fillCircle(CX, CY, 10);
+    g.fillStyle(p.trim, 0.7);
+    g.fillCircle(CX - 4, CY - 3, 4);
+    g.fillCircle(CX + 5, CY + 2, 3);
+    g.fillStyle(p.glow, 0.9);
+    g.fillCircle(CX, CY - 1, 3);
+  },
+  callistoStalker: (g, p) => {
+    g.fillStyle(p.hullDark, 1);
+    g.fillCircle(CX, CY, 11);
+    g.fillStyle(p.hull, 1);
+    g.fillCircle(CX, CY, 8);
+    g.fillStyle(0x221100, 0.55);
+    g.fillCircle(CX - 3, CY - 2, 3);
+    g.fillCircle(CX + 4, CY + 3, 2.5);
+    g.fillCircle(CX + 1, CY - 5, 2);
+    g.fillStyle(p.glow, 0.85);
+    g.fillCircle(CX, CY, 2);
   },
 };
 

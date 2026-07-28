@@ -24,6 +24,13 @@ export const FUEL_TANK_SCORE_CAP: Record<number, number> = {
   5: 1000,
 };
 
+/** Survival Fuel Tank pickup cadence when owned (ms). */
+export const FUEL_TANK_SPAWN_INTERVAL_MS = 50_000;
+/**
+ * Slower Fuel Tank spawns while a Fuel Tank / Engine / Hyperdrive score boost is active.
+ */
+export const FUEL_TANK_SPAWN_INTERVAL_BOOST_MS = 90_000;
+
 export const ENGINE_SCORE_CAP = 2500;
 export const HYPERDRIVE_SCORE_CAP = 7500;
 

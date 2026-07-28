@@ -527,7 +527,8 @@ export function createShopPanel(
     content.setY(SCROLL_TOP - scrollY);
   };
 
-  const rebuildContent = () => {
+  const rebuildContent = (options?: { resetScroll?: boolean }) => {
+    const previousScrollY = scrollY;
     content.removeAll(true);
     rainbowPreviews.length = 0;
     coinsText.setText(formatCoinsLabel());
@@ -572,8 +573,8 @@ export function createShopPanel(
       }
     }
 
-    scrollY = 0;
     maxScroll = Math.max(0, y - SCROLL_HEIGHT);
+    scrollY = options?.resetScroll ? 0 : Phaser.Math.Clamp(previousScrollY, 0, maxScroll);
     applyScroll();
     updateRainbowPreviews();
   };
@@ -619,9 +620,10 @@ export function createShopPanel(
       tab.input!.cursor = 'pointer';
       tab.on('pointerup', () => {
         if (currentTab !== tabDef.id) {
+          playSfx('ui');
           currentTab = tabDef.id;
           drawTabs();
-          rebuildContent();
+          rebuildContent({ resetScroll: true });
         }
       });
 

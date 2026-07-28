@@ -327,6 +327,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.applySpeedMultiplier();
   }
 
+  /**
+   * Add bonus to the boost denominator while keeping the current numerator.
+   * Used when collecting a Fuel Tank during an active Fuel Tank / Engine / Hyperdrive boost.
+   */
+  extendBoostScoreCap(bonus: number): boolean {
+    if (!this.boosting || bonus <= 0) return false;
+    this.boostScoreCap += bonus;
+    return true;
+  }
+
   deactivateBoostMode(triggerCallback = false): void {
     if (!this.boosting) return;
     this.boosting = false;

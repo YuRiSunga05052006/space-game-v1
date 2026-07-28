@@ -56,15 +56,20 @@ interface NodeDef {
   angle?: number;
   x?: number;
   y?: number;
+  /** Place Titan just above Saturn (must match SolarSystemMap node radii). */
+  saturnTitanOffset?: boolean;
   nodeStyle: MapNodeStyle;
   planetId?: MapPlanetId;
   isOuterNode?: boolean;
 }
 
+/** Saturn 12px + Titan 6px + small gap, as a fraction of CONTENT_HEIGHT (560). */
+const TITAN_ABOVE_SATURN_Y = (12 + 6 + 3) / 560;
+
 const NODE_DEFS: NodeDef[] = [
   { level: 11, orbitIndex: JUPITER_ORBIT, angle: JUPITER_ANGLE, nodeStyle: 'planet', planetId: 'jupiter' },
   { level: 12, orbitIndex: SATURN_ORBIT, angle: SATURN_ANGLE, nodeStyle: 'planet', planetId: 'saturn' },
-  { level: 13, x: 0.92, y: 0.56, nodeStyle: 'moon', planetId: 'titan' },
+  { level: 13, saturnTitanOffset: true, nodeStyle: 'moon', planetId: 'titan' },
   { level: 14, orbitIndex: URANUS_ORBIT, angle: URANUS_ANGLE, nodeStyle: 'planet', planetId: 'uranus' },
   { level: 15, orbitIndex: NEPTUNE_ORBIT, angle: NEPTUNE_ANGLE, nodeStyle: 'planet', planetId: 'neptune' },
   { level: 16, x: 0.50, y: 0.40, nodeStyle: 'asteroid', isOuterNode: true },
@@ -75,21 +80,48 @@ const NODE_DEFS: NodeDef[] = [
 ];
 
 /**
- * Elbow points for route segments that aren't a straight line in the reference art.
+ * Elbow points for route segments that aren't a straight line.
  * Key = destination level; waypoints are visited in order after the source node.
  */
-export const WORLD2_ROUTE_WAYPOINTS: Record<number, { x: number; y: number }[]> = {
-  16: [{ x: 0.62, y: 0.62 }],
-};
+export const WORLD2_ROUTE_WAYPOINTS: Record<number, { x: number; y: number }[]> = {};
 
-export function getWorld2RouteWaypoints(fromLevel: number, toLevel: number): { x: number; y: number }[] {
-  if (toLevel === 16 && fromLevel === 15) {
-    return WORLD2_ROUTE_WAYPOINTS[16] ?? [];
-  }
-  return [];
+export function getWorld2RouteWaypoints(_fromLevel: number, toLevel: number): { x: number; y: number }[] {
+  return WORLD2_ROUTE_WAYPOINTS[toLevel] ?? [];
 }
 
-function resolveNodePosition(def: NodeDef): { x: number; y: number } {
+/** Selection / route anchor just above Jupiter (moons sit on the planet node). */
+const GALILEAN_OFFSET = { dx: 0, dy: -0.04 * MAP_WIDTH_TO_HEIGHT };
+
+function getJupiterPosition(): { x: number; y: number } {
+  return positionOnOrbit(JUPITER_ORBIT, JUPITER_ANGLE);
+}
+
+export const SECRET_GALILEAN_MAP_POSITION: { x: number; y: number } = (() => {
+  const jupiter = getJupiterPosition();
+  return {
+    x: jupiter.x + GALILEAN_OFFSET.dx,
+    y: jupiter.y + GALILEAN_OFFSET.dy,
+  };
+})();
+
+export function getWorld2GalileanNeptuneRoute(): { from: { x: number; y: number }; to: { x: number; y: number } } {
+  const neptune = positionOnOrbit(NEPTUNE_ORBIT, NEPTUNE_ANGLE);
+  return {
+    from: SECRET_GALILEAN_MAP_POSITION,
+    to: neptune,
+  };
+}
+
+function resolveNodePosition(
+  def: NodeDef,
+  saturnPos?: { x: number; y: number },
+): { x: number; y: number } {
+  if (def.saturnTitanOffset && saturnPos) {
+    return {
+      x: saturnPos.x,
+      y: saturnPos.y - TITAN_ABOVE_SATURN_Y,
+    };
+  }
   if (def.x !== undefined && def.y !== undefined) {
     return { x: def.x, y: def.y };
   }
@@ -97,8 +129,11 @@ function resolveNodePosition(def: NodeDef): { x: number; y: number } {
 }
 
 function buildMapNodes(): MapNodeLayout[] {
+  const saturnDef = NODE_DEFS.find((d) => d.level === 12)!;
+  const saturnPos = resolveNodePosition(saturnDef);
+
   return NODE_DEFS.map((def) => {
-    const pos = resolveNodePosition(def);
+    const pos = resolveNodePosition(def, saturnPos);
     return {
       level: def.level,
       x: pos.x,

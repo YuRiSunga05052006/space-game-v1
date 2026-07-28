@@ -3,7 +3,7 @@ import { getWorldNumber } from './worlds';
 import { getWorld1Level } from './world1/levels';
 import { getWorld2Level } from './world2/levels';
 import { getWorld3Level } from './world3/levels';
-import { getSecretLevel, type SecretLevelDefinition } from './world1/secretLevels';
+import { getSecretLevel, getSecretWorldId, type SecretLevelDefinition } from './secretLevels';
 import { getBackgroundTheme as getWorld1Theme, type BackgroundTheme } from './world1/backgrounds';
 import { getBackgroundTheme as getWorld2Theme } from './world2/backgrounds';
 import { getBackgroundTheme as getWorld3Theme } from './world3/backgrounds';
@@ -14,6 +14,10 @@ import { getBossDefinition as getWorld3Boss } from './world3/bosses';
 import { getStoryEnemyDefinition as getWorld1StoryEnemy } from './world1/storyEnemyDefinitions';
 import { getStoryEnemyDefinition as getWorld2StoryEnemy } from './world2/storyEnemyDefinitions';
 import { getStoryEnemyDefinition as getWorld3StoryEnemy } from './world3/storyEnemyDefinitions';
+import {
+  getGalileanMoonEnemyDefinition,
+  isGalileanMoonLevel,
+} from './world2/galileanEnemies';
 import {
   getWorld1MapNode,
   getWorld1MapRouteLevels,
@@ -67,7 +71,7 @@ function resolveContentWorldId(worldId: string, level: number): string {
 }
 
 export function resolveWorldId(worldId?: string, level?: number, secretId?: string): string {
-  if (secretId) return 'world1';
+  if (secretId) return getSecretWorldId(secretId);
   if (worldId) return worldId;
   if (level !== undefined) return getWorldIdFromLevel(level);
   return 'world1';
@@ -103,6 +107,9 @@ export function getLevelMeta(worldId: string, level: number, secretId?: string):
 export function getBackgroundTheme(worldId: string, themeId: string): BackgroundTheme {
   if (themeId === 'iss' || themeId === 'dawn') {
     return getWorld1Theme(themeId);
+  }
+  if (themeId === 'galilean') {
+    return getWorld2Theme(themeId);
   }
   if (
     worldId === 'world5'
@@ -145,6 +152,9 @@ export function getBossDefinition(worldId: string, level: number): BossDefinitio
 
 export function getStoryEnemyDefinition(worldId: string, level: number): StoryEnemyDefinition {
   const contentWorld = resolveContentWorldId(worldId, level);
+  if (contentWorld === 'world2' || worldId === 'world2') {
+    if (isGalileanMoonLevel(level)) return getGalileanMoonEnemyDefinition(level);
+  }
   if (contentWorld === 'world3') return getWorld3StoryEnemy(level);
   if (contentWorld === 'world2') return getWorld2StoryEnemy(level);
   return getWorld1StoryEnemy(level);

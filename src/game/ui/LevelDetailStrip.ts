@@ -2,7 +2,7 @@
 import { playSfx } from '../audioManager';
 import { isLevelUnlocked, getHighestUnlockedLevelForWorld } from '../storyProgress';
 import { getLevelMeta, getBackgroundTheme } from '../levelResolver';
-import { getSecretLevel } from '../world1/secretLevels';
+import { getSecretLevel } from '../secretLevels';
 
 export interface LevelDetailStripConfig {
   x: number;
@@ -114,7 +114,10 @@ export function createLevelDetailStrip(
       const theme = getBackgroundTheme(worldId, secret?.themeId ?? 'iss');
       locationText.setText(`SECRET · ${(secret?.name ?? 'ISS').toUpperCase()}`);
       locationText.setColor(hexColor(theme.accentColor));
-      bossText.setText('No boss — reach warp panel');
+      const exitHint = secret?.exitPanel === 'finish'
+        ? 'No boss — reach Finish Panel'
+        : 'No boss — reach warp panel';
+      bossText.setText(exitHint);
       statusText.setText('Ready to launch');
       playBtn.setVisible(true);
       playBtn.setAlpha(1);

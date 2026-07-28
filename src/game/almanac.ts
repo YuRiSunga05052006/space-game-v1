@@ -33,6 +33,7 @@ import { BOSS_DEFINITIONS as WORLD2_BOSSES } from './world2/bosses';
 import { BOSS_DEFINITIONS as WORLD3_BOSSES } from './world3/bosses';
 import { STORY_ENEMY_DEFINITIONS as WORLD1_STORY_ENEMIES, type StoryEnemyBehavior } from './world1/storyEnemyDefinitions';
 import { STORY_ENEMY_DEFINITIONS as WORLD2_STORY_ENEMIES } from './world2/storyEnemyDefinitions';
+import { GALILEAN_MOON_ENEMIES } from './world2/galileanEnemies';
 import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from './world3/storyEnemyDefinitions';
 import { getStoryEnemyUnlockScore, getSurvivalBossUnlockScore } from './survivalSpawn';
 import { MINE_CARRIER_UNLOCK_SCORE } from './enemies';
@@ -180,8 +181,8 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     textureScale: 1.1,
     subtitle: `Story W3 L27+ · Survival W3 ${MINE_CARRIER_UNLOCK_SCORE}+ score`,
     description:
-      'Does not fire lasers. Rams explode in a blast that damages you, enemies, obstacles, and can chain mines and other carriers. Defeating one leaves a Blue Mine behind.',
-    stats: `HP ${MINE_CARRIER_HEALTH} · Blast DMG ${MINE_CARRIER_BODY_DAMAGE} · R ${MINE_CARRIER_BLAST_RADIUS} · ${MINE_CARRIER_POINTS} pts`,
+      'Does not fire lasers. Rams explode in a blast that damages you (max on contact, less farther out), enemies, obstacles, and can chain mines and other carriers. Defeating one leaves a Blue Mine behind.',
+    stats: `HP ${MINE_CARRIER_HEALTH} · Blast DMG up to ${MINE_CARRIER_BODY_DAMAGE} · R ${MINE_CARRIER_BLAST_RADIUS} · ${MINE_CARRIER_POINTS} pts`,
     almanacPage: 'shared',
     requiresWorld3: true,
   },
@@ -203,20 +204,22 @@ const MINE_SUBTITLES: Record<MineVariant, string> = {
 
 const MINE_DESCRIPTIONS: Record<MineVariant, string> = {
   gray:
-    'Small naval mine. Immune to lasers. Player collision detonates it, damaging you, enemies, and obstacles, and can chain other mines (not Mine Carriers).',
+    'Small naval mine. Immune to lasers. Player collision detonates it, damaging you (max on contact, less farther out), enemies, and obstacles, and can chain other mines and Mine Carriers. Touching a Mine Carrier alone does not set it off.',
   blue:
-    'Small naval mine. Immune to lasers. Player collision pushes it instead of detonating. Explodes on enemy contact — damages enemies and obstacles and can chain mines/carriers, but never damages you.',
+    'Small naval mine. Immune to lasers. Starts dormant: asteroids, comets, enemies, and other mines pass through without detonating it. The first player kick arms it; after that, contact with those hazards (or other mines) explodes it. Blast damages enemies and obstacles and can chain armed mines/carriers, but never damages you.',
   red:
-    'Medium naval mine. Immune to lasers. Player collision detonates a moderate blast that can chain mines and Mine Carriers. Does not appear in Story Mode yet.',
+    'Medium naval mine. Immune to lasers. Player collision detonates a moderate blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Does not appear in Story Mode yet.',
   purple:
-    'Large naval mine. Immune to lasers. Player collision detonates a massive blast that can chain mines and Mine Carriers. Does not appear in Story Mode yet.',
+    'Large naval mine. Immune to lasers. Player collision detonates a massive blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Does not appear in Story Mode yet.',
 };
 
 function buildMineEntries(): AlmanacEntry[] {
   const variants: MineVariant[] = ['gray', 'blue', 'red', 'purple'];
   return variants.map((variant) => {
     const data = MINE_DATA[variant];
-    const dmgLabel = data.damagesPlayer ? `DMG ${data.playerDamage}` : 'DMG 0 (safe)';
+    const dmgLabel = data.damagesPlayer
+      ? `DMG up to ${data.playerDamage}`
+      : 'DMG 0 (safe)';
     const isWorld3Exclusive = variant === 'red' || variant === 'purple';
     return {
       id: `mine-${variant}`,
@@ -301,8 +304,9 @@ function buildCometEntries(): AlmanacEntry[] {
       name: 'Comet',
       textureKey: 'comet',
       textureScale: 1,
-      subtitle: 'Story L16+ · World 2+ Survival · All World 3+',
-      description: 'Fast icy hazard with a glowing tail. From Kuiper Belt onward in World 2; all levels in World 3+.',
+      subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival · All World 3+',
+      description:
+        'Fast icy hazard with a glowing tail. Appears from Saturn onward in World 2 (including Titan, Uranus, and Neptune). More frequent from the Kuiper Belt (L16+) and throughout World 3+.',
       stats: `DMG ${COMET_DAMAGE} · ${COMET_POINTS} pts`,
       almanacPage: 'shared',
     },
@@ -312,12 +316,32 @@ function buildCometEntries(): AlmanacEntry[] {
       name: 'Gold Comet',
       textureKey: 'comet-gold',
       textureScale: 1,
-      subtitle: 'Story L16+ · World 2+ Survival · All World 3+',
-      description: 'Rare golden comet. Destroy to earn bonus coins.',
+      subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival · All World 3+',
+      description:
+        'Rare golden comet. Destroy to earn bonus coins. Same regions as normal comets; more common from L16+ and World 3+.',
       stats: `DMG ${COMET_DAMAGE} · ${GOLD_COMET_POINTS} pts · +${goldCoins} coins`,
       almanacPage: 'shared',
     },
   ];
+}
+
+function buildGalileanMoonEntries(): AlmanacEntry[] {
+  return Object.values(GALILEAN_MOON_ENEMIES)
+    .sort((a, b) => a.level - b.level)
+    .map((enemy) => {
+      const unlockScore = getStoryEnemyUnlockScore(enemy.level, 'world2');
+      return {
+        id: `story-enemy-world2-galilean-${enemy.level}`,
+        category: 'storyEnemy' as const,
+        name: enemy.enemyName,
+        textureKey: enemy.textureKey,
+        textureScale: 1,
+        subtitle: `Galilean Moons secret · W2 Survival ${unlockScore}+ score`,
+        description: `${STORY_BEHAVIOR_DESCRIPTIONS[enemy.behavior]} One of Jupiter's four Galilean moons. Spawns in the Galilean Moons secret and World 2 Survival.${STORY_SURVIVAL_SUFFIX}`,
+        stats: `HP ${enemy.health} · DMG ${enemy.bodyDamage} · ${enemy.points} pts`,
+        almanacPage: 'world2' as const,
+      };
+    });
 }
 
 export const ALMANAC_ENTRIES: AlmanacEntry[] = [
@@ -329,6 +353,7 @@ export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   ...buildStoryEnemyEntries(WORLD1_STORY_ENEMIES, 'world1', 'Story W1'),
   ...buildBossEntries(WORLD1_BOSSES, 'world1', 'Story W1'),
   ...buildStoryEnemyEntries(WORLD2_STORY_ENEMIES, 'world2', 'Story W2'),
+  ...buildGalileanMoonEntries(),
   ...buildBossEntries(WORLD2_BOSSES, 'world2', 'Story W2'),
   ...buildStoryEnemyEntries(WORLD3_STORY_ENEMIES, 'world3', 'Story W3'),
   ...buildBossEntries(WORLD3_BOSSES, 'world3', 'Story W3'),

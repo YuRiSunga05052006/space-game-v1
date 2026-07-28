@@ -29,7 +29,7 @@ export const MINE_DATA: Record<MineVariant, MineBlastStats> = {
     playerDamage: 6,
     blastRadius: 70,
     points: 30,
-    canChainCarriers: false,
+    canChainCarriers: true,
     damagesPlayer: true,
   },
   blue: {
@@ -78,6 +78,8 @@ export class Mine extends Phaser.Physics.Arcade.Sprite {
   readonly canChainCarriers: boolean;
   readonly damagesPlayer: boolean;
   private pushCooldownMs = 0;
+  /** Blue mines stay inert until the player kicks them once. */
+  private armed = false;
 
   constructor(scene: Phaser.Scene, config: MineConfig) {
     const data = MINE_DATA[config.variant];
@@ -101,6 +103,21 @@ export class Mine extends Phaser.Physics.Arcade.Sprite {
 
   get isBlue(): boolean {
     return this.variant === 'blue';
+  }
+
+  /** True after the player has kicked this blue mine at least once. */
+  get isArmed(): boolean {
+    return this.armed;
+  }
+
+  /** Dormant blue mines ignore hazard contact and blast chains. */
+  get isDormantBlue(): boolean {
+    return this.isBlue && !this.armed;
+  }
+
+  /** Armed blue mines detonate on hazard / mine contact. */
+  get canDetonateFromContact(): boolean {
+    return this.isBlue && this.armed;
   }
 
   static randomConfig(variant: MineVariant): MineConfig {
@@ -150,6 +167,8 @@ export class Mine extends Phaser.Physics.Arcade.Sprite {
 
   applyPlayerPush(playerX: number, playerY: number): void {
     if (!this.canAcceptPush()) return;
+    // First kick arms the mine for the rest of its life.
+    this.armed = true;
     const angle = Phaser.Math.Angle.Between(playerX, playerY, this.x, this.y);
     // Slow kick so the player can steer blue mines with repeated nudges.
     const pushSpeed = 95;

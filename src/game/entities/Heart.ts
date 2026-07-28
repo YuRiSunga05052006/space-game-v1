@@ -18,7 +18,7 @@ export class Heart extends Phaser.Physics.Arcade.Sprite {
     this.setDepth(6);
     this.setVelocity(
       Phaser.Math.Between(-18, 18),
-      Phaser.Math.Between(25, 55),
+      Phaser.Math.Between(20, 45),
     );
 
     scene.tweens.add({

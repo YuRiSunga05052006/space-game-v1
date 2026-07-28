@@ -42,7 +42,8 @@ export const POWER_UPS: PowerUpDefinition[] = [
     id: 'fuelTank',
     name: 'Fuel Tank',
     textureKey: 'fuel-tank-pickup',
-    description: 'Invincible ram boost that destroys hazards in your path for bonus score. Scatters in Survival runs.',
+    description:
+      'Invincible ram boost that destroys hazards for bonus score. Scatters in Survival. Collecting another while boosting (Fuel Tank, Engine, or Hyperdrive) adds its cap to the meter without resetting progress. Spawns less often during an active boost.',
     modeTag: 'Survival only',
     kind: 'upgradable',
     buyPrices: [200, 100, 125, 150, 175],

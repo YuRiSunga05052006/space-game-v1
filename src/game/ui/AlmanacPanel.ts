@@ -9,6 +9,7 @@ import {
   type AlmanacPage,
 } from '../almanac';
 import { createMenuButton } from './MenuButtons';
+import { playSfx } from '../audioManager';
 
 const SCROLL_TOP = 148;
 const SCROLL_HEIGHT = 500;
@@ -197,6 +198,7 @@ export function createAlmanacPanel(
         tab.input!.cursor = 'pointer';
         tab.on('pointerup', () => {
           if (currentPage !== page.id) {
+            playSfx('ui');
             currentPage = page.id;
             drawTabs();
             rebuildContent();

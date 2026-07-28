@@ -11,6 +11,7 @@ import { PlasmaTurret, TURRET_BODY_DAMAGE } from '../entities/PlasmaTurret';
 import { StoryEnemy, storyEnemyNeedsFire } from '../entities/StoryEnemy';
 import { BossShip } from '../entities/BossShip';
 import { Wormhole } from '../entities/Wormhole';
+import { FinishPanel } from '../entities/FinishPanel';
 import { WarpPanel } from '../entities/WarpPanel';
 import { Comet } from '../entities/Comet';
 import { Mine, type MineVariant } from '../entities/Mine';
@@ -75,9 +76,10 @@ import { hasSurvivalGoldSpawnBonus } from '../playerSkins';
 import {
   getGoldAsteroidSpawnChance,
   getGoldCometSpawnChance,
+  getCometSpawnChance,
+  getCometSpawnIntervalMs,
   MAX_GOLD_ASTEROIDS_ON_SCREEN,
   rollEnemyCoinDrop,
-  COMET_SPAWN_CHANCE,
   MAX_COMETS_ON_SCREEN,
   MINE_SPAWN_CHANCE,
   MAX_MINES_ON_SCREEN,
@@ -89,12 +91,19 @@ import {
   completeSecretIss,
   unlockSecretDawn,
   completeSecretDawn,
+  unlockSecretGalilean,
+  completeSecretGalilean,
   onLevel20Cleared,
 } from '../worldProgress';
-import { getSecretLevel, SECRET_LEVELS } from '../world1/secretLevels';
+import { getSecretLevel, getSecretsForWorld, getSecretWorldId } from '../secretLevels';
 import { getWorldIdFromLevel } from '../gameMode';
 import { getWorldNumber } from '../worlds';
 import { applyStoryBackground } from '../ui/StoryThemeBackground';
+import {
+  getGalileanMoonEnemyDefinition,
+  isGalileanMoonLevel,
+  pickGalileanSecretEnemy,
+} from '../world2/galileanEnemies';
 import {
   applyAudioSettings,
   initAudio,
@@ -130,6 +139,8 @@ import {
 import { detonateDeathBomb } from '../deathBomb';
 import {
   ENGINE_SCORE_CAP,
+  FUEL_TANK_SPAWN_INTERVAL_BOOST_MS,
+  FUEL_TANK_SPAWN_INTERVAL_MS,
   getFuelTankScoreCap,
   getInvisibilityDurationMs,
   getShieldDurationMs,
@@ -181,6 +192,7 @@ export class GameScene extends Phaser.Scene {
   private gameOverScreenShown = false;
   private isPaused = false;
   private pauseMenu?: Phaser.GameObjects.Container;
+  private pauseConfirmOverlay?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
   private almanacPanelCleanup?: () => void;
   private escKey?: Phaser.Input.Keyboard.Key;
@@ -239,8 +251,6 @@ export class GameScene extends Phaser.Scene {
   private fuelTankSpawnTimer = 0;
   private engineHudBtn?: Phaser.GameObjects.Container;
   private hyperdriveHudBtn?: Phaser.GameObjects.Container;
-  private engineKey?: Phaser.Input.Keyboard.Key;
-  private hyperdriveKey?: Phaser.Input.Keyboard.Key;
 
   private touchTarget: Phaser.Math.Vector2 | null = null;
   private isDragging = false;
@@ -277,6 +287,8 @@ export class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.pauseMenu?.destroy();
     this.pauseMenu = undefined;
+    this.pauseConfirmOverlay?.destroy();
+    this.pauseConfirmOverlay = undefined;
     this.settingsPanel?.destroy();
     this.settingsPanel = undefined;
     this.destroyAlmanacPanel();
@@ -592,11 +604,6 @@ export class GameScene extends Phaser.Scene {
         if (this.isGameOver || this.isChoosingWeapon) return;
         this.togglePause();
       });
-
-      this.engineKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-      this.hyperdriveKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.H);
-      this.engineKey.on('down', () => this.tryActivateEngine());
-      this.hyperdriveKey.on('down', () => this.tryActivateHyperdrive());
     }
 
     this.dragIndicator = this.add.graphics().setDepth(50).setScrollFactor(0);
@@ -844,7 +851,10 @@ export class GameScene extends Phaser.Scene {
       this,
     );
 
-    const blueMineEnemyGroups = [
+    // Armed blue mines detonate on contact with enemies, obstacles, or other mines.
+    // Gray / red / purple never detonate from touching a Mine Carrier — only from
+    // player hit or a nearby blast (which can still chain carriers via canChainCarriers).
+    const blueMineDetonationGroups = [
       this.spiderShips,
       this.seekerDrones,
       this.kamikazeWasps,
@@ -852,16 +862,26 @@ export class GameScene extends Phaser.Scene {
       this.storyEnemies,
       this.mineCarriers,
       this.bossShips,
+      this.asteroids,
+      this.comets,
     ];
-    for (const group of blueMineEnemyGroups) {
+    for (const group of blueMineDetonationGroups) {
       this.physics.add.overlap(
         this.mines,
         group,
-        this.onMineHitEnemy as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+        this.onArmedBlueMineHitHazard as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
         undefined,
         this,
       );
     }
+
+    this.physics.add.overlap(
+      this.mines,
+      this.mines,
+      this.onMineHitMine as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
 
     this.physics.add.overlap(
       this.player,
@@ -1091,6 +1111,10 @@ export class GameScene extends Phaser.Scene {
 
   private togglePause(): void {
     if (this.isGameOver || this.isChoosingWeapon) return;
+    if (this.pauseConfirmOverlay) {
+      this.cancelPauseConfirm();
+      return;
+    }
     if (this.isPaused) {
       this.resumeGame();
     } else {
@@ -1118,10 +1142,7 @@ export class GameScene extends Phaser.Scene {
         label: 'RESTART',
         y: 0,
         color: 0xffcc00,
-        onClick: () => {
-          this.bankRunCoins();
-          restartGame(this, this.score, this.gameMode, this.storyLevel, this.worldId, this.secretId);
-        },
+        onClick: () => this.showPauseConfirm('Restart level?', () => this.confirmRestartFromPause()),
       },
     ];
 
@@ -1130,14 +1151,19 @@ export class GameScene extends Phaser.Scene {
         label: 'LEVEL SELECT',
         y: 0,
         color: 0x8899bb,
-        onClick: () => this.quitToLevelSelect(),
+        onClick: () => this.showPauseConfirm('Return to level select?', () => this.quitToLevelSelect()),
       });
     }
 
     pauseButtons.push(
       { label: 'ALMANAC', y: 0, color: 0x8899bb, onClick: () => this.showAlmanacFromPause() },
       { label: 'SETTINGS', y: 0, color: 0x8899bb, onClick: () => this.showSettingsFromPause() },
-      { label: 'QUIT', y: 0, color: 0xff4466, onClick: () => this.quitToTitle() },
+      {
+        label: 'QUIT',
+        y: 0,
+        color: 0xff4466,
+        onClick: () => this.showPauseConfirm('Return to main menu?', () => this.quitToTitle()),
+      },
     );
 
     const buttonStartY = this.gameMode === 'story'
@@ -1145,6 +1171,72 @@ export class GameScene extends Phaser.Scene {
       : GAME_HEIGHT / 2 - 40;
 
     this.pauseMenu = createMenuOverlay(this, 'PAUSED', pauseButtons, 200, buttonStartY);
+  }
+
+  private showPauseConfirm(message: string, onYes: () => void): void {
+    this.pauseMenu?.setVisible(false);
+    this.settingsPanel?.destroy();
+    this.settingsPanel = undefined;
+    this.destroyAlmanacPanel();
+    this.pauseConfirmOverlay?.destroy();
+
+    const root = this.add.container(0, 0).setDepth(260).setScrollFactor(0);
+
+    root.add(this.add.rectangle(
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2,
+      GAME_WIDTH,
+      GAME_HEIGHT,
+      0x000000,
+      0.8,
+    ));
+
+    root.add(this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 60, message, {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '22px',
+      fontStyle: '700',
+      color: '#00d4ff',
+    }).setOrigin(0.5));
+
+    const { container: yesBtn } = createMenuButton(this, {
+      label: 'YES',
+      y: GAME_HEIGHT / 2 + 10,
+      color: 0xff4466,
+      onClick: () => {
+        this.pauseConfirmOverlay?.destroy();
+        this.pauseConfirmOverlay = undefined;
+        onYes();
+      },
+    });
+    yesBtn.setX(GAME_WIDTH / 2);
+    root.add(yesBtn);
+
+    const { container: noBtn } = createMenuButton(this, {
+      label: 'NO',
+      y: GAME_HEIGHT / 2 + 74,
+      onClick: () => this.cancelPauseConfirm(),
+    });
+    noBtn.setX(GAME_WIDTH / 2);
+    root.add(noBtn);
+
+    this.pauseConfirmOverlay = root;
+  }
+
+  private cancelPauseConfirm(): void {
+    this.pauseConfirmOverlay?.destroy();
+    this.pauseConfirmOverlay = undefined;
+    this.pauseMenu?.setVisible(true);
+  }
+
+  private confirmRestartFromPause(): void {
+    this.isPaused = false;
+    this.pauseMenu?.destroy();
+    this.pauseMenu = undefined;
+    this.settingsPanel?.destroy();
+    this.settingsPanel = undefined;
+    this.destroyAlmanacPanel();
+    this.bankRunCoins();
+    restartGame(this, this.score, this.gameMode, this.storyLevel, this.worldId, this.secretId);
   }
 
   private showSettingsFromPause(): void {
@@ -1186,6 +1278,8 @@ export class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.pauseMenu?.destroy();
     this.pauseMenu = undefined;
+    this.pauseConfirmOverlay?.destroy();
+    this.pauseConfirmOverlay = undefined;
     this.settingsPanel?.destroy();
     this.settingsPanel = undefined;
     this.destroyAlmanacPanel();
@@ -1199,22 +1293,26 @@ export class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.pauseMenu?.destroy();
     this.pauseMenu = undefined;
+    this.pauseConfirmOverlay?.destroy();
+    this.pauseConfirmOverlay = undefined;
     this.settingsPanel?.destroy();
     this.settingsPanel = undefined;
     this.destroyAlmanacPanel();
     this.bankRunCoins();
-    saveScoreAndGoToTitle(this, this.score, this.gameMode);
+    saveScoreAndGoToTitle(this, this.score, this.gameMode, this.worldId);
   }
 
   private quitToLevelSelect(): void {
     this.isPaused = false;
     this.pauseMenu?.destroy();
     this.pauseMenu = undefined;
+    this.pauseConfirmOverlay?.destroy();
+    this.pauseConfirmOverlay = undefined;
     this.settingsPanel?.destroy();
     this.settingsPanel = undefined;
     this.destroyAlmanacPanel();
     this.bankRunCoins();
-    goToLevelSelect(this);
+    goToLevelSelect(this, this.worldId);
   }
 
   private onPlayerHitAsteroid(
@@ -1409,8 +1507,8 @@ export class GameScene extends Phaser.Scene {
   private checkSecretMilestones(): void {
     if (this.isGameOver || this.isPaused) return;
 
-    if (this.gameMode === 'story' && !this.secretId && this.worldId === 'world1') {
-      for (const secret of Object.values(SECRET_LEVELS)) {
+    if (this.gameMode === 'story' && !this.secretId) {
+      for (const secret of getSecretsForWorld(this.worldId)) {
         if (
           this.storyLevel === secret.entryLevel
           && this.score >= secret.scoreThreshold
@@ -1428,7 +1526,11 @@ export class GameScene extends Phaser.Scene {
       const secret = getSecretLevel(this.secretId);
       if (secret && this.score >= secret.exitScoreThreshold && !this.warpPanelSpawned) {
         this.warpPanelSpawned = true;
-        this.spawnWarpPanel();
+        if (secret.exitPanel === 'finish') {
+          this.spawnFinishPanel();
+        } else {
+          this.spawnWarpPanel();
+        }
       }
     }
   }
@@ -1473,6 +1575,26 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private spawnFinishPanel(): void {
+    const { x, y } = FinishPanel.randomSpawnPosition();
+    const panel = new FinishPanel(this, x, y);
+    this.warpPanels.add(panel);
+
+    const hint = this.add.text(GAME_WIDTH / 2, 90, 'FINISH PANEL ONLINE', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '14px',
+      fontStyle: '700',
+      color: '#88ff44',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(150);
+
+    this.tweens.add({
+      targets: hint,
+      alpha: 0,
+      duration: 2500,
+      onComplete: () => hint.destroy(),
+    });
+  }
+
   private onPlayerEnterWormhole(
     _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
     wormholeObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
@@ -1486,10 +1608,19 @@ export class GameScene extends Phaser.Scene {
 
     if (secretId === 'iss') unlockSecretIss();
     else if (secretId === 'dawn') unlockSecretDawn();
+    else if (secretId === 'galilean') unlockSecretGalilean();
+
+    const secretWorldId = getSecretWorldId(secretId);
+    const entryLevel = getSecretLevel(secretId)?.entryLevel ?? 1;
 
     this.cameras.main.fadeOut(400, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
-      this.scene.start('GameScene', { mode: 'story', secretId, worldId: 'world1', level: 1 });
+      this.scene.start('GameScene', {
+        mode: 'story',
+        secretId,
+        worldId: secretWorldId,
+        level: entryLevel,
+      });
     });
   }
 
@@ -1498,7 +1629,7 @@ export class GameScene extends Phaser.Scene {
     panelObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     if (this.isGameOver || this.isPaused || !this.secretId) return;
-    const panel = panelObj as WarpPanel;
+    const panel = panelObj as WarpPanel | FinishPanel;
     panel.destroy();
     this.triggerSecretVictory();
   }
@@ -1508,6 +1639,10 @@ export class GameScene extends Phaser.Scene {
       completeSecretIss();
     } else if (this.secretId === 'dawn') {
       completeSecretDawn();
+    } else if (this.secretId === 'galilean') {
+      completeSecretGalilean();
+      const unlockLevelId = getSecretLevel('galilean')?.finishUnlockLevel ?? 15;
+      unlockLevel(unlockLevelId);
     }
     this.triggerVictory(true);
   }
@@ -1568,14 +1703,33 @@ export class GameScene extends Phaser.Scene {
     this.triggerMineDetonation(mine);
   }
 
-  private onMineHitEnemy(
+  private onArmedBlueMineHitHazard(
     mineObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
-    _enemyObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    _hazardObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     if (this.isGameOver || this.isPaused) return;
     const mine = mineObj as Mine;
-    if (!mine.active || !mine.isBlue) return;
+    if (!mine.active || !mine.canDetonateFromContact) return;
     this.triggerMineDetonation(mine);
+  }
+
+  private onMineHitMine(
+    aObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    bObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused) return;
+    const a = aObj as Mine;
+    const b = bObj as Mine;
+    if (!a.active || !b.active || a === b) return;
+
+    // Only armed blue mines explode from mine contact; dormant blues stay inert.
+    if (a.canDetonateFromContact) {
+      this.triggerMineDetonation(a);
+      return;
+    }
+    if (b.canDetonateFromContact) {
+      this.triggerMineDetonation(b);
+    }
   }
 
   private onBulletHitMineCarrier(
@@ -1732,7 +1886,11 @@ export class GameScene extends Phaser.Scene {
           this.tryAwardEnemyCoins(cx, cy);
         },
       },
-      options,
+      {
+        skipPlayerDamage: options?.skipPlayerDamage,
+        playerX: this.player.x,
+        playerY: this.player.y,
+      },
     );
   }
 
@@ -1760,6 +1918,11 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = LootBox.randomSpawnPosition();
     const box = new LootBox(this, x, y);
     this.lootBoxes.add(box);
+    // Physics groups reset body defaults on add — re-apply drift after.
+    box.setVelocity(
+      Phaser.Math.Between(-18, 18),
+      Phaser.Math.Between(20, 45),
+    );
   }
 
   private onPlayerCollectLootBox(
@@ -2060,6 +2223,8 @@ export class GameScene extends Phaser.Scene {
       victoryTitle = 'ISS CLEAR!';
     } else if (isSecretClear && this.secretId === 'dawn') {
       victoryTitle = 'DAWN CLEAR!';
+    } else if (isSecretClear && this.secretId === 'galilean') {
+      victoryTitle = 'GALILEAN MOONS CLEAR!';
     } else if (this.storyLevel === getMaxLevelSlots()) {
       victoryTitle = 'STORY COMPLETE!';
     } else {
@@ -2110,7 +2275,7 @@ export class GameScene extends Phaser.Scene {
       color: 0x8899bb,
       onClick: () => {
         this.bankRunCoins();
-        goToLevelSelect(this, isSecretClear || this.secretId ? 'world1' : this.worldId);
+        goToLevelSelect(this, this.worldId);
       },
     });
     selectBtn.setX(GAME_WIDTH / 2);
@@ -2495,7 +2660,7 @@ export class GameScene extends Phaser.Scene {
     this.hearts.add(heart);
     heart.setVelocity(
       Phaser.Math.Between(-18, 18),
-      Phaser.Math.Between(25, 55),
+      Phaser.Math.Between(20, 45),
     );
   }
 
@@ -2519,6 +2684,11 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = ShieldPickup.randomSpawnPosition();
     const pickup = new ShieldPickup(this, x, y);
     this.shieldPickups.add(pickup);
+    // Physics groups reset body defaults on add — re-apply drift after.
+    pickup.setVelocity(
+      Phaser.Math.Between(-18, 18),
+      Phaser.Math.Between(20, 45),
+    );
   }
 
   private spawnInvisibilityPickup(): void {
@@ -2528,6 +2698,10 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = InvisibilityPickup.randomSpawnPosition();
     const pickup = new InvisibilityPickup(this, x, y);
     this.invisibilityPickups.add(pickup);
+    pickup.setVelocity(
+      Phaser.Math.Between(-18, 18),
+      Phaser.Math.Between(20, 45),
+    );
   }
 
   private spawnFuelTankPickup(): void {
@@ -2538,6 +2712,10 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = FuelTankPickup.randomSpawnPosition();
     const pickup = new FuelTankPickup(this, x, y);
     this.fuelTankPickups.add(pickup);
+    pickup.setVelocity(
+      Phaser.Math.Between(-18, 18),
+      Phaser.Math.Between(20, 45),
+    );
   }
 
   private onPlayerCollectShield(
@@ -2569,7 +2747,19 @@ export class GameScene extends Phaser.Scene {
     if (this.isGameOver || this.isPaused || this.gameMode !== 'survival') return;
     (pickupObj as FuelTankPickup).destroy();
     const level = getPowerUpLevel('fuelTank');
-    this.startScoreBoost(getFuelTankScoreCap(level));
+    const bonus = getFuelTankScoreCap(level);
+
+    // Mid-boost pickup: add Fuel Tank cap to the denominator; keep current numerator.
+    if (this.player.isBoosting() && this.player.extendBoostScoreCap(bonus)) {
+      this.boostPointMeter.update(
+        this.player.getBoostPointsEarned(),
+        this.player.getBoostScoreCap(),
+      );
+      this.cameras.main.flash(100, 255, 204, 0, false);
+      return;
+    }
+
+    this.startScoreBoost(bonus);
   }
 
   private createSurvivalPowerUpHud(): void {
@@ -2773,6 +2963,13 @@ export class GameScene extends Phaser.Scene {
   private spawnStoryEnemy(): void {
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
 
+    if (this.secretId === 'galilean') {
+      const definition = pickGalileanSecretEnemy(this.getStoryEnemyCounts());
+      if (!definition) return;
+      this.addStoryEnemy(definition);
+      return;
+    }
+
     const definition = getStoryEnemyDefinition(this.worldId, this.storyLevel);
     const activeCount = this.storyEnemies.countActive(true);
     if (!canSpawnStoryEnemy(this.storyLevel, activeCount)) return;
@@ -2783,7 +2980,10 @@ export class GameScene extends Phaser.Scene {
   private spawnSurvivalStoryEnemy(level: number): void {
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
 
-    const scaled = scaleStoryEnemyDefinition(getStoryEnemyDefinition(this.worldId, level), this.score);
+    const base = isGalileanMoonLevel(level)
+      ? getGalileanMoonEnemyDefinition(level)
+      : getStoryEnemyDefinition(this.worldId, level);
+    const scaled = scaleStoryEnemyDefinition(base, this.score);
     this.addStoryEnemy(scaled);
   }
 
@@ -3159,9 +3359,18 @@ export class GameScene extends Phaser.Scene {
     if (this.secretId) return false;
     if (getWorldNumber(this.worldId) >= 3) return true;
     if (this.gameMode === 'story') {
-      return this.storyLevel >= 16;
+      // Saturn (L12), Titan, Uranus, Neptune, then Kuiper Belt+ (L16+).
+      return this.storyLevel >= 12;
     }
     return this.worldId === 'world2';
+  }
+
+  /** Kuiper Belt+ story levels and World 3+ get denser comet traffic. */
+  private hasFrequentComets(): boolean {
+    if (this.secretId) return false;
+    if (getWorldNumber(this.worldId) >= 3) return true;
+    if (this.gameMode === 'story') return this.storyLevel >= 16;
+    return false;
   }
 
   private countCometsOnScreen(): number {
@@ -3173,11 +3382,12 @@ export class GameScene extends Phaser.Scene {
     if (this.countCometsOnScreen() >= MAX_COMETS_ON_SCREEN) return;
 
     const goldBonus = this.gameMode === 'survival' && hasSurvivalGoldSpawnBonus();
+    const frequent = this.hasFrequentComets();
 
     let variant: 'normal' | 'gold' | undefined;
-    if (Math.random() < getGoldCometSpawnChance(goldBonus)) {
+    if (Math.random() < getGoldCometSpawnChance(goldBonus, frequent)) {
       variant = 'gold';
-    } else if (Math.random() < COMET_SPAWN_CHANCE) {
+    } else if (Math.random() < getCometSpawnChance(frequent)) {
       variant = 'normal';
     } else {
       return;
@@ -3191,7 +3401,7 @@ export class GameScene extends Phaser.Scene {
 
   private shouldSpawnMines(): boolean {
     // Gray/Blue also appear in ISS / Dawn secrets and W1–W2 Survival.
-    if (this.secretId === 'iss' || this.secretId === 'dawn') return true;
+    if (this.secretId === 'iss' || this.secretId === 'dawn' || this.secretId === 'galilean') return true;
     if (this.secretId) return false;
 
     if (this.gameMode === 'survival') {
@@ -3334,7 +3544,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.cometSpawnTimer += delta;
-    if (this.shouldSpawnComets() && this.cometSpawnTimer >= 3500) {
+    if (this.shouldSpawnComets() && this.cometSpawnTimer >= getCometSpawnIntervalMs(this.hasFrequentComets())) {
       this.cometSpawnTimer = 0;
       this.spawnComet();
     }
@@ -3377,9 +3587,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.fuelTankSpawnTimer += delta;
-    if (this.gameMode === 'survival' && this.fuelTankSpawnTimer >= 50000) {
-      this.fuelTankSpawnTimer = 0;
-      this.spawnFuelTankPickup();
+    if (this.gameMode === 'survival') {
+      // Slower spawns while Fuel Tank / Engine / Hyperdrive boost is active.
+      const fuelInterval = this.player.isBoosting()
+        ? FUEL_TANK_SPAWN_INTERVAL_BOOST_MS
+        : FUEL_TANK_SPAWN_INTERVAL_MS;
+      if (this.fuelTankSpawnTimer >= fuelInterval) {
+        this.fuelTankSpawnTimer = 0;
+        this.spawnFuelTankPickup();
+      }
     }
 
     if (this.gameMode === 'story') {

@@ -107,11 +107,10 @@ export const WEAPONS: Weapon[] = [
   {
     id: 'scatter-burst',
     name: 'Scatter Burst',
-    description: '+4 wide fan, fire rate −10%',
+    description: '+4 wide fan',
     color: 0xff6644,
     apply: (l) => {
       l.scatterBurst = true;
-      l.fireCooldownMs *= 1.1;
     },
   },
   {

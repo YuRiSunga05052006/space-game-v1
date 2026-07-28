@@ -124,6 +124,34 @@ function blastDamageForRadius(radius: number): number {
 }
 
 /**
+ * Player damage falls off with distance from the blast center.
+ * Ramming / overlapping the mine or carrier counts as epicenter → full damage.
+ * Outside the blast radius → 0.
+ */
+export function scalePlayerBlastDamage(
+  maxDamage: number,
+  dist: number,
+  blastRadius: number,
+): number {
+  if (maxDamage <= 0 || blastRadius <= 0 || dist >= blastRadius) return 0;
+
+  // Player + mine/carrier body overlap still reads as "closest" (full damage).
+  const epicenterPad = Math.min(32, blastRadius * 0.4);
+  const adjusted = Math.max(0, dist - epicenterPad);
+  const falloffSpan = blastRadius - epicenterPad;
+  if (adjusted <= 0 || falloffSpan <= 0) return maxDamage;
+
+  const factor = 1 - adjusted / falloffSpan;
+  return Math.max(1, Math.round(maxDamage * factor));
+}
+
+export interface DetonateMineBlastOptions {
+  skipPlayerDamage?: boolean;
+  playerX?: number;
+  playerY?: number;
+}
+
+/**
  * Detonate a mine/carrier blast and chain into nearby mines (and carriers when allowed).
  * Sources must already be removed from the world before calling.
  */
@@ -131,7 +159,7 @@ export function detonateMineBlast(
   initial: MineBlastSource,
   groups: MineBlastGroups,
   callbacks: MineBlastCallbacks,
-  options?: { skipPlayerDamage?: boolean },
+  options?: DetonateMineBlastOptions,
 ): void {
   const queue: MineBlastSource[] = [initial];
   const visitedMines = new Set<Phaser.Physics.Arcade.Sprite>();
@@ -152,8 +180,14 @@ export function detonateMineBlast(
       source.damagesPlayer
       && source.playerDamage > 0
       && !options?.skipPlayerDamage
+      && options?.playerX !== undefined
+      && options?.playerY !== undefined
     ) {
-      callbacks.onDamagePlayer(source.playerDamage);
+      const dist = Math.hypot(options.playerX - cx, options.playerY - cy);
+      const scaled = scalePlayerBlastDamage(source.playerDamage, dist, radius);
+      if (scaled > 0) {
+        callbacks.onDamagePlayer(scaled);
+      }
     }
 
     forEachActive(groups.asteroids, (sprite) => {
@@ -197,7 +231,10 @@ export function detonateMineBlast(
     forEachActive(groups.mines, (sprite) => {
       if (visitedMines.has(sprite)) return;
       if (!withinRadius(sprite.x, sprite.y, cx, cy, radius)) return;
-      chainedMines.push(sprite as Mine);
+      const mine = sprite as Mine;
+      // Dormant blue mines are inert — blasts pass through without chaining them.
+      if (mine.isDormantBlue) return;
+      chainedMines.push(mine);
     });
     for (const mine of chainedMines) {
       if (!mine.active || visitedMines.has(mine)) continue;
