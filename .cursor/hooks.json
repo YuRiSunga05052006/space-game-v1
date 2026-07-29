@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "node .cursor/hooks/log-usage.mjs"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "node .cursor/hooks/log-usage.mjs"
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "node .cursor/hooks/log-usage.mjs"
+      }
+    ],
+    "stop": [
+      {
+        "command": "node .cursor/hooks/log-usage.mjs"
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": "node .cursor/hooks/log-usage.mjs"
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": "node .cursor/hooks/log-usage.mjs"
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "node .cursor/hooks/log-usage.mjs"
+      }
+    ]
+  }
+}

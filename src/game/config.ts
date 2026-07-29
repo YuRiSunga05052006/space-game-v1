@@ -5,6 +5,7 @@ import { MenuScene } from './scenes/MenuScene';
 import { ModeSelectScene } from './scenes/ModeSelectScene';
 import { WorldSelectScene } from './scenes/WorldSelectScene';
 import { LevelSelectScene } from './scenes/LevelSelectScene';
+import { LaunchCutsceneScene } from './scenes/LaunchCutsceneScene';
 import { GameScene } from './scenes/GameScene';
 
 export { GAME_HEIGHT, GAME_WIDTH } from './dimensions';
@@ -34,5 +35,13 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   input: {
     activePointers: 3,
   },
-  scene: [BootScene, MenuScene, ModeSelectScene, WorldSelectScene, LevelSelectScene, GameScene],
+  scene: [
+    BootScene,
+    MenuScene,
+    ModeSelectScene,
+    WorldSelectScene,
+    LevelSelectScene,
+    LaunchCutsceneScene,
+    GameScene,
+  ],
 };

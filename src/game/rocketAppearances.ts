@@ -220,6 +220,8 @@ export function lowerModuleTextureKey(skinTextureKey: string): string {
 
 export interface ModuleDrawOptions {
   wingsDeployed?: boolean;
+  /** Combat lower-module wings. Defaults to true (gameplay). Launch cutscene uses false until separation. */
+  lowerWingsDeployed?: boolean;
   /** When false, skip the baked cannon (runtime uses a counter-rotated sprite). */
   includeCannon?: boolean;
 }
@@ -303,6 +305,7 @@ export function drawLowerModule(
   options: ModuleDrawOptions = {},
 ): void {
   const includeCannon = options.includeCannon !== false;
+  const lowerWingsDeployed = options.lowerWingsDeployed !== false;
   const cx = ox + 20;
   const hullLight = brightenColor(p.hull, 1.25);
   const wingColor = shadeColor(p.accent, 0.85);
@@ -320,13 +323,15 @@ export function drawLowerModule(
   g.fillStyle(p.accent, 1);
   g.fillRect(ox + 15, oy + 4, 10, 18);
 
-  // Large rear wings
-  g.fillStyle(wingColor, 0.95);
-  g.fillTriangle(ox + 11, oy + 14, ox + 0, oy + 28, ox + 11, oy + 26);
-  g.fillTriangle(ox + 29, oy + 14, ox + 40, oy + 28, ox + 29, oy + 26);
-  g.fillStyle(p.accent, 0.5);
-  g.fillTriangle(ox + 11, oy + 16, ox + 3, oy + 27, ox + 11, oy + 24);
-  g.fillTriangle(ox + 29, oy + 16, ox + 37, oy + 27, ox + 29, oy + 24);
+  // Large rear wings (retracted during launch until booster separation)
+  if (lowerWingsDeployed) {
+    g.fillStyle(wingColor, 0.95);
+    g.fillTriangle(ox + 11, oy + 14, ox + 0, oy + 28, ox + 11, oy + 26);
+    g.fillTriangle(ox + 29, oy + 14, ox + 40, oy + 28, ox + 29, oy + 26);
+    g.fillStyle(p.accent, 0.5);
+    g.fillTriangle(ox + 11, oy + 16, ox + 3, oy + 27, ox + 11, oy + 24);
+    g.fillTriangle(ox + 29, oy + 16, ox + 37, oy + 27, ox + 29, oy + 24);
+  }
 
   // Twin rear engine nozzles
   g.fillStyle(0x555566, 1);
@@ -375,8 +380,9 @@ export function drawAssembledRocket(
   options: ModuleDrawOptions = {},
 ): void {
   const includeCannon = options.includeCannon === true;
+  const lowerWingsDeployed = options.lowerWingsDeployed !== false;
   drawUpperModule(g, p, originX, originY, { wingsDeployed: false });
-  drawLowerModule(g, p, originX, originY + 28, { includeCannon });
+  drawLowerModule(g, p, originX, originY + 28, { includeCannon, lowerWingsDeployed });
 }
 
 export function drawEscapeUpper(
@@ -413,6 +419,7 @@ export function drawElectricRainbowRocket(
   );
   drawAssembledRocket(g, p, originX, originY, {
     includeCannon: options.includeCannon === true,
+    lowerWingsDeployed: options.lowerWingsDeployed,
   });
 }
 
@@ -436,6 +443,7 @@ export function drawRocketSkin(
   const p = getRocketSkinPalette(appearanceId);
   drawAssembledRocket(g, p, 0, 0, {
     includeCannon: options.includeCannon === true,
+    lowerWingsDeployed: options.lowerWingsDeployed,
   });
 }
 

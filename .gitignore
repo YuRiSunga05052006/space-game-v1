@@ -3,3 +3,11 @@ dist
 *.local
 .DS_Store
 src-tauri/target
+
+# Local Cursor usage tracking (regenerate with npm run usage:track)
+cursor-usage/events.jsonl
+cursor-usage/daily.json
+cursor-usage/meta.json
+cursor-usage/report.csv
+cursor-usage/report.xlsx
+cursor-usage-space-game.xlsx

@@ -103,7 +103,7 @@ export class LevelSelectScene extends Phaser.Scene {
     if (!secretId && !isLevelUnlocked(level)) return;
     initAudio();
     startMusic();
-    this.transitionTo('GameScene', {
+    this.transitionTo('LaunchCutsceneScene', {
       mode: 'story',
       level,
       worldId: this.worldId,

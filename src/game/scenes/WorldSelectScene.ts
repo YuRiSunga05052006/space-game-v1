@@ -70,7 +70,7 @@ export class WorldSelectScene extends Phaser.Scene {
             if (this.mode === 'story') {
               this.transitionTo('LevelSelectScene', { worldId: world.id, mode: this.mode });
             } else {
-              this.transitionTo('GameScene', {
+              this.transitionTo('LaunchCutsceneScene', {
                 mode: 'survival',
                 worldId: world.id,
                 level: getWorldLevelRange(world.id).min,

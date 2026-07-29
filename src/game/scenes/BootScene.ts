@@ -15,6 +15,13 @@ import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from '../world3/story
 import { drawStoryEnemyAppearance as drawWorld3StoryEnemy, getStoryEnemyAppearancePalette as getWorld3StoryEnemyPalette } from '../world3/storyEnemyAppearances';
 import { PLAYER_SKINS } from '../playerSkins';
 import {
+  BOOSTER_DEPLOYED_TEXTURE_KEY,
+  BOOSTER_TEXTURE_HEIGHT,
+  BOOSTER_TEXTURE_KEY,
+  BOOSTER_TEXTURE_WIDTH,
+  drawBooster,
+} from '../boosterAppearances';
+import {
   drawCannonTexture,
   drawEscapeUpperSkin,
   drawLowerModuleSkin,
@@ -49,6 +56,7 @@ export class BootScene extends Phaser.Scene {
 
   private createTextures(): void {
     this.createRocketSkinTextures();
+    this.createBoosterTextures();
     this.createBulletTexture();
     this.createAsteroidTextures();
     this.createStarTexture();
@@ -109,6 +117,22 @@ export class BootScene extends Phaser.Scene {
       ROCKET_CANNON_TEXTURE_HEIGHT,
     );
     cannon.destroy();
+  }
+
+  private createBoosterTextures(): void {
+    const retracted = this.make.graphics({ x: 0, y: 0 }, false);
+    drawBooster(retracted, 0, 0, { deployed: false });
+    retracted.generateTexture(BOOSTER_TEXTURE_KEY, BOOSTER_TEXTURE_WIDTH, BOOSTER_TEXTURE_HEIGHT);
+    retracted.destroy();
+
+    const deployed = this.make.graphics({ x: 0, y: 0 }, false);
+    drawBooster(deployed, 0, 0, { deployed: true });
+    deployed.generateTexture(
+      BOOSTER_DEPLOYED_TEXTURE_KEY,
+      BOOSTER_TEXTURE_WIDTH,
+      BOOSTER_TEXTURE_HEIGHT,
+    );
+    deployed.destroy();
   }
 
   private createBulletTexture(): void {
