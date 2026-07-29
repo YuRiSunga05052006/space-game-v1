@@ -2072,13 +2072,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.physics.pause();
-    this.player.hideForDeath();
+    const { explosionX, explosionY } = this.player.playFailSeparation();
     stopRocketEngineSfx();
-    this.spawnBigExplosion(deathX, deathY);
+    this.spawnBigExplosion(explosionX, explosionY);
     this.cameras.main.shake(400, 0.025);
     this.cameras.main.flash(250, 255, 120, 60);
 
-    this.time.delayedCall(850, () => this.triggerGameOver());
+    this.time.delayedCall(1200, () => this.triggerGameOver());
   }
 
   private triggerGameOver(): void {

@@ -4,9 +4,18 @@ import { startInvincibilityTheme, stopInvincibilityTheme } from '../audioManager
 import { getEquippedSkinTextureKey, getEquippedSkinId, PLAYER_SKINS } from '../playerSkins';
 import {
   drawElectricRainbowRocket,
+  escapeUpperTextureKey,
   getRainbowCyclePhase,
   getThrusterTints,
+  lowerModuleTextureKey,
+  ROCKET_CANNON_OFFSET_Y,
+  ROCKET_CANNON_TEXTURE_KEY,
   ROCKET_ENGINE_OFFSET_Y,
+  ROCKET_ESCAPE_TEXTURE_HEIGHT,
+  ROCKET_LOWER_OFFSET_Y,
+  ROCKET_TEXTURE_HEIGHT,
+  ROCKET_TEXTURE_WIDTH,
+  ROCKET_UPPER_OFFSET_Y,
   sampleRainbowColor,
 } from '../rocketAppearances';
 import {
@@ -18,6 +27,9 @@ import {
   type WeaponLoadout,
 } from '../weapons';
 
+const FAIL_ESCAPE_DURATION_MS = 1100;
+const FAIL_ESCAPE_SPEED = 520;
+
 export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly baseMaxSpeed = 280;
   private lastFired = 0;
@@ -26,8 +38,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private smokeEmitCooldown = 0;
   private readonly smokeEmitIntervalMs = 16;
   private readonly engineWorldPos = new Phaser.Math.Vector2();
+  private readonly cannonWorldPos = new Phaser.Math.Vector2();
   private readonly worldMatrix = new Phaser.GameObjects.Components.TransformMatrix();
   private isMoving = false;
+  private cannon?: Phaser.GameObjects.Image;
+  private readonly skinTextureKey: string;
 
   private invincible = false;
   private invincibleTimer?: Phaser.Time.TimerEvent;
@@ -59,17 +74,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private ownedWeaponIds: string[] = [];
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, getEquippedSkinTextureKey());
+    const textureKey = getEquippedSkinTextureKey();
+    super(scene, x, y, textureKey);
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
+    this.skinTextureKey = textureKey;
     this.electricRainbowSkin = getEquippedSkinId() === 'electricRainbow';
 
     this.setCollideWorldBounds(true);
     this.setDrag(0);
     this.applySpeedMultiplier();
-    this.setSize(20, 36);
-    this.setOffset(6, 8);
+    this.setSize(22, 44);
+    this.setOffset(9, 10);
     this.setDepth(10);
 
     if (this.electricRainbowSkin) {
@@ -78,7 +95,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.setAlpha(0);
     }
 
+    this.createCannon();
     this.createThruster();
+  }
+
+  private createCannon(): void {
+    this.cannon = this.scene.add.image(0, 0, ROCKET_CANNON_TEXTURE_KEY);
+    this.cannon.setDepth(11);
+    this.cannon.setOrigin(0.5, 0.85);
   }
 
   private applySpeedMultiplier(): void {
@@ -191,7 +215,30 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.rainbowShipGfx.setVisible(true);
     this.rainbowShipGfx.setAlpha(this.invisible ? this.alpha : 1);
 
-    drawElectricRainbowRocket(this.rainbowShipGfx, bodyColor, engineColor, -16, -26);
+    drawElectricRainbowRocket(
+      this.rainbowShipGfx,
+      bodyColor,
+      engineColor,
+      -ROCKET_TEXTURE_WIDTH / 2,
+      -ROCKET_TEXTURE_HEIGHT / 2,
+    );
+  }
+
+  private updateCannonVisual(): void {
+    if (!this.cannon) return;
+
+    if (!this.visible) {
+      this.cannon.setVisible(false);
+      return;
+    }
+
+    this.getWorldTransformMatrix(this.worldMatrix);
+    this.worldMatrix.transformPoint(0, ROCKET_CANNON_OFFSET_Y, this.cannonWorldPos);
+    this.cannon.setPosition(this.cannonWorldPos.x, this.cannonWorldPos.y);
+    // Keep barrel pointing screen-up regardless of hull angle.
+    this.cannon.setRotation(0);
+    this.cannon.setVisible(true);
+    this.cannon.setAlpha(this.invisible ? 0.35 : 1);
   }
 
   private getEngineWorldPosition(): { x: number; y: number } {
@@ -453,17 +500,94 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.stopMove();
     this.setVisible(false);
     this.rainbowShipGfx?.setVisible(false);
+    this.cannon?.setVisible(false);
     this.thruster?.setVisible(false);
     this.smokeTrail?.setVisible(false);
+    this.rainbowGlow?.setVisible(false);
+    this.shieldGlow?.setVisible(false);
+    this.boostGlow?.setVisible(false);
     if (this.body) {
       this.body.enable = false;
     }
+  }
+
+  /**
+   * Separates the ship on fatal hit: lower module explodes, upper escape module
+   * deploys wings and flies away. Returns explosion center for VFX.
+   */
+  playFailSeparation(): { explosionX: number; explosionY: number } {
+    this.getWorldTransformMatrix(this.worldMatrix);
+
+    const lowerPos = new Phaser.Math.Vector2();
+    const upperPos = new Phaser.Math.Vector2();
+    this.worldMatrix.transformPoint(0, ROCKET_LOWER_OFFSET_Y, lowerPos);
+    this.worldMatrix.transformPoint(0, ROCKET_UPPER_OFFSET_Y, upperPos);
+
+    const facing = this.rotation;
+    this.hideForDeath();
+
+    const lower = this.scene.add.image(
+      lowerPos.x,
+      lowerPos.y,
+      lowerModuleTextureKey(this.skinTextureKey),
+    );
+    lower.setRotation(facing);
+    lower.setDepth(10);
+
+    const escape = this.scene.add.image(
+      upperPos.x,
+      upperPos.y,
+      escapeUpperTextureKey(this.skinTextureKey),
+    );
+    escape.setRotation(facing);
+    escape.setDepth(12);
+
+    // Fly roughly along current nose direction (screen-up when upright).
+    const escapeAngle = facing - Math.PI / 2;
+    const targetX = upperPos.x + Math.cos(escapeAngle) * FAIL_ESCAPE_SPEED * (FAIL_ESCAPE_DURATION_MS / 1000);
+    const targetY = upperPos.y + Math.sin(escapeAngle) * FAIL_ESCAPE_SPEED * (FAIL_ESCAPE_DURATION_MS / 1000);
+
+    this.scene.tweens.add({
+      targets: escape,
+      x: targetX,
+      y: targetY,
+      duration: FAIL_ESCAPE_DURATION_MS,
+      ease: 'Cubic.easeIn',
+      onComplete: () => {
+        escape.destroy();
+      },
+    });
+
+    // Brief thruster burst from the escape module's hidden engines.
+    const escapeThruster = this.scene.add.particles(0, 0, 'particle', {
+      speed: { min: 40, max: 100 },
+      scale: { start: 1.0, end: 0 },
+      alpha: { start: 0.9, end: 0 },
+      lifespan: 280,
+      tint: [0x66ccff, 0xaaddff, 0xffffff],
+      frequency: 30,
+      angle: Phaser.Math.RadToDeg(facing) + 90,
+    });
+    escapeThruster.setDepth(11);
+    escapeThruster.startFollow(escape, 0, ROCKET_ESCAPE_TEXTURE_HEIGHT * 0.35, true);
+
+    this.scene.time.delayedCall(400, () => {
+      escapeThruster.stop();
+      escapeThruster.destroy();
+    });
+
+    this.scene.time.delayedCall(80, () => {
+      lower.destroy();
+    });
+
+    return { explosionX: lowerPos.x, explosionY: lowerPos.y };
   }
 
   updateThruster(_time: number, _delta: number): void {
     if (this.electricRainbowSkin) {
       this.updateRainbowShip();
     }
+    this.updateCannonVisual();
 
     if (this.isMoving && this.thruster) {
       const engine = this.getEngineWorldPosition();
@@ -509,9 +633,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   getBulletSpawnPoint(): { x: number; y: number } {
+    // Muzzle sits above the cannon in screen space (always fires toward top of screen).
     this.getWorldTransformMatrix(this.worldMatrix);
-    this.worldMatrix.transformPoint(0, -ROCKET_ENGINE_OFFSET_Y, this.engineWorldPos);
-    return { x: this.engineWorldPos.x, y: this.engineWorldPos.y };
+    this.worldMatrix.transformPoint(0, ROCKET_CANNON_OFFSET_Y, this.cannonWorldPos);
+    return { x: this.cannonWorldPos.x, y: this.cannonWorldPos.y - 10 };
   }
 
   moveTowardTarget(tx: number, ty: number, strength = 1): void {
@@ -585,6 +710,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.thruster?.destroy();
     this.smokeTrail?.destroy();
     this.rainbowShipGfx?.destroy();
+    this.cannon?.destroy();
     super.destroy(fromScene);
   }
 }

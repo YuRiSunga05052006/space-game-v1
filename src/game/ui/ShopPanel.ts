@@ -514,7 +514,7 @@ export function createShopPanel(
     for (const gfx of rainbowPreviews) {
       if (!gfx.active) continue;
       gfx.clear();
-      drawElectricRainbowRocket(gfx, bodyColor, engineColor, -16, -26);
+      drawElectricRainbowRocket(gfx, bodyColor, engineColor, -20, -32);
     }
   };
 

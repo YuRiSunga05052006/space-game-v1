@@ -14,7 +14,23 @@ import { drawBossAppearance as drawWorld3Boss, getBossAppearancePalette as getWo
 import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from '../world3/storyEnemyDefinitions';
 import { drawStoryEnemyAppearance as drawWorld3StoryEnemy, getStoryEnemyAppearancePalette as getWorld3StoryEnemyPalette } from '../world3/storyEnemyAppearances';
 import { PLAYER_SKINS } from '../playerSkins';
-import { drawRocketSkin } from '../rocketAppearances';
+import {
+  drawCannonTexture,
+  drawEscapeUpperSkin,
+  drawLowerModuleSkin,
+  drawRocketSkin,
+  escapeUpperTextureKey,
+  lowerModuleTextureKey,
+  ROCKET_CANNON_TEXTURE_HEIGHT,
+  ROCKET_CANNON_TEXTURE_KEY,
+  ROCKET_CANNON_TEXTURE_WIDTH,
+  ROCKET_ESCAPE_TEXTURE_HEIGHT,
+  ROCKET_ESCAPE_TEXTURE_WIDTH,
+  ROCKET_LOWER_TEXTURE_HEIGHT,
+  ROCKET_LOWER_TEXTURE_WIDTH,
+  ROCKET_TEXTURE_HEIGHT,
+  ROCKET_TEXTURE_WIDTH,
+} from '../rocketAppearances';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -61,11 +77,38 @@ export class BootScene extends Phaser.Scene {
 
   private createRocketSkinTextures(): void {
     for (const skin of PLAYER_SKINS) {
-      const g = this.make.graphics({ x: 0, y: 0 }, false);
-      drawRocketSkin(g, skin.appearanceId);
-      g.generateTexture(skin.textureKey, 32, 52);
-      g.destroy();
+      const assembled = this.make.graphics({ x: 0, y: 0 }, false);
+      drawRocketSkin(assembled, skin.appearanceId, { includeCannon: false });
+      assembled.generateTexture(skin.textureKey, ROCKET_TEXTURE_WIDTH, ROCKET_TEXTURE_HEIGHT);
+      assembled.destroy();
+
+      const escape = this.make.graphics({ x: 0, y: 0 }, false);
+      drawEscapeUpperSkin(escape, skin.appearanceId);
+      escape.generateTexture(
+        escapeUpperTextureKey(skin.textureKey),
+        ROCKET_ESCAPE_TEXTURE_WIDTH,
+        ROCKET_ESCAPE_TEXTURE_HEIGHT,
+      );
+      escape.destroy();
+
+      const lower = this.make.graphics({ x: 0, y: 0 }, false);
+      drawLowerModuleSkin(lower, skin.appearanceId);
+      lower.generateTexture(
+        lowerModuleTextureKey(skin.textureKey),
+        ROCKET_LOWER_TEXTURE_WIDTH,
+        ROCKET_LOWER_TEXTURE_HEIGHT,
+      );
+      lower.destroy();
     }
+
+    const cannon = this.make.graphics({ x: 0, y: 0 }, false);
+    drawCannonTexture(cannon);
+    cannon.generateTexture(
+      ROCKET_CANNON_TEXTURE_KEY,
+      ROCKET_CANNON_TEXTURE_WIDTH,
+      ROCKET_CANNON_TEXTURE_HEIGHT,
+    );
+    cannon.destroy();
   }
 
   private createBulletTexture(): void {
