@@ -4,6 +4,7 @@
 }
 
 export const BOSS_LEVEL_CONFIG: Record<number, BossLevelConfig> = {
+  // World 1
   1: { spawnMs: 120_000, coinReward: 100 },
   2: { spawnMs: 150_000, coinReward: 120 },
   3: { spawnMs: 150_000, coinReward: 140 },
@@ -14,6 +15,7 @@ export const BOSS_LEVEL_CONFIG: Record<number, BossLevelConfig> = {
   8: { spawnMs: 180_000, coinReward: 260 },
   9: { spawnMs: 180_000, coinReward: 280 },
   10: { spawnMs: 360_000, coinReward: 350 },
+  // World 2
   11: { spawnMs: 150_000, coinReward: 380 },
   12: { spawnMs: 180_000, coinReward: 400 },
   13: { spawnMs: 180_000, coinReward: 420 },
@@ -24,6 +26,25 @@ export const BOSS_LEVEL_CONFIG: Record<number, BossLevelConfig> = {
   18: { spawnMs: 210_000, coinReward: 490 },
   19: { spawnMs: 210_000, coinReward: 495 },
   20: { spawnMs: 420_000, coinReward: 500 },
+  // World 3
+  21: { spawnMs: 120_000, coinReward: 510 },
+  22: { spawnMs: 150_000, coinReward: 520 },
+  23: { spawnMs: 150_000, coinReward: 530 },
+  24: { spawnMs: 150_000, coinReward: 540 },
+  25: { spawnMs: 150_000, coinReward: 550 },
+  26: { spawnMs: 240_000, coinReward: 575 },
+  27: { spawnMs: 180_000, coinReward: 585 },
+  28: { spawnMs: 180_000, coinReward: 595 },
+  29: { spawnMs: 180_000, coinReward: 605 },
+  30: { spawnMs: 180_000, coinReward: 615 },
+  31: { spawnMs: 180_000, coinReward: 625 },
+  32: { spawnMs: 300_000, coinReward: 660 },
+  33: { spawnMs: 210_000, coinReward: 670 },
+  34: { spawnMs: 210_000, coinReward: 680 },
+  35: { spawnMs: 210_000, coinReward: 690 },
+  36: { spawnMs: 210_000, coinReward: 700 },
+  37: { spawnMs: 210_000, coinReward: 710 },
+  38: { spawnMs: 420_000, coinReward: 800 },
 };
 
 export function getBossConfigForLevel(level: number): BossLevelConfig {
