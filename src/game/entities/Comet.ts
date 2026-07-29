@@ -48,7 +48,11 @@ export class Comet extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (scene.textures.exists('particle')) {
-      const tailAngle = Phaser.Math.RadToDeg(moveAngle + Math.PI);
+      // Texture points +X (head at right, drawn tail toward -X). Offset the emitter
+      // to the visual tail tip so particles continue behind it, not from the core.
+      const tailDir = moveAngle + Math.PI;
+      const tailEmitOffset = 16;
+      const tailAngle = Phaser.Math.RadToDeg(tailDir);
       this.tailEmitter = scene.add.particles(config.x, config.y, 'particle', {
         speed: { min: 20, max: 60 },
         scale: { start: 0.5, end: 0 },
@@ -58,6 +62,10 @@ export class Comet extends Phaser.Physics.Arcade.Sprite {
         tint: variant === 'gold' ? 0xffcc44 : 0x88aaff,
         angle: { min: tailAngle - 20, max: tailAngle + 20 },
         follow: this,
+        followOffset: {
+          x: Math.cos(tailDir) * tailEmitOffset,
+          y: Math.sin(tailDir) * tailEmitOffset,
+        },
       });
       this.tailEmitter.setDepth(4);
     }

@@ -153,6 +153,15 @@ import { updateBoostVacuum, type BoostVacuumAbsorbPayload } from '../boostVacuum
 
 const STAR_BOOST_SPEED_MULTIPLIER = 2.75;
 const SURVIVAL_INVENTORY_BOOST_WINDOW_MS = 5000;
+/** Top-center HUD stack (boss / boost / weapon labels). */
+const BOSS_HEALTH_BAR_Y = 96;
+const BOOST_METER_Y_DEFAULT = 78;
+/** Below boss bar (center 96, half-height 7 → bottom ~103). */
+const BOOST_METER_Y_BELOW_BOSS = 118;
+const WEAPON_HUD_Y_DEFAULT = 112;
+/** Boost score label sits ~15px under the bar center; keep weapon text under that. */
+const BOOST_METER_LABEL_OFFSET = 25;
+const WEAPON_HUD_GAP_BELOW_BOOST = 10;
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -501,14 +510,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.healthBar = new HealthBar(this, GAME_WIDTH / 2, 58);
-    this.boostPointMeter = new BoostPointMeter(this, GAME_WIDTH / 2, 78);
-    this.bossHealthBar = new BossHealthBar(this, 96);
-    this.weaponHudText = this.add.text(GAME_WIDTH / 2, 112, '', {
+    this.boostPointMeter = new BoostPointMeter(this, GAME_WIDTH / 2, BOOST_METER_Y_DEFAULT);
+    this.bossHealthBar = new BossHealthBar(this, BOSS_HEALTH_BAR_Y);
+    this.weaponHudText = this.add.text(GAME_WIDTH / 2, WEAPON_HUD_Y_DEFAULT, '', {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '9px',
       color: '#556677',
       align: 'center',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(hudTextDepth);
+    this.layoutTopCenterHud();
     this.updateFireModeUI();
     this.createSurvivalPowerUpHud();
     this.createDeathBombHud();
@@ -983,6 +993,7 @@ export class GameScene extends Phaser.Scene {
     if (boss.takeDamage(damage)) {
       const { x, y } = boss;
       this.bossHealthBar.hide();
+      this.layoutTopCenterHud();
       this.addScore(boss.points);
       this.spawnBigExplosion(x, y);
       this.lastDefeatedBossX = x;
@@ -1477,13 +1488,32 @@ export class GameScene extends Phaser.Scene {
       onEnd: () => this.endScoreBoost(),
     });
     this.boostPointMeter.show(scoreCap);
+    this.layoutTopCenterHud();
     this.cameras.main.flash(flashDuration, flashRgb.r, flashRgb.g, flashRgb.b, false);
   }
 
   private endScoreBoost(): void {
     this.starSpeedBoostMultiplier = 1;
     this.boostPointMeter.hide();
+    this.layoutTopCenterHud();
     this.applyPostScoreBoostInvisibility();
+  }
+
+  /** Keep Boost under Boss HP, and weapon labels under the Boost score text. */
+  private layoutTopCenterHud(): void {
+    const bossVisible = this.bossHealthBar?.visible === true;
+    const boostVisible = this.boostPointMeter?.visible === true;
+
+    this.bossHealthBar.y = BOSS_HEALTH_BAR_Y;
+    const boostY = bossVisible ? BOOST_METER_Y_BELOW_BOSS : BOOST_METER_Y_DEFAULT;
+    this.boostPointMeter.y = boostY;
+
+    if (!this.weaponHudText) return;
+    if (boostVisible) {
+      this.weaponHudText.y = boostY + BOOST_METER_LABEL_OFFSET + WEAPON_HUD_GAP_BELOW_BOOST;
+    } else {
+      this.weaponHudText.y = WEAPON_HUD_Y_DEFAULT;
+    }
   }
 
   private applyPostScoreBoostInvisibility(): void {
@@ -1700,7 +1730,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.triggerMineDetonation(mine);
+    this.triggerMineDetonation(mine, { contactFullDamage: true });
   }
 
   private onArmedBlueMineHitHazard(
@@ -1783,7 +1813,7 @@ export class GameScene extends Phaser.Scene {
     carrier.destroy();
     this.addScore(points);
     this.tryAwardEnemyCoins(x, y);
-    this.runMineBlast(source);
+    this.runMineBlast(source, { contactFullDamage: true });
   }
 
   private spawnBlueMineAt(x: number, y: number): void {
@@ -1792,7 +1822,10 @@ export class GameScene extends Phaser.Scene {
     this.mines.add(mine);
   }
 
-  private triggerMineDetonation(mine: Mine, options?: { skipPlayerDamage?: boolean }): void {
+  private triggerMineDetonation(
+    mine: Mine,
+    options?: { skipPlayerDamage?: boolean; contactFullDamage?: boolean },
+  ): void {
     if (!mine.active) return;
     const source: MineBlastSource = {
       x: mine.x,
@@ -1840,7 +1873,10 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  private runMineBlast(source: MineBlastSource, options?: { skipPlayerDamage?: boolean }): void {
+  private runMineBlast(
+    source: MineBlastSource,
+    options?: { skipPlayerDamage?: boolean; contactFullDamage?: boolean },
+  ): void {
     detonateMineBlast(
       source,
       this.getMineBlastGroups(),
@@ -1888,6 +1924,7 @@ export class GameScene extends Phaser.Scene {
       },
       {
         skipPlayerDamage: options?.skipPlayerDamage,
+        contactFullDamage: options?.contactFullDamage,
         playerX: this.player.x,
         playerY: this.player.y,
       },
@@ -2156,6 +2193,7 @@ export class GameScene extends Phaser.Scene {
       this.bossSkillText?.destroy();
       this.bossSkillText = undefined;
       this.bossHealthBar.hide();
+      this.layoutTopCenterHud();
       this.triggerVictory();
       return;
     }
@@ -2171,6 +2209,7 @@ export class GameScene extends Phaser.Scene {
     this.bossSkillText?.destroy();
     this.bossSkillText = undefined;
     this.bossHealthBar.hide();
+    this.layoutTopCenterHud();
 
     this.awardCoins(this.lastBossCoinReward, this.lastDefeatedBossX, this.lastDefeatedBossY);
     this.survivalBossesDefeated += 1;
@@ -2302,6 +2341,7 @@ export class GameScene extends Phaser.Scene {
     this.bossShips.add(boss);
     this.bossHealthRemaining = boss.health;
     this.bossHealthBar.show(boss.maxHealth, boss.health, definition.bossName);
+    this.layoutTopCenterHud();
     return boss;
   }
 

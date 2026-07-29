@@ -147,6 +147,11 @@ export function scalePlayerBlastDamage(
 
 export interface DetonateMineBlastOptions {
   skipPlayerDamage?: boolean;
+  /**
+   * Player rammed this mine/carrier. First blast deals full playerDamage
+   * (no distance falloff), regardless of approach angle / body sizes.
+   */
+  contactFullDamage?: boolean;
   playerX?: number;
   playerY?: number;
 }
@@ -165,6 +170,7 @@ export function detonateMineBlast(
   const visitedMines = new Set<Phaser.Physics.Arcade.Sprite>();
   const visitedCarriers = new Set<Phaser.Physics.Arcade.Sprite>();
   let safety = 0;
+  let useContactFullDamage = options?.contactFullDamage === true;
 
   while (queue.length > 0 && safety < 64) {
     safety += 1;
@@ -183,8 +189,14 @@ export function detonateMineBlast(
       && options?.playerX !== undefined
       && options?.playerY !== undefined
     ) {
-      const dist = Math.hypot(options.playerX - cx, options.playerY - cy);
-      const scaled = scalePlayerBlastDamage(source.playerDamage, dist, radius);
+      let scaled: number;
+      if (useContactFullDamage) {
+        scaled = source.playerDamage;
+        useContactFullDamage = false;
+      } else {
+        const dist = Math.hypot(options.playerX - cx, options.playerY - cy);
+        scaled = scalePlayerBlastDamage(source.playerDamage, dist, radius);
+      }
       if (scaled > 0) {
         callbacks.onDamagePlayer(scaled);
       }
