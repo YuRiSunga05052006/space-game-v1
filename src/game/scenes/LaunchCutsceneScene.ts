@@ -105,7 +105,6 @@ export class LaunchCutsceneScene extends Phaser.Scene {
   private cloudSpawnTimer = 0;
   private cloudLayerAlpha = 0;
   private cloudsStarted = false;
-  private ascentProgress = 0;
 
   constructor() {
     super({ key: 'LaunchCutsceneScene' });
@@ -129,7 +128,6 @@ export class LaunchCutsceneScene extends Phaser.Scene {
     this.cloudSpawnTimer = 0;
     this.cloudLayerAlpha = 0;
     this.cloudsStarted = false;
-    this.ascentProgress = 0;
     this.moonCraters = [];
     this.stars = [];
     this.starBaseAlphas = [];
@@ -471,7 +469,6 @@ export class LaunchCutsceneScene extends Phaser.Scene {
     if (this.phase !== 'countdown') return;
     this.phase = 'ascent';
     this.phaseElapsed = 0;
-    this.ascentProgress = 0;
     this.cloudsStarted = false;
     this.cloudLayerAlpha = 0;
     this.cloudSpawnTimer = 0;
@@ -490,7 +487,6 @@ export class LaunchCutsceneScene extends Phaser.Scene {
     if (!this.stack) return;
     this.phaseElapsed += delta;
     const t = Phaser.Math.Clamp(this.phaseElapsed / CLIMB_TO_MID_MS, 0, 1);
-    this.ascentProgress = t;
     // Ease-out: starts gently from the pad, never snaps to mid.
     const ease = 1 - (1 - t) * (1 - t);
 
