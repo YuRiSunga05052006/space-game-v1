@@ -28,6 +28,7 @@ export const BACKGROUND_THEMES: Record<string, BackgroundTheme> = {
   alderamin: { id: 'alderamin', skyTop: 0x081018, skyBottom: 0x182830, starColor: 0xccddff, planetColor: 0x99bbdd, planetSize: 42, planetX: 0.7, accentColor: 0xbbddff },
   castor: { id: 'castor', skyTop: 0x0a1020, skyBottom: 0x203048, starColor: 0xccddee, planetColor: 0xaabbcc, planetSize: 44, planetX: 0.66, accentColor: 0xddeeff },
   aldebaran: { id: 'aldebaran', skyTop: 0x100404, skyBottom: 0x301010, starColor: 0xff4422, planetColor: 0xcc2200, planetSize: 80, planetX: 0.5, accentColor: 0xff6633 },
+  wise0855: { id: 'wise0855', skyTop: 0x2a1810, skyBottom: 0x3d2418, starColor: 0x4a3020, planetColor: 0x5a3828, planetSize: 26, planetX: 0.72, accentColor: 0x886644 },
 };
 
 export function getBackgroundTheme(themeId: string): BackgroundTheme {

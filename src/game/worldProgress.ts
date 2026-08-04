@@ -15,6 +15,8 @@ export interface WorldProgressState {
   secretDawnComplete: boolean;
   secretGalileanUnlocked: boolean;
   secretGalileanComplete: boolean;
+  secretWise0855Unlocked: boolean;
+  secretWise0855Complete: boolean;
 }
 
 function defaultState(): WorldProgressState {
@@ -29,6 +31,8 @@ function defaultState(): WorldProgressState {
     secretDawnComplete: false,
     secretGalileanUnlocked: false,
     secretGalileanComplete: false,
+    secretWise0855Unlocked: false,
+    secretWise0855Complete: false,
   };
 }
 
@@ -48,6 +52,8 @@ function readState(): WorldProgressState {
       secretDawnComplete: parsed.secretDawnComplete === true,
       secretGalileanUnlocked: parsed.secretGalileanUnlocked === true,
       secretGalileanComplete: parsed.secretGalileanComplete === true,
+      secretWise0855Unlocked: parsed.secretWise0855Unlocked === true,
+      secretWise0855Complete: parsed.secretWise0855Complete === true,
     };
   } catch {
     return defaultState();
@@ -133,6 +139,14 @@ export function isSecretGalileanComplete(): boolean {
   return readState().secretGalileanComplete;
 }
 
+export function isSecretWise0855Unlocked(): boolean {
+  return readState().secretWise0855Unlocked;
+}
+
+export function isSecretWise0855Complete(): boolean {
+  return readState().secretWise0855Complete;
+}
+
 export function isLevel20Complete(): boolean {
   const { max } = getWorldLevelRange('world2');
   try {
@@ -196,6 +210,19 @@ export function completeSecretGalilean(): void {
   const state = readState();
   state.secretGalileanComplete = true;
   state.secretGalileanUnlocked = true;
+  writeState(state);
+}
+
+export function unlockSecretWise0855(): void {
+  const state = readState();
+  state.secretWise0855Unlocked = true;
+  writeState(state);
+}
+
+export function completeSecretWise0855(): void {
+  const state = readState();
+  state.secretWise0855Complete = true;
+  state.secretWise0855Unlocked = true;
   writeState(state);
 }
 

@@ -2,12 +2,20 @@ import Phaser from 'phaser';
 import { playSfx } from '../audioManager';
 import { isLevelUnlocked } from '../storyProgress';
 import { getLevelMeta, getBackgroundTheme, getMapLayout } from '../levelResolver';
-import { isSecretIssUnlocked, isSecretDawnUnlocked, isSecretGalileanUnlocked, isSecretGalileanComplete } from '../worldProgress';
+import {
+  isSecretIssUnlocked,
+  isSecretDawnUnlocked,
+  isSecretGalileanUnlocked,
+  isSecretGalileanComplete,
+  isSecretWise0855Unlocked,
+  isSecretWise0855Complete,
+} from '../worldProgress';
 import type { MapNodeStyle, MapPlanetId, MapNodeLayout as World1MapNodeLayout } from '../world1/mapLayout';
 import { SECRET_ISS_MAP_POSITION, SECRET_DAWN_MAP_POSITION } from '../world1/mapLayout';
 import type { MapPlanetId as World2PlanetId, MapNodeLayout as World2MapNodeLayout } from '../world2/mapLayout';
 import { SECRET_GALILEAN_MAP_POSITION, getWorld2GalileanNeptuneRoute } from '../world2/mapLayout';
 import type { MapNodeLayout as World3MapNodeLayout } from '../world3/mapLayout';
+import { SECRET_WISE0855_MAP_POSITION, getWorld3WisePolluxRoute } from '../world3/mapLayout';
 
 const FINALE_STAR_COLOR = 0xffdd66;
 const PLANET_RADII: Record<MapPlanetId, number> = {
@@ -85,6 +93,17 @@ function drawMiniGalilean(g: Phaser.GameObjects.Graphics): void {
     g.fillStyle(0xffffff, 0.25);
     g.fillCircle(moon.x - moon.r * 0.25, moon.y - moon.r * 0.25, moon.r * 0.35);
   }
+}
+
+function drawMiniWise0855(g: Phaser.GameObjects.Graphics): void {
+  g.fillStyle(0x1a1520, 1);
+  g.fillCircle(0, 0, 8);
+  g.fillStyle(0x332844, 0.7);
+  g.fillCircle(0, 0, 5);
+  g.fillStyle(0x110818, 0.9);
+  g.fillCircle(1, 1, 3);
+  g.fillStyle(0x6644aa, 0.35);
+  g.fillCircle(-2, -2, 2);
 }
 
 function drawAsteroidBeltDonut(
@@ -508,6 +527,15 @@ export function createSolarSystemMap(
       mapToContent(alt.to.x, alt.to.y),
     );
   }
+
+  if (worldId === 'world3' && isSecretWise0855Complete()) {
+    const alt = getWorld3WisePolluxRoute();
+    route.lineStyle(2, 0x88ff44, 0.55);
+    drawRouteSegment(
+      mapToContent(alt.from.x, alt.from.y),
+      mapToContent(alt.to.x, alt.to.y),
+    );
+  }
   content.add(route);
 
   const clampPan = (): void => {
@@ -548,6 +576,10 @@ export function createSolarSystemMap(
       focusOnPosition(SECRET_GALILEAN_MAP_POSITION.x, SECRET_GALILEAN_MAP_POSITION.y);
       return;
     }
+    if (secretId === 'wise0855') {
+      focusOnPosition(SECRET_WISE0855_MAP_POSITION.x, SECRET_WISE0855_MAP_POSITION.y);
+      return;
+    }
     const node = layout.getMapNode(level);
     focusOnPosition(node.x, node.y);
   };
@@ -567,6 +599,10 @@ export function createSolarSystemMap(
     } else if (selectedSecretId === 'galilean') {
       pos = mapToContent(SECRET_GALILEAN_MAP_POSITION.x, SECRET_GALILEAN_MAP_POSITION.y);
       themeId = 'galilean';
+      ringRadius = 18;
+    } else if (selectedSecretId === 'wise0855') {
+      pos = mapToContent(SECRET_WISE0855_MAP_POSITION.x, SECRET_WISE0855_MAP_POSITION.y);
+      themeId = 'wise0855';
       ringRadius = 18;
     } else {
       const node = layout.getMapNode(selectedLevel);
@@ -823,6 +859,44 @@ export function createSolarSystemMap(
       selectedLevel = 11;
       redrawSelection();
       onSelectLevel(11, 'galilean');
+    });
+
+    content.add(secretContainer);
+  }
+
+  if (worldId === 'world3' && isSecretWise0855Unlocked()) {
+    const secretPos = mapToContent(SECRET_WISE0855_MAP_POSITION.x, SECRET_WISE0855_MAP_POSITION.y);
+    const secretContainer = scene.add.container(secretPos.x, secretPos.y);
+
+    const secretGfx = scene.add.graphics();
+    drawMiniWise0855(secretGfx);
+    secretContainer.add(secretGfx);
+
+    const secretLabel = scene.add.text(0, 16, 'WISE', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '8px',
+      fontStyle: '700',
+      color: '#8866aa',
+    }).setOrigin(0.5);
+    secretContainer.add(secretLabel);
+
+    secretContainer.setInteractive(
+      new Phaser.Geom.Rectangle(-18, -18, 36, 36),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    secretContainer.input!.cursor = 'pointer';
+
+    secretContainer.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+      isPanning = false;
+    });
+    secretContainer.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+      playSfx('ui');
+      selectedSecretId = 'wise0855';
+      selectedLevel = 24;
+      redrawSelection();
+      onSelectLevel(24, 'wise0855');
     });
 
     content.add(secretContainer);

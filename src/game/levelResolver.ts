@@ -111,6 +111,9 @@ export function getBackgroundTheme(worldId: string, themeId: string): Background
   if (themeId === 'galilean') {
     return getWorld2Theme(themeId);
   }
+  if (themeId === 'wise0855') {
+    return getWorld3Theme(themeId);
+  }
   if (
     worldId === 'world5'
     || worldId === 'world6'

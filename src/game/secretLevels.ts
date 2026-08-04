@@ -3,12 +3,14 @@ import {
   type SecretLevelDefinition,
 } from './world1/secretLevels';
 import { WORLD2_SECRET_LEVELS } from './world2/secretLevels';
+import { WORLD3_SECRET_LEVELS } from './world3/secretLevels';
 
 export type { SecretLevelDefinition };
 
 export const SECRET_LEVELS: Record<string, SecretLevelDefinition> = {
   ...WORLD1_SECRET_LEVELS,
   ...WORLD2_SECRET_LEVELS,
+  ...WORLD3_SECRET_LEVELS,
 };
 
 export function getSecretLevel(id: string): SecretLevelDefinition | undefined {

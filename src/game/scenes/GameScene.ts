@@ -93,9 +93,18 @@ import {
   completeSecretDawn,
   unlockSecretGalilean,
   completeSecretGalilean,
+  unlockSecretWise0855,
+  completeSecretWise0855,
   onLevel20Cleared,
 } from '../worldProgress';
 import { getSecretLevel, getSecretsForWorld, getSecretWorldId } from '../secretLevels';
+import {
+  DarknessOverlay,
+  LIGHT_RADIUS,
+  beamLengthToScreenEdge,
+  type CircleLight,
+  type BeamLight,
+} from '../lighting/DarknessOverlay';
 import { getWorldIdFromLevel } from '../gameMode';
 import { getWorldNumber } from '../worlds';
 import { applyStoryBackground } from '../ui/StoryThemeBackground';
@@ -200,6 +209,8 @@ export class GameScene extends Phaser.Scene {
   private isPlayerDying = false;
   private gameOverScreenShown = false;
   private isPaused = false;
+  private pauseBtnHit?: Phaser.GameObjects.Zone;
+  private pauseBtnDrawIcon?: (color: number) => void;
   private pauseMenu?: Phaser.GameObjects.Container;
   private pauseConfirmOverlay?: Phaser.GameObjects.Container;
   private settingsPanel?: Phaser.GameObjects.Container;
@@ -253,6 +264,7 @@ export class GameScene extends Phaser.Scene {
   private wormholeSpawned = false;
   private pendingSecretId?: string;
   private warpPanelSpawned = false;
+  private darknessOverlay?: DarknessOverlay;
   private cometSpawnTimer = 0;
   private mineSpawnTimer = 0;
   private shieldSpawnTimer = 0;
@@ -294,6 +306,8 @@ export class GameScene extends Phaser.Scene {
     this.isPlayerDying = false;
     this.gameOverScreenShown = false;
     this.isPaused = false;
+    this.pauseBtnHit = undefined;
+    this.pauseBtnDrawIcon = undefined;
     this.pauseMenu?.destroy();
     this.pauseMenu = undefined;
     this.pauseConfirmOverlay?.destroy();
@@ -359,7 +373,16 @@ export class GameScene extends Phaser.Scene {
     this.starSpeedBoostMultiplier = 1;
     this.boostPointMeter?.destroy();
 
-    this.createStarfield();
+    const secretDef = this.secretId ? getSecretLevel(this.secretId) : undefined;
+    const isDarkLevel = secretDef?.darkLevel === true;
+
+    if (!isDarkLevel) {
+      this.createStarfield();
+    } else {
+      this.stars = [];
+      this.starSpeeds = [];
+    }
+
     if (this.gameMode === 'story') {
       const levelMeta = getLevelMeta(this.worldId, this.storyLevel, this.secretId);
       const theme = getBackgroundTheme(this.worldId, levelMeta.themeId);
@@ -374,12 +397,23 @@ export class GameScene extends Phaser.Scene {
     this.setupInput();
     this.setupCollisions();
 
+    this.darknessOverlay?.destroy();
+    this.darknessOverlay = undefined;
+    if (isDarkLevel) {
+      this.darknessOverlay = new DarknessOverlay(
+        this,
+        secretDef?.darkObstructionColor ?? 0x000000,
+      );
+    }
+
     initAudio();
     startMusic();
     stopRocketEngineSfx();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       stopRocketEngineSfx();
       stopInvincibilityTheme();
+      this.darknessOverlay?.destroy();
+      this.darknessOverlay = undefined;
     });
 
     this.spawnAsteroid('lg');
@@ -464,7 +498,7 @@ export class GameScene extends Phaser.Scene {
     const hudTextDepth = 110;
 
     const pauseBtn = this.createPauseButton();
-    const topLabelX = pauseBtn.x - pauseBtn.width - 8;
+    const topLabelX = pauseBtn.x - pauseBtn.width / 2 - 8;
     const topLabelMaxWidth = Math.max(80, topLabelX - 16);
 
     this.scoreText = this.add.text(16, 12, 'SCORE 0', hudStyle)
@@ -580,22 +614,64 @@ export class GameScene extends Phaser.Scene {
     this.updateFireModeUI();
   }
 
-  private createPauseButton(): Phaser.GameObjects.Text {
-    const btn = this.add.text(GAME_WIDTH - 16, 12, '⏸', {
-      fontFamily: 'Orbitron, sans-serif',
-      fontSize: '22px',
-      color: '#8899bb',
-      backgroundColor: '#1a1f3a',
-      padding: { x: 10, y: 6 },
-    }).setOrigin(1, 0).setScrollFactor(0).setDepth(110).setInteractive({ useHandCursor: true });
+  private createPauseButton(): Phaser.GameObjects.Container {
+    const btnW = 42;
+    const btnH = 36;
+    const barW = 5;
+    const barH = 16;
+    const barGap = 6;
+    const idleColor = 0x8899bb;
+    const hoverColor = 0x00d4ff;
 
-    btn.on('pointerover', () => btn.setColor('#00d4ff'));
-    btn.on('pointerout', () => btn.setColor('#8899bb'));
-    btn.on('pointerup', () => {
+    const container = this.add.container(GAME_WIDTH - 16 - btnW / 2, 12 + btnH / 2);
+    container.setSize(btnW, btnH);
+    container.setScrollFactor(0).setDepth(110);
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a1f3a, 1);
+    bg.fillRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 4);
+
+    const icon = this.add.graphics();
+    const drawIcon = (color: number) => {
+      icon.clear();
+      icon.fillStyle(color, 1);
+      const barsLeft = -(barW * 2 + barGap) / 2;
+      const barsTop = -barH / 2;
+      icon.fillRect(barsLeft, barsTop, barW, barH);
+      icon.fillRect(barsLeft + barW + barGap, barsTop, barW, barH);
+    };
+    drawIcon(idleColor);
+    this.pauseBtnDrawIcon = drawIcon;
+
+    // Zone owns input so the full button is hit-tested (Container custom
+    // hit areas get double-offset by the default 0.5 origin).
+    const hit = this.add.zone(0, 0, btnW, btnH);
+    hit.setInteractive({ useHandCursor: true });
+    this.pauseBtnHit = hit;
+
+    container.add([bg, icon, hit]);
+
+    hit.on('pointerover', () => drawIcon(hoverColor));
+    hit.on('pointerout', () => drawIcon(idleColor));
+    hit.on('pointerup', () => {
       playSfx('ui');
       this.togglePause();
     });
-    return btn;
+    return container;
+  }
+
+  private syncPauseButtonInteractive(): void {
+    const enabled = !this.isPaused && !this.isChoosingWeapon && !this.isGameOver;
+    if (!this.pauseBtnHit) return;
+
+    if (enabled) {
+      this.pauseBtnHit.setInteractive({ useHandCursor: true });
+    } else {
+      this.pauseBtnHit.disableInteractive();
+      this.pauseBtnDrawIcon?.(0x8899bb);
+      // disableInteractive while hovered leaves the hand cursor stuck
+      this.input.setDefaultCursor('default');
+    }
   }
 
   private setupInput(): void {
@@ -1182,6 +1258,7 @@ export class GameScene extends Phaser.Scene {
       : GAME_HEIGHT / 2 - 40;
 
     this.pauseMenu = createMenuOverlay(this, 'PAUSED', pauseButtons, 200, buttonStartY);
+    this.syncPauseButtonInteractive();
   }
 
   private showPauseConfirm(message: string, onYes: () => void): void {
@@ -1298,6 +1375,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.resumeAll();
     this.physics.resume();
     resumeMusic();
+    this.syncPauseButtonInteractive();
   }
 
   private quitToTitle(): void {
@@ -1639,6 +1717,7 @@ export class GameScene extends Phaser.Scene {
     if (secretId === 'iss') unlockSecretIss();
     else if (secretId === 'dawn') unlockSecretDawn();
     else if (secretId === 'galilean') unlockSecretGalilean();
+    else if (secretId === 'wise0855') unlockSecretWise0855();
 
     const secretWorldId = getSecretWorldId(secretId);
     const entryLevel = getSecretLevel(secretId)?.entryLevel ?? 1;
@@ -1672,6 +1751,10 @@ export class GameScene extends Phaser.Scene {
     } else if (this.secretId === 'galilean') {
       completeSecretGalilean();
       const unlockLevelId = getSecretLevel('galilean')?.finishUnlockLevel ?? 15;
+      unlockLevel(unlockLevelId);
+    } else if (this.secretId === 'wise0855') {
+      completeSecretWise0855();
+      const unlockLevelId = getSecretLevel('wise0855')?.finishUnlockLevel ?? 32;
       unlockLevel(unlockLevelId);
     }
     this.triggerVictory(true);
@@ -1795,6 +1878,7 @@ export class GameScene extends Phaser.Scene {
       carrier.destroy();
       if (this.player.isBoosting()) this.addBoostScore(points);
       else this.addScore(points);
+      playExplosionSfx();
       this.spawnExplosion(x, y, 8);
       this.tryAwardEnemyCoins(x, y);
       this.spawnBlueMineAt(x, y);
@@ -1884,7 +1968,7 @@ export class GameScene extends Phaser.Scene {
         onPlayExplosionSfx: () => playExplosionSfx(),
         onSpawnBlastRing: (bx, by, radius) => this.spawnBlastRing(bx, by, radius),
         onSpawnExplosion: (ex, ey, count) => {
-          // Visual-only; SFX handled by onPlayExplosionSfx (explosion.mp3).
+          // Visual-only; SFX handled by onPlayExplosionSfx (randomized explosion1–4).
           const emitter = this.add.particles(ex, ey, 'particle', {
             speed: { min: 60, max: 220 },
             scale: { start: 1.2, end: 0 },
@@ -1985,6 +2069,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.pause();
     this.time.paused = true;
     this.tweens.pauseAll();
+    this.syncPauseButtonInteractive();
 
     const choices = rollWeaponChoices(this.player.getOwnedWeaponIds(), 3);
     if (choices.length === 0) {
@@ -2015,6 +2100,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.resumeAll();
       this.physics.resume();
     }
+    this.syncPauseButtonInteractive();
 
     this.trySpawnLootBox();
   }
@@ -2097,6 +2183,7 @@ export class GameScene extends Phaser.Scene {
     this.pauseMenu = undefined;
     this.weaponSelectPanel?.destroy();
     this.weaponSelectPanel = undefined;
+    this.syncPauseButtonInteractive();
 
     const deathX = this.player.x;
     const deathY = this.player.y;
@@ -2128,6 +2215,7 @@ export class GameScene extends Phaser.Scene {
     this.pauseMenu = undefined;
     this.weaponSelectPanel?.destroy();
     this.weaponSelectPanel = undefined;
+    this.syncPauseButtonInteractive();
 
     if (this.gameMode === 'survival') {
       updateHighScore(this.score, this.worldId);
@@ -2142,23 +2230,40 @@ export class GameScene extends Phaser.Scene {
       {
         label: 'RESTART',
         y: 0,
+        color: 0xffcc00,
         onClick: () => {
           this.bankRunCoins();
           restartGame(this, this.score, this.gameMode, this.storyLevel, this.worldId, this.secretId);
         },
       },
-      {
-        label: 'QUIT',
-        y: 0,
-        color: 0xff4466,
-        onClick: () => {
-          this.bankRunCoins();
-          goToTitleScreen(this);
-        },
-      },
     ];
 
-    createMenuOverlay(this, 'GAME OVER', buttons, 200, GAME_HEIGHT / 2 + 40);
+    if (this.gameMode === 'story') {
+      buttons.push({
+        label: 'LEVEL SELECT',
+        y: 0,
+        color: 0x8899bb,
+        onClick: () => {
+          this.bankRunCoins();
+          goToLevelSelect(this, this.worldId);
+        },
+      });
+    }
+
+    buttons.push({
+      label: 'QUIT',
+      y: 0,
+      color: 0xff4466,
+      onClick: () => {
+        this.bankRunCoins();
+        goToTitleScreen(this);
+      },
+    });
+
+    const gameOverButtonY = this.gameMode === 'story'
+      ? GAME_HEIGHT / 2 + 10
+      : GAME_HEIGHT / 2 + 40;
+    createMenuOverlay(this, 'GAME OVER', buttons, 200, gameOverButtonY);
 
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 85, `Score: ${this.score}`, {
       fontFamily: 'Orbitron, sans-serif',
@@ -2224,6 +2329,7 @@ export class GameScene extends Phaser.Scene {
     this.pauseMenu = undefined;
     this.weaponSelectPanel?.destroy();
     this.weaponSelectPanel = undefined;
+    this.syncPauseButtonInteractive();
     this.physics.pause();
     this.player.stopMove();
 
@@ -2264,6 +2370,8 @@ export class GameScene extends Phaser.Scene {
       victoryTitle = 'DAWN CLEAR!';
     } else if (isSecretClear && this.secretId === 'galilean') {
       victoryTitle = 'GALILEAN MOONS CLEAR!';
+    } else if (isSecretClear && this.secretId === 'wise0855') {
+      victoryTitle = 'WISE 0855-0714 CLEAR!';
     } else if (this.storyLevel === getMaxLevelSlots()) {
       victoryTitle = 'STORY COMPLETE!';
     } else {
@@ -2285,12 +2393,15 @@ export class GameScene extends Phaser.Scene {
       }).setOrigin(0.5));
     }
 
-    let buttonY = GAME_HEIGHT / 2 - 10;
+    const victoryButtons: Array<{
+      label: string;
+      color?: number;
+      onClick: () => void;
+    }> = [];
 
     if (nextLevel !== null && nextLevel <= getMaxLevelSlots() && isLevelUnlocked(nextLevel)) {
-      const { container: continueBtn } = createMenuButton(this, {
+      victoryButtons.push({
         label: `CONTINUE TO LEVEL ${nextLevel}`,
-        y: buttonY,
         color: 0x00d4ff,
         onClick: () => {
           this.cameras.main.fadeOut(300, 0, 0, 0);
@@ -2303,22 +2414,49 @@ export class GameScene extends Phaser.Scene {
           });
         },
       });
-      continueBtn.setX(GAME_WIDTH / 2);
-      root.add(continueBtn);
-      buttonY += 64;
     }
 
-    const { container: selectBtn } = createMenuButton(this, {
-      label: 'LEVEL SELECT',
-      y: buttonY,
-      color: 0x8899bb,
-      onClick: () => {
-        this.bankRunCoins();
-        goToLevelSelect(this, this.worldId);
+    victoryButtons.push(
+      {
+        label: 'RESTART',
+        color: 0xffcc00,
+        onClick: () => {
+          this.bankRunCoins();
+          restartGame(this, this.score, this.gameMode, this.storyLevel, this.worldId, this.secretId);
+        },
       },
-    });
-    selectBtn.setX(GAME_WIDTH / 2);
-    root.add(selectBtn);
+      {
+        label: 'LEVEL SELECT',
+        color: 0x8899bb,
+        onClick: () => {
+          this.bankRunCoins();
+          goToLevelSelect(this, this.worldId);
+        },
+      },
+      {
+        label: 'QUIT',
+        color: 0xff4466,
+        onClick: () => {
+          this.bankRunCoins();
+          goToTitleScreen(this);
+        },
+      },
+    );
+
+    let buttonY = victoryButtons.length >= 4
+      ? GAME_HEIGHT / 2 - 40
+      : GAME_HEIGHT / 2 - 10;
+    for (const btn of victoryButtons) {
+      const { container } = createMenuButton(this, {
+        label: btn.label,
+        y: buttonY,
+        color: btn.color,
+        onClick: btn.onClick,
+      });
+      container.setX(GAME_WIDTH / 2);
+      root.add(container);
+      buttonY += 58;
+    }
   }
 
   private createBossInstance(
@@ -3003,6 +3141,9 @@ export class GameScene extends Phaser.Scene {
   private spawnStoryEnemy(): void {
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
 
+    // WISE is survival-enemies only (no story probes / bosses).
+    if (this.secretId === 'wise0855') return;
+
     if (this.secretId === 'galilean') {
       const definition = pickGalileanSecretEnemy(this.getStoryEnemyCounts());
       if (!definition) return;
@@ -3143,8 +3284,9 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** Visual burst only — no SFX (asteroids, comets, normal enemies). */
   private spawnExplosion(x: number, y: number, count: number): void {
-    playSfx('explosion');
+    this.darknessOverlay?.addExplosionLight(x, y, LIGHT_RADIUS.explosion, 600);
     const emitter = this.add.particles(x, y, 'particle', {
       speed: { min: 60, max: 200 },
       scale: { start: 1, end: 0 },
@@ -3160,6 +3302,7 @@ export class GameScene extends Phaser.Scene {
 
   private spawnBigExplosion(x: number, y: number): void {
     playExplosionSfx();
+    this.darknessOverlay?.addExplosionLight(x, y, LIGHT_RADIUS.bigExplosion, 1000);
     const burst = this.add.particles(x, y, 'particle', {
       speed: { min: 90, max: 300 },
       scale: { start: 1.6, end: 0 },
@@ -3396,6 +3539,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private shouldSpawnComets(): boolean {
+    // WISE (World 3) has comets; ISS / Dawn / Galilean do not.
+    if (this.secretId === 'wise0855') return true;
     if (this.secretId) return false;
     if (getWorldNumber(this.worldId) >= 3) return true;
     if (this.gameMode === 'story') {
@@ -3407,6 +3552,8 @@ export class GameScene extends Phaser.Scene {
 
   /** Kuiper Belt+ story levels and World 3+ get denser comet traffic. */
   private hasFrequentComets(): boolean {
+    // WISE is World 3 → frequent; other secrets stay comet-free via shouldSpawnComets.
+    if (this.secretId === 'wise0855') return true;
     if (this.secretId) return false;
     if (getWorldNumber(this.worldId) >= 3) return true;
     if (this.gameMode === 'story') return this.storyLevel >= 16;
@@ -3440,8 +3587,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private shouldSpawnMines(): boolean {
-    // Gray/Blue also appear in ISS / Dawn secrets and W1–W2 Survival.
-    if (this.secretId === 'iss' || this.secretId === 'dawn' || this.secretId === 'galilean') return true;
+    // Gray/Blue also appear in ISS / Dawn / Galilean / WISE secrets and W1–W2 Survival.
+    if (
+      this.secretId === 'iss'
+      || this.secretId === 'dawn'
+      || this.secretId === 'galilean'
+      || this.secretId === 'wise0855'
+    ) {
+      return true;
+    }
     if (this.secretId) return false;
 
     if (this.gameMode === 'survival') {
@@ -3457,6 +3611,12 @@ export class GameScene extends Phaser.Scene {
   private pickMineVariant(): MineVariant | null {
     if (!this.shouldSpawnMines()) return null;
 
+    // WISE: blue / gray / red from the start (no purple).
+    if (this.secretId === 'wise0855') {
+      const variants: MineVariant[] = ['gray', 'blue', 'red'];
+      return variants[Phaser.Math.Between(0, variants.length - 1)];
+    }
+
     const canSpawnAdvanced =
       this.gameMode === 'survival'
       && this.worldId === 'world3'
@@ -3470,6 +3630,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     return Math.random() < 0.5 ? 'gray' : 'blue';
+  }
+
+  /** Story L27+ gate for mine carriers; WISE secret bypasses the level gate. */
+  private getEnemyStoryLevelGate(): number | undefined {
+    return this.secretId === 'wise0855' ? undefined : this.storyLevel;
   }
 
   private countMinesOnScreen(): number {
@@ -3516,6 +3681,179 @@ export class GameScene extends Phaser.Scene {
     setRocketEngineActive(shouldPlay);
   }
 
+  private collectDarknessLights(): { circles: CircleLight[]; beams: BeamLight[] } {
+    const circles: CircleLight[] = [];
+    const beams: BeamLight[] = [];
+
+    circles.push({
+      x: this.player.x,
+      y: this.player.y,
+      radius: LIGHT_RADIUS.playerSpotlight,
+      intensity: 1,
+    });
+    const beamRotation = this.player.rotation - Math.PI / 2;
+    beams.push({
+      x: this.player.x,
+      y: this.player.y,
+      rotation: beamRotation,
+      length: beamLengthToScreenEdge(this.player.x, this.player.y, beamRotation),
+      halfWidth: LIGHT_RADIUS.playerBeamHalfWidth,
+      intensity: 0.9,
+    });
+
+    const pushActive = (
+      group: Phaser.Physics.Arcade.Group,
+      radius: number,
+      intensity = 0.7,
+      filter?: (sprite: Phaser.Physics.Arcade.Sprite) => boolean,
+    ): void => {
+      group.children.each((child) => {
+        const sprite = child as Phaser.Physics.Arcade.Sprite;
+        if (!sprite.active) return true;
+        if (filter && !filter(sprite)) return true;
+        circles.push({ x: sprite.x, y: sprite.y, radius, intensity });
+        return true;
+      });
+    };
+
+    const pushEnemyShipLights = (
+      group: Phaser.Physics.Arcade.Group,
+      spotlightRadius: number,
+      spotlightIntensity: number,
+      beamHalfWidth: number,
+      beamIntensity: number,
+    ): void => {
+      group.children.each((child) => {
+        const sprite = child as Phaser.Physics.Arcade.Sprite;
+        if (!sprite.active) return true;
+
+        circles.push({
+          x: sprite.x,
+          y: sprite.y,
+          radius: spotlightRadius,
+          intensity: spotlightIntensity,
+        });
+
+        const body = sprite.body as Phaser.Physics.Arcade.Body | null;
+        const vx = body?.velocity.x ?? 0;
+        const vy = body?.velocity.y ?? 0;
+        const beamRotation = (vx * vx + vy * vy) > 16
+          ? Math.atan2(vy, vx)
+          : Math.atan2(this.player.y - sprite.y, this.player.x - sprite.x);
+
+        beams.push({
+          x: sprite.x,
+          y: sprite.y,
+          rotation: beamRotation,
+          length: beamLengthToScreenEdge(sprite.x, sprite.y, beamRotation),
+          halfWidth: beamHalfWidth,
+          intensity: beamIntensity,
+        });
+        return true;
+      });
+    };
+
+    pushActive(this.warpPanels, LIGHT_RADIUS.panel, 1);
+    pushEnemyShipLights(
+      this.bossShips,
+      LIGHT_RADIUS.boss,
+      1,
+      LIGHT_RADIUS.bossBeamHalfWidth,
+      0.75,
+    );
+    pushEnemyShipLights(
+      this.spiderShips,
+      LIGHT_RADIUS.enemySpotlight,
+      0.65,
+      LIGHT_RADIUS.enemyBeamHalfWidth,
+      0.5,
+    );
+    pushEnemyShipLights(
+      this.seekerDrones,
+      LIGHT_RADIUS.enemySpotlight,
+      0.65,
+      LIGHT_RADIUS.enemyBeamHalfWidth,
+      0.5,
+    );
+    pushEnemyShipLights(
+      this.kamikazeWasps,
+      LIGHT_RADIUS.enemySpotlight,
+      0.65,
+      LIGHT_RADIUS.enemyBeamHalfWidth,
+      0.5,
+    );
+    pushEnemyShipLights(
+      this.plasmaTurrets,
+      LIGHT_RADIUS.enemySpotlight,
+      0.65,
+      LIGHT_RADIUS.enemyBeamHalfWidth,
+      0.5,
+    );
+    pushEnemyShipLights(
+      this.mineCarriers,
+      LIGHT_RADIUS.enemySpotlight,
+      0.65,
+      LIGHT_RADIUS.enemyBeamHalfWidth,
+      0.5,
+    );
+    pushEnemyShipLights(
+      this.storyEnemies,
+      LIGHT_RADIUS.enemySpotlight,
+      0.65,
+      LIGHT_RADIUS.enemyBeamHalfWidth,
+      0.5,
+    );
+    pushActive(this.mines, LIGHT_RADIUS.mine, 0.65);
+    pushActive(this.comets, LIGHT_RADIUS.faint, 0.7);
+    pushActive(this.hearts, LIGHT_RADIUS.faint, 0.7);
+    pushActive(this.powerStars, LIGHT_RADIUS.faint, 0.75);
+    pushActive(this.lootBoxes, LIGHT_RADIUS.faint, 0.7);
+    pushActive(this.shieldPickups, LIGHT_RADIUS.faint, 0.7);
+    pushActive(this.invisibilityPickups, LIGHT_RADIUS.faint, 0.7);
+    pushActive(this.fuelTankPickups, LIGHT_RADIUS.faint, 0.7);
+    pushActive(this.asteroids, LIGHT_RADIUS.faint, 0.7, (sprite) => (sprite as Asteroid).isGold);
+
+    this.bullets.children.each((child) => {
+      const bullet = child as Phaser.Physics.Arcade.Sprite;
+      if (!bullet.active) return true;
+      circles.push({
+        x: bullet.x,
+        y: bullet.y,
+        radius: LIGHT_RADIUS.laser,
+        intensity: 0.45,
+      });
+      return true;
+    });
+
+    this.enemyLasers.children.each((child) => {
+      const laser = child as Phaser.Physics.Arcade.Sprite;
+      if (!laser.active) return true;
+      circles.push({
+        x: laser.x,
+        y: laser.y,
+        radius: LIGHT_RADIUS.laser,
+        intensity: 0.4,
+      });
+      return true;
+    });
+
+    return { circles, beams };
+  }
+
+  private updateDarknessOverlay(): void {
+    if (!this.darknessOverlay) return;
+
+    const fullLight = this.player.isInvincible() || this.player.isBoosting();
+    this.darknessOverlay.setFullIlluminate(fullLight);
+    if (fullLight) {
+      this.darknessOverlay.redraw([], []);
+      return;
+    }
+
+    const { circles, beams } = this.collectDarknessLights();
+    this.darknessOverlay.redraw(circles, beams);
+  }
+
   update(time: number, delta: number): void {
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) {
       stopRocketEngineSfx();
@@ -3560,6 +3898,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.isHitStunned) {
       this.player.clampToBounds();
     }
+    this.updateDarknessOverlay();
     this.updateEnemies(time, delta);
     if (this.bossActive) {
       this.updateBoss(time);
@@ -3649,9 +3988,10 @@ export class GameScene extends Phaser.Scene {
       }
 
       // Survival enemies also appear in story levels, unlocked/escalated by score.
+      const enemyLevelGate = this.getEnemyStoryLevelGate();
       this.enemySpawnTimer += delta;
       if (!this.bossActive) {
-        const enemyInterval = getEnemySpawnInterval(this.score, this.worldId, this.storyLevel);
+        const enemyInterval = getEnemySpawnInterval(this.score, this.worldId, enemyLevelGate);
         if (this.enemySpawnTimer >= enemyInterval) {
           this.enemySpawnTimer = 0;
           const kind = pickEnemyToSpawn(
@@ -3659,7 +3999,7 @@ export class GameScene extends Phaser.Scene {
             this.getEnemyCounts(),
             false,
             this.worldId,
-            this.storyLevel,
+            enemyLevelGate,
           );
           if (kind) this.spawnEnemy(kind);
         }

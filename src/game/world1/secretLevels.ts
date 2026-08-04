@@ -16,6 +16,10 @@ export interface SecretLevelDefinition {
   exitPanel?: 'warp' | 'finish';
   /** When exitPanel is finish, which story level to unlock. */
   finishUnlockLevel?: number;
+  /** When true, gameplay uses a darkness overlay with spotlights. */
+  darkLevel?: boolean;
+  /** Obstruction fill color for dark levels (default black). */
+  darkObstructionColor?: number;
 }
 
 export const SECRET_LEVELS: Record<string, SecretLevelDefinition> = {

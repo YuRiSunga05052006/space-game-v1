@@ -11,8 +11,8 @@ let musicOscillators: OscillatorNode[] = [];
 let musicArpTimer: ReturnType<typeof setInterval> | null = null;
 let musicPlaying = false;
 let musicMutedByPause = false;
-let explosionBuffer: AudioBuffer | null = null;
-let explosionLoadPromise: Promise<AudioBuffer | null> | null = null;
+let explosionBuffers: AudioBuffer[] = [];
+let explosionLoadPromise: Promise<AudioBuffer[]> | null = null;
 let buttonClickBuffer: AudioBuffer | null = null;
 let buttonClickLoadPromise: Promise<AudioBuffer | null> | null = null;
 let laserBuffer: AudioBuffer | null = null;
@@ -29,7 +29,12 @@ let invincibilityThemeGain: GainNode | null = null;
 let invincibilityThemePlaying = false;
 let invincibilityThemeDesired = false;
 
-const EXPLOSION_URL = assetUrl('assets/explosion.mp3');
+const EXPLOSION_URLS = [
+  assetUrl('assets/explosion1.mp3'),
+  assetUrl('assets/explosion2.mp3'),
+  assetUrl('assets/explosion3.mp3'),
+  assetUrl('assets/explosion4.mp3'),
+];
 const BUTTON_CLICK_URL = assetUrl('assets/button-click.mp3');
 const LASER_URL = assetUrl('assets/laser.mp3');
 const ROCKET_ENGINE_URL = assetUrl('assets/rocket-engine.mp3');
@@ -93,34 +98,44 @@ export async function initAudio(): Promise<void> {
   preloadInvincibilityTheme();
 }
 
-function loadExplosionBuffer(): Promise<AudioBuffer | null> {
-  if (explosionBuffer) {
-    return Promise.resolve(explosionBuffer);
+function loadExplosionBuffers(): Promise<AudioBuffer[]> {
+  if (explosionBuffers.length > 0) {
+    return Promise.resolve(explosionBuffers);
   }
 
   if (!explosionLoadPromise) {
     explosionLoadPromise = (async () => {
       const audioCtx = await getRunningAudioContext();
-      if (!audioCtx) return null;
+      if (!audioCtx) return [];
 
-      try {
-        const response = await fetch(EXPLOSION_URL);
-        if (!response.ok) return null;
-
-        const arrayBuffer = await response.arrayBuffer();
-        explosionBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        return explosionBuffer;
-      } catch {
-        return null;
-      }
+      const loaded: AudioBuffer[] = [];
+      await Promise.all(
+        EXPLOSION_URLS.map(async (url) => {
+          try {
+            const response = await fetch(url);
+            if (!response.ok) return;
+            const arrayBuffer = await response.arrayBuffer();
+            loaded.push(await audioCtx.decodeAudioData(arrayBuffer));
+          } catch {
+            // skip failed sample
+          }
+        }),
+      );
+      explosionBuffers = loaded;
+      return explosionBuffers;
     })();
   }
 
   return explosionLoadPromise;
 }
 
+function pickRandomExplosionBuffer(buffers: AudioBuffer[]): AudioBuffer | null {
+  if (buffers.length === 0) return null;
+  return buffers[Math.floor(Math.random() * buffers.length)];
+}
+
 export function preloadExplosionSfx(): void {
-  void loadExplosionBuffer();
+  void loadExplosionBuffers();
 }
 
 function loadButtonClickBuffer(): Promise<AudioBuffer | null> {
@@ -410,7 +425,8 @@ export function playExplosionSfx(): void {
   void getRunningAudioContext().then((audioCtx) => {
     if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
 
-    void loadExplosionBuffer().then((buffer) => {
+    void loadExplosionBuffers().then((buffers) => {
+      const buffer = pickRandomExplosionBuffer(buffers);
       playBufferedSample(buffer, 0.9, sfxGain!, () => playSfx('explosion'));
     });
   });
@@ -532,28 +548,34 @@ export function playSfx(type: SfxType): void {
   }
 
   if (type === 'explosion') {
-    const duration = 0.16;
-    const bufferSize = Math.floor(audioCtx.sampleRate * duration);
-    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
-    }
+    void loadExplosionBuffers().then((buffers) => {
+      if (!ctx || !sfxGain) return;
+      const sample = pickRandomExplosionBuffer(buffers);
+      playBufferedSample(sample, 0.9, sfxGain, () => {
+        const duration = 0.16;
+        const bufferSize = Math.floor(audioCtx.sampleRate * duration);
+        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+        }
 
-    const noise = audioCtx.createBufferSource();
-    noise.buffer = buffer;
-    const filter = audioCtx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(900, now);
-    filter.frequency.exponentialRampToValueAtTime(120, now + duration);
-    const gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(output);
-    noise.start(now);
-    noise.stop(now + duration);
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(900, now);
+        filter.frequency.exponentialRampToValueAtTime(120, now + duration);
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(output);
+        noise.start(now);
+        noise.stop(now + duration);
+      });
+    });
     return;
   }
 

@@ -51,6 +51,7 @@ export const MINE_CARRIER_UNLOCK_SCORE = 3000;
 /**
  * Score bands: 0-999 none, 1000+ spider, 2000+ seeker, 3000+ mineCarrier (W3), 4000+ wasp, 5000+ turret.
  * Story Mode passes storyLevel so Mine Carriers only unlock at L27+.
+ * Pass storyLevel as undefined (e.g. WISE secret) to allow Mine Carriers in World 3 at the score gate.
  */
 export function getUnlockedEnemyKinds(
   score: number,

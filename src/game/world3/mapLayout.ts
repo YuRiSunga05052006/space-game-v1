@@ -83,3 +83,17 @@ export function getWorld3MapNode(level: number): MapNodeLayout {
 export function getWorld3MapRouteLevels(): number[] {
   return WORLD3_MAP_NODES.map((node) => node.level);
 }
+
+/** Secret node anchored just above Luhman 16 (Level 24). */
+export const SECRET_WISE0855_MAP_POSITION: { x: number; y: number } = {
+  x: 0.28,
+  y: 0.58,
+};
+
+export function getWorld3WisePolluxRoute(): { from: { x: number; y: number }; to: { x: number; y: number } } {
+  const pollux = getWorld3MapNode(32);
+  return {
+    from: SECRET_WISE0855_MAP_POSITION,
+    to: { x: pollux.x, y: pollux.y },
+  };
+}

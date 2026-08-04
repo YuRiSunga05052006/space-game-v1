@@ -179,9 +179,9 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     name: 'Mine Carrier',
     textureKey: 'mine-carrier',
     textureScale: 1.1,
-    subtitle: `Story W3 L27+ · Survival W3 ${MINE_CARRIER_UNLOCK_SCORE}+ score`,
+    subtitle: `Story W3 L27+ · WISE secret · Survival W3 ${MINE_CARRIER_UNLOCK_SCORE}+ score`,
     description:
-      'Does not fire lasers. Rams explode in a blast that damages you (max on contact, less farther out), enemies, obstacles, and can chain mines and other carriers. Defeating one leaves a Blue Mine behind.',
+      'Does not fire lasers. Rams explode in a blast that damages you (max on contact, less farther out), enemies, obstacles, and can chain mines and other carriers. Defeating one leaves a Blue Mine behind. Also spawns in the WISE 0855-0714 secret.',
     stats: `HP ${MINE_CARRIER_HEALTH} · Blast DMG up to ${MINE_CARRIER_BODY_DAMAGE} · R ${MINE_CARRIER_BLAST_RADIUS} · ${MINE_CARRIER_POINTS} pts`,
     almanacPage: 'shared',
     requiresWorld3: true,
@@ -196,9 +196,9 @@ const MINE_NAMES: Record<MineVariant, string> = {
 };
 
 const MINE_SUBTITLES: Record<MineVariant, string> = {
-  gray: 'Story W3 L21+ · All Survival · ISS & Dawn',
-  blue: 'Story W3 L21+ · All Survival · ISS & Dawn',
-  red: 'Survival W3 · 6000+ score',
+  gray: 'Story W3 L21+ · All Survival · Secrets',
+  blue: 'Story W3 L21+ · All Survival · Secrets',
+  red: 'Survival W3 · 6000+ · WISE secret',
   purple: 'Survival W3 · 9000+ score',
 };
 
@@ -208,7 +208,7 @@ const MINE_DESCRIPTIONS: Record<MineVariant, string> = {
   blue:
     'Small naval mine. Immune to lasers. Starts dormant: asteroids, comets, enemies, and other mines pass through without detonating it. The first player kick arms it; after that, contact with those hazards (or other mines) explodes it. Blast damages enemies and obstacles and can chain armed mines/carriers, but never damages you.',
   red:
-    'Medium naval mine. Immune to lasers. Player collision detonates a moderate blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Does not appear in Story Mode yet.',
+    'Medium naval mine. Immune to lasers. Player collision detonates a moderate blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Appears in Survival World 3 (6000+ score) and the WISE 0855-0714 secret.',
   purple:
     'Large naval mine. Immune to lasers. Player collision detonates a massive blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Does not appear in Story Mode yet.',
 };
