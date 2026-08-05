@@ -27,11 +27,16 @@ export interface MineBlastGroups {
   bossShips: Phaser.Physics.Arcade.Group;
 }
 
+export interface MineBlastPlayerDamageMeta {
+  /** True only for the initial player-ram contact blast (not chain / radius falloff). */
+  fromContact?: boolean;
+}
+
 export interface MineBlastCallbacks {
   onPlayExplosionSfx: () => void;
   onSpawnBlastRing: (x: number, y: number, radius: number) => void;
   onSpawnExplosion: (x: number, y: number, count: number) => void;
-  onDamagePlayer: (damage: number) => void;
+  onDamagePlayer: (damage: number, meta?: MineBlastPlayerDamageMeta) => void;
   onAsteroidDestroyed: (
     x: number,
     y: number,
@@ -190,15 +195,17 @@ export function detonateMineBlast(
       && options?.playerY !== undefined
     ) {
       let scaled: number;
+      let fromContact = false;
       if (useContactFullDamage) {
         scaled = source.playerDamage;
         useContactFullDamage = false;
+        fromContact = true;
       } else {
         const dist = Math.hypot(options.playerX - cx, options.playerY - cy);
         scaled = scalePlayerBlastDamage(source.playerDamage, dist, radius);
       }
       if (scaled > 0) {
-        callbacks.onDamagePlayer(scaled);
+        callbacks.onDamagePlayer(scaled, fromContact ? { fromContact: true } : undefined);
       }
     }
 

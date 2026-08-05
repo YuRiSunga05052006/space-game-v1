@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import {
   initAudio,
+  stopMusic,
   preloadRocketEngineSfx,
   startRocketEngineSfx,
   stopRocketEngineSfx,
@@ -133,6 +134,7 @@ export class LaunchCutsceneScene extends Phaser.Scene {
     this.starBaseAlphas = [];
 
     void initAudio();
+    stopMusic();
     preloadRocketEngineSfx();
 
     this.cameras.main.fadeIn(400, 0, 0, 0);

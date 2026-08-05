@@ -16,6 +16,8 @@ export interface BoostVacuumAbsorbPayload {
   explosionCount: number;
   coinReward?: number;
   spawnBlueMine?: boolean;
+  /** Asteroid / comet absorb — play rock-break SFX. */
+  rockBreak?: boolean;
 }
 
 export interface BoostVacuumGroups {
@@ -96,6 +98,7 @@ export function updateBoostVacuum(
         y: asteroid.y,
         explosionCount,
         coinReward: asteroid.isGold ? asteroid.coinReward : undefined,
+        rockBreak: true,
       });
       asteroid.destroy();
     }
@@ -110,14 +113,17 @@ export function updateBoostVacuum(
         y: comet.y,
         explosionCount: 10,
         coinReward: comet.coinReward > 0 ? comet.coinReward : undefined,
+        rockBreak: true,
       });
       comet.destroy();
     }
   });
 
   forEachActive(groups.mines, (sprite) => {
+    const mine = sprite as Mine;
+    // Blue mines are kick-only — boost vacuum must not pull or destroy them.
+    if (mine.isBlue) return;
     if (pullToward(sprite, px, py, delta)) {
-      const mine = sprite as Mine;
       onAbsorb({
         points: mine.points,
         x: mine.x,

@@ -115,7 +115,10 @@ export class Mine extends Phaser.Physics.Arcade.Sprite {
     return this.isBlue && !this.armed;
   }
 
-  /** Armed blue mines detonate on hazard / mine contact. */
+  /**
+   * Armed blue mines detonate on hazard contact (enemies, asteroids, comets, etc.)
+   * and on contact with non-blue mines — not on other blue mines.
+   */
   get canDetonateFromContact(): boolean {
     return this.isBlue && this.armed;
   }
@@ -165,15 +168,24 @@ export class Mine extends Phaser.Physics.Arcade.Sprite {
     return this.isBlue && this.pushCooldownMs <= 0;
   }
 
-  applyPlayerPush(playerX: number, playerY: number): void {
-    if (!this.canAcceptPush()) return;
-    // First kick arms the mine for the rest of its life.
+  /**
+   * Knock this blue mine away from a source. Arms it on first knock.
+   * Returns true if the knock was applied (for hit SFX).
+   */
+  applyKnockFrom(sourceX: number, sourceY: number): boolean {
+    if (!this.canAcceptPush()) return false;
+    // First kick/knock arms the mine for the rest of its life.
     this.armed = true;
-    const angle = Phaser.Math.Angle.Between(playerX, playerY, this.x, this.y);
+    const angle = Phaser.Math.Angle.Between(sourceX, sourceY, this.x, this.y);
     // Slow kick so the player can steer blue mines with repeated nudges.
     const pushSpeed = 95;
     this.setVelocity(Math.cos(angle) * pushSpeed, Math.sin(angle) * pushSpeed);
     this.pushCooldownMs = 120;
+    return true;
+  }
+
+  applyPlayerPush(playerX: number, playerY: number): boolean {
+    return this.applyKnockFrom(playerX, playerY);
   }
 
   updateMine(_time: number, delta: number): void {

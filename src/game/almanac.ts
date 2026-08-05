@@ -60,6 +60,8 @@ export interface AlmanacEntry {
   description: string;
   stats: string;
   almanacPage: AlmanacPage;
+  /** When true, only shown after World 2 or World 3 unlock (World 1 has none). */
+  requiresWorld2?: boolean;
   /** When true, only shown on Shared after World 3 unlock. */
   requiresWorld3?: boolean;
 }
@@ -179,9 +181,9 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     name: 'Mine Carrier',
     textureKey: 'mine-carrier',
     textureScale: 1.1,
-    subtitle: `Story W3 L27+ · WISE secret · Survival W3 ${MINE_CARRIER_UNLOCK_SCORE}+ score`,
+    subtitle: `Story W3 L27+ · W3+ secrets · Survival W3 ${MINE_CARRIER_UNLOCK_SCORE}+ score`,
     description:
-      'Does not fire lasers. Rams explode in a blast that damages you (max on contact, less farther out), enemies, obstacles, and can chain mines and other carriers. Defeating one leaves a Blue Mine behind. Also spawns in the WISE 0855-0714 secret.',
+      'Does not fire lasers. Rams explode in a blast that damages you (max on contact, less farther out), enemies, obstacles, and can chain mines and other carriers. Defeating one leaves a Blue Mine behind. Also spawns in secret levels in World 3 or later',
     stats: `HP ${MINE_CARRIER_HEALTH} · Blast DMG up to ${MINE_CARRIER_BODY_DAMAGE} · R ${MINE_CARRIER_BLAST_RADIUS} · ${MINE_CARRIER_POINTS} pts`,
     almanacPage: 'shared',
     requiresWorld3: true,
@@ -198,7 +200,7 @@ const MINE_NAMES: Record<MineVariant, string> = {
 const MINE_SUBTITLES: Record<MineVariant, string> = {
   gray: 'Story W3 L21+ · All Survival · Secrets',
   blue: 'Story W3 L21+ · All Survival · Secrets',
-  red: 'Survival W3 · 6000+ · WISE secret',
+  red: 'Survival W3 · 6000+ · W3+ secrets',
   purple: 'Survival W3 · 9000+ score',
 };
 
@@ -206,9 +208,9 @@ const MINE_DESCRIPTIONS: Record<MineVariant, string> = {
   gray:
     'Small naval mine. Immune to lasers. Player collision detonates it, damaging you (max on contact, less farther out), enemies, and obstacles, and can chain other mines and Mine Carriers. Touching a Mine Carrier alone does not set it off.',
   blue:
-    'Small naval mine. Immune to lasers. Starts dormant: asteroids, comets, enemies, and other mines pass through without detonating it. The first player kick arms it; after that, contact with those hazards (or other mines) explodes it. Blast damages enemies and obstacles and can chain armed mines/carriers, but never damages you.',
+    'Small naval mine. Immune to lasers. Starts dormant: asteroids, comets, enemies, and non-blue mines pass through without detonating it. Player kicks or knocks from other blue mines arm it (unarmed blues ignore each other). Once armed, contact with hazards or non-blue mines explodes it; other blue mines only knock it again. Blast damages enemies and obstacles and can chain armed mines/carriers, but never damages you.',
   red:
-    'Medium naval mine. Immune to lasers. Player collision detonates a moderate blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Appears in Survival World 3 (6000+ score) and the WISE 0855-0714 secret.',
+    'Medium naval mine. Immune to lasers. Player collision detonates a moderate blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Appears in Survival World 3 (6000+ score) and secret levels in World 3 or later.',
   purple:
     'Large naval mine. Immune to lasers. Player collision detonates a massive blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Does not appear in Story Mode yet.',
 };
@@ -304,11 +306,12 @@ function buildCometEntries(): AlmanacEntry[] {
       name: 'Comet',
       textureKey: 'comet',
       textureScale: 1,
-      subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival · All World 3+',
+      subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival',
       description:
         'Fast icy hazard with a glowing tail. Appears from Saturn onward in World 2 (including Titan, Uranus, and Neptune). More frequent from the Kuiper Belt (L16+) and throughout World 3+.',
       stats: `DMG ${COMET_DAMAGE} · ${COMET_POINTS} pts`,
       almanacPage: 'shared',
+      requiresWorld2: true,
     },
     {
       id: 'comet-gold',
@@ -316,11 +319,12 @@ function buildCometEntries(): AlmanacEntry[] {
       name: 'Gold Comet',
       textureKey: 'comet-gold',
       textureScale: 1,
-      subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival · All World 3+',
+      subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival',
       description:
         'Rare golden comet. Destroy to earn bonus coins. Same regions as normal comets; more common from L16+ and World 3+.',
       stats: `DMG ${COMET_DAMAGE} · ${GOLD_COMET_POINTS} pts · +${goldCoins} coins`,
       almanacPage: 'shared',
+      requiresWorld2: true,
     },
   ];
 }
@@ -398,9 +402,11 @@ export function isAlmanacPageUnlocked(page: AlmanacPage): boolean {
 
 export function getVisibleEntriesForPage(page: AlmanacPage): AlmanacEntry[] {
   if (!isAlmanacPageUnlocked(page)) return [];
+  const world2Unlocked = isWorld2Unlocked();
   const world3Unlocked = isWorld3Unlocked();
   return ALMANAC_ENTRIES.filter((entry) => {
     if (entry.almanacPage !== page) return false;
+    if (entry.requiresWorld2 && !world2Unlocked && !world3Unlocked) return false;
     if (entry.requiresWorld3 && !world3Unlocked) return false;
     return true;
   });

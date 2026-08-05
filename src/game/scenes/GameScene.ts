@@ -117,7 +117,11 @@ import {
   applyAudioSettings,
   initAudio,
   pauseMusic,
+  ensureMusic,
   playExplosionSfx,
+  playHitSfx,
+  playRockBreakSfx,
+  playRockSfx,
   playSfx,
   resumeMusic,
   setRocketEngineActive,
@@ -240,6 +244,7 @@ export class GameScene extends Phaser.Scene {
   private storyLevel = 1;
   private worldId = 'world1';
   private secretId?: string;
+  private continueMusic = false;
   private levelTimer = 0;
   private bossSpawned = false;
   private bossDefeated = false;
@@ -292,12 +297,13 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
-  init(data: { mode?: GameMode; level?: number; worldId?: string; secretId?: string }): void {
+  init(data: { mode?: GameMode; level?: number; worldId?: string; secretId?: string; continueMusic?: boolean }): void {
     const normalized = normalizeGameSceneData(data);
     this.gameMode = normalized.mode;
     this.storyLevel = normalized.level;
     this.worldId = resolveWorldId(normalized.worldId, normalized.level, normalized.secretId);
     this.secretId = normalized.secretId;
+    this.continueMusic = normalized.continueMusic === true;
   }
 
   create(): void {
@@ -407,7 +413,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     initAudio();
-    startMusic();
+    if (this.continueMusic) {
+      ensureMusic();
+    } else {
+      startMusic();
+    }
+    this.continueMusic = false;
     stopRocketEngineSfx();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       stopRocketEngineSfx();
@@ -999,6 +1010,8 @@ export class GameScene extends Phaser.Scene {
 
     if (asteroid.takeDamage(damage)) {
       this.finalizeAsteroidRewards(x, y, points, coinReward, explosionCount);
+    } else {
+      playRockSfx();
     }
     this.consumeBulletHit(bullet);
   }
@@ -1071,11 +1084,13 @@ export class GameScene extends Phaser.Scene {
       this.bossHealthBar.hide();
       this.layoutTopCenterHud();
       this.addScore(boss.points);
+      // Boss kill: explosion only (no hit SFX).
       this.spawnBigExplosion(x, y);
       this.lastDefeatedBossX = x;
       this.lastDefeatedBossY = y;
       this.onBossDefeated();
     } else {
+      playHitSfx();
       this.bossHealthRemaining = boss.health;
       this.bossHealthBar.setHp(boss.health);
     }
@@ -1088,6 +1103,7 @@ export class GameScene extends Phaser.Scene {
     explosionCount: number,
   ): void {
     const damage = (bullet.getData('damage') as number) ?? 1;
+    playHitSfx();
     if (enemy.takeDamage(damage)) {
       this.addScore(enemy.points);
       this.spawnExplosion(enemy.x, enemy.y, explosionCount);
@@ -1160,10 +1176,18 @@ export class GameScene extends Phaser.Scene {
     bossObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
-    if (this.player.isGhostMode() || this.player.isBoosting() || this.player.isInvincible()) return;
+    if (this.player.isGhostMode()) return;
 
     const boss = bossObj as BossShip;
-    if (this.player.absorbHit()) return;
+
+    // Shield / invincibility / boost: hit SFX only (boss is not destroyed by ramming).
+    if (this.player.isInvincible() || this.player.isBoosting() || this.player.isShielded()) {
+      playHitSfx();
+      if (this.player.isShielded() && !this.player.isInvincible() && !this.player.isBoosting()) {
+        this.player.absorbHit();
+      }
+      return;
+    }
 
     this.takeDamage(boss.bodyDamage);
   }
@@ -1185,8 +1209,18 @@ export class GameScene extends Phaser.Scene {
       } else {
         this.addScore(enemy.points);
       }
+      playHitSfx();
       this.spawnExplosion(x, y, explosionCount);
       this.tryAwardEnemyCoins(x, y);
+      return;
+    }
+
+    if (this.player.isShielded()) {
+      enemy.destroy();
+      playHitSfx();
+      this.spawnExplosion(x, y, explosionCount);
+      this.tryAwardEnemyCoins(x, y);
+      this.player.absorbHit();
       return;
     }
 
@@ -1324,6 +1358,7 @@ export class GameScene extends Phaser.Scene {
     this.settingsPanel = undefined;
     this.destroyAlmanacPanel();
     this.bankRunCoins();
+    // GameScene.create() restarts main theme from the beginning.
     restartGame(this, this.score, this.gameMode, this.storyLevel, this.worldId, this.secretId);
   }
 
@@ -1388,6 +1423,7 @@ export class GameScene extends Phaser.Scene {
     this.settingsPanel = undefined;
     this.destroyAlmanacPanel();
     this.bankRunCoins();
+    // Destination scene starts main theme from the beginning.
     saveScoreAndGoToTitle(this, this.score, this.gameMode, this.worldId);
   }
 
@@ -1401,6 +1437,7 @@ export class GameScene extends Phaser.Scene {
     this.settingsPanel = undefined;
     this.destroyAlmanacPanel();
     this.bankRunCoins();
+    // Destination scene starts main theme from the beginning.
     goToLevelSelect(this, this.worldId);
   }
 
@@ -1412,6 +1449,10 @@ export class GameScene extends Phaser.Scene {
     if (this.player.isGhostMode()) return;
     const asteroid = asteroidObj as Asteroid;
     const explosionCount = asteroid.size === 'lg' ? 12 : asteroid.size === 'md' ? 8 : 5;
+    const poweredBreak =
+      this.player.isInvincible()
+      || this.player.isBoosting()
+      || this.player.isShielded();
 
     if (asteroid.isGold) {
       const { x, y, points, coinReward, size } = asteroid;
@@ -1423,9 +1464,12 @@ export class GameScene extends Phaser.Scene {
       }
       this.awardCoins(coinReward, x, y);
       this.spawnExplosion(x, y, explosionCount);
+      if (poweredBreak) playRockBreakSfx();
 
       if (!this.player.isDamageImmune()) {
         this.takeDamage(ASTEROID_DAMAGE[size]);
+      } else if (this.player.isShielded() && !this.player.isInvincible() && !this.player.isBoosting()) {
+        this.player.absorbHit();
       }
       return;
     }
@@ -1437,10 +1481,22 @@ export class GameScene extends Phaser.Scene {
       } else {
         this.addScore(asteroid.points);
       }
+      playRockBreakSfx();
       this.spawnExplosion(asteroid.x, asteroid.y, explosionCount);
       return;
     }
 
+    if (this.player.isShielded()) {
+      const { x, y, points } = asteroid;
+      asteroid.destroy();
+      this.addScore(points);
+      playRockBreakSfx();
+      this.spawnExplosion(x, y, explosionCount);
+      this.player.absorbHit();
+      return;
+    }
+
+    // Unpowered ram: destroy silently (no rock-break) and damage the player.
     const damage = ASTEROID_DAMAGE[asteroid.size];
     asteroid.destroy();
     this.takeDamage(damage);
@@ -1605,6 +1661,7 @@ export class GameScene extends Phaser.Scene {
     if (payload.coinReward != null && payload.coinReward > 0) {
       this.awardCoins(payload.coinReward, payload.x, payload.y);
     }
+    if (payload.rockBreak) playRockBreakSfx();
     this.spawnExplosion(payload.x, payload.y, payload.explosionCount);
     this.tryAwardEnemyCoins(payload.x, payload.y);
     if (payload.spawnBlueMine) {
@@ -1729,6 +1786,7 @@ export class GameScene extends Phaser.Scene {
         secretId,
         worldId: secretWorldId,
         level: entryLevel,
+        continueMusic: true,
       });
     });
   }
@@ -1777,8 +1835,34 @@ export class GameScene extends Phaser.Scene {
     cometObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     if (this.isGameOver || this.isPaused) return;
-    if (this.player.isGhostMode() || this.player.isBoosting() || this.player.isInvincible()) return;
+    if (this.player.isGhostMode()) return;
+
     const comet = cometObj as Comet;
+    if (!comet.active) return;
+
+    if (this.player.isInvincible() || this.player.isBoosting()) {
+      const { x, y, points, coinReward } = comet;
+      comet.destroy();
+      if (this.player.isBoosting()) this.addBoostScore(points);
+      else this.addScore(points);
+      if (coinReward > 0) this.awardCoins(coinReward, x, y);
+      playRockBreakSfx();
+      this.spawnExplosion(x, y, 8);
+      return;
+    }
+
+    if (this.player.isShielded()) {
+      const { x, y, points, coinReward } = comet;
+      comet.destroy();
+      this.addScore(points);
+      if (coinReward > 0) this.awardCoins(coinReward, x, y);
+      playRockBreakSfx();
+      this.spawnExplosion(x, y, 8);
+      this.player.absorbHit();
+      return;
+    }
+
+    // Unpowered ram: no rock-break.
     comet.destroy();
     this.takeDamage(comet.bodyDamage);
   }
@@ -1795,7 +1879,9 @@ export class GameScene extends Phaser.Scene {
 
     if (mine.isBlue) {
       // Always kick — including while invincible. Boost vacuum can still absorb separately.
-      mine.applyPlayerPush(this.player.x, this.player.y);
+      if (mine.applyPlayerPush(this.player.x, this.player.y)) {
+        playHitSfx();
+      }
       return;
     }
 
@@ -1806,10 +1892,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.player.isBoosting()) {
-      const { x, y, points } = mine;
-      mine.destroy();
-      this.addBoostScore(points);
-      this.spawnExplosion(x, y, 8);
+      // Full detonation (explosion SFX, no hit SFX); boost score for the contact mine.
+      this.triggerMineDetonation(mine, { skipPlayerDamage: true, useBoostScore: true });
       return;
     }
 
@@ -1835,7 +1919,18 @@ export class GameScene extends Phaser.Scene {
     const b = bObj as Mine;
     if (!a.active || !b.active || a === b) return;
 
-    // Only armed blue mines explode from mine contact; dormant blues stay inert.
+    // Blue ↔ blue: never explode. Unarmed pairs ignore each other; otherwise knock/arm.
+    if (a.isBlue && b.isBlue) {
+      if (a.isDormantBlue && b.isDormantBlue) return;
+
+      let knocked = false;
+      if (a.applyKnockFrom(b.x, b.y)) knocked = true;
+      if (b.applyKnockFrom(a.x, a.y)) knocked = true;
+      if (knocked) playHitSfx();
+      return;
+    }
+
+    // Armed blue detonates on non-blue mines; dormant blues stay inert.
     if (a.canDetonateFromContact) {
       this.triggerMineDetonation(a);
       return;
@@ -1908,7 +2003,11 @@ export class GameScene extends Phaser.Scene {
 
   private triggerMineDetonation(
     mine: Mine,
-    options?: { skipPlayerDamage?: boolean; contactFullDamage?: boolean },
+    options?: {
+      skipPlayerDamage?: boolean;
+      contactFullDamage?: boolean;
+      useBoostScore?: boolean;
+    },
   ): void {
     if (!mine.active) return;
     const source: MineBlastSource = {
@@ -1922,7 +2021,8 @@ export class GameScene extends Phaser.Scene {
     };
     const points = mine.points;
     mine.destroy();
-    this.addScore(points);
+    if (options?.useBoostScore) this.addBoostScore(points);
+    else this.addScore(points);
     this.runMineBlast(source, options);
   }
 
@@ -1981,9 +2081,19 @@ export class GameScene extends Phaser.Scene {
           emitter.explode(count);
           this.time.delayedCall(650, () => emitter.destroy());
         },
-        onDamagePlayer: (damage) => {
+        onDamagePlayer: (damage, meta) => {
           if (this.isGameOver || this.isPlayerDying) return;
-          if (this.player.isGhostMode() || this.player.isDamageImmune()) return;
+          if (this.player.isGhostMode()) return;
+
+          if (meta?.fromContact) {
+            // Direct ram into mine/carrier: shield breaks; other immunities absorb.
+            if (this.player.absorbHit()) return;
+            this.takeDamage(damage);
+            return;
+          }
+
+          // Blast radius (including chains): shield blocks without breaking.
+          if (this.player.isDamageImmune()) return;
           if (this.player.absorbHit()) return;
           this.takeDamage(damage);
         },
@@ -2077,6 +2187,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    pauseMusic();
+
     const panel = createWeaponSelectPanel(this, 260, {
       weapons: choices,
       onSelect: (weaponId) => {
@@ -2099,6 +2211,7 @@ export class GameScene extends Phaser.Scene {
       this.time.paused = false;
       this.tweens.resumeAll();
       this.physics.resume();
+      resumeMusic();
     }
     this.syncPauseButtonInteractive();
 
@@ -2122,6 +2235,7 @@ export class GameScene extends Phaser.Scene {
 
   private takeLaserDamage(amount: number, fromX: number, fromY: number): void {
     if (this.player.isGhostMode() || this.isHitStunned) return;
+    // Invincibility / shield / boost (and other absorb cases): no damage, no hit SFX.
     if (this.player.absorbHit()) return;
 
     this.hp = Math.max(0, this.hp - amount);
@@ -2134,10 +2248,12 @@ export class GameScene extends Phaser.Scene {
     this.player.stopMove();
 
     if (this.hp <= 0) {
+      // Player death: explosion only (no hit SFX).
       this.triggerPlayerDeath();
       return;
     }
 
+    playHitSfx();
     this.isHitStunned = true;
     this.time.delayedCall(500, () => {
       this.isHitStunned = false;
@@ -2154,10 +2270,12 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.flash(150, 255, 50, 50);
 
     if (this.hp <= 0) {
+      // Player death: explosion only (no hit SFX).
       this.triggerPlayerDeath();
       return;
     }
 
+    playHitSfx();
     this.spawnExplosion(this.player.x, this.player.y, 20);
 
     this.player.setPosition(GAME_WIDTH / 2, GAME_HEIGHT - 120);
@@ -2216,6 +2334,7 @@ export class GameScene extends Phaser.Scene {
     this.weaponSelectPanel?.destroy();
     this.weaponSelectPanel = undefined;
     this.syncPauseButtonInteractive();
+    pauseMusic();
 
     if (this.gameMode === 'survival') {
       updateHighScore(this.score, this.worldId);
@@ -2330,6 +2449,7 @@ export class GameScene extends Phaser.Scene {
     this.weaponSelectPanel?.destroy();
     this.weaponSelectPanel = undefined;
     this.syncPauseButtonInteractive();
+    pauseMusic();
     this.physics.pause();
     this.player.stopMove();
 
@@ -2819,6 +2939,7 @@ export class GameScene extends Phaser.Scene {
     if (coinReward > 0) {
       this.awardCoins(coinReward, x, y);
     }
+    playRockBreakSfx();
     this.spawnExplosion(x, y, explosionCount);
   }
 
@@ -3372,7 +3493,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleShooting(time: number): void {
-    const shouldFire = this.autoFire || this.spaceKey?.isDown || this.manualFireHeld;
+    // Auto-fire pauses during Fuel Tank / Engine / Hyperdrive boost; resume when it ends.
+    const shouldFire =
+      (this.autoFire && !this.player.isBoosting())
+      || this.spaceKey?.isDown
+      || this.manualFireHeld;
     if (!shouldFire || !this.player.canFire(time)) return;
 
     this.player.consumeFire(time);

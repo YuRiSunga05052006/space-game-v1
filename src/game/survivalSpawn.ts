@@ -25,8 +25,8 @@ const WORLD1_STORY_ENEMY_UNLOCK_SCORES: Record<number, number> = {
 };
 
 const WORLD2_STORY_ENEMY_UNLOCK_SCORES: Record<number, number> = {
-  11: 1000, 12: 3000, 13: 5000, 14: 7000, 15: 9000,
-  16: 11000, 17: 13000, 18: 15000, 19: 17000, 20: 19000,
+  11: 0, 12: 2000, 13: 4000, 14: 6000, 15: 8000,
+  16: 10000, 17: 12000, 18: 14000, 19: 16000, 20: 18000,
 };
 
 const WORLD3_STORY_ENEMY_UNLOCK_SCORES: Record<number, number> = Object.fromEntries(

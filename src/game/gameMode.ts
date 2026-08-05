@@ -5,6 +5,8 @@ export interface GameSceneData {
   level?: number;
   worldId?: string;
   secretId?: string;
+  /** When true, keep main theme playback position (e.g. wormhole → secret). */
+  continueMusic?: boolean;
 }
 
 export function normalizeGameSceneData(data: GameSceneData = {}): Required<Pick<GameSceneData, 'mode' | 'level'>> & GameSceneData {
@@ -13,6 +15,7 @@ export function normalizeGameSceneData(data: GameSceneData = {}): Required<Pick<
     level: data.level ?? 1,
     worldId: data.worldId,
     secretId: data.secretId,
+    continueMusic: data.continueMusic === true,
   };
 }
 

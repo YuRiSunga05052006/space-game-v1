@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { initAudio, startMusic } from '../audioManager';
+import { ensureMusic, initAudio, stopMusic } from '../audioManager';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { formatCoinsLabel } from '../coins';
 import { getWorld } from '../worlds';
@@ -36,6 +36,9 @@ export class LevelSelectScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.fadeIn(400, 0, 0, 0);
+    initAudio();
+    // Continue from menu flow; restart only when returning from suspended gameplay.
+    ensureMusic();
 
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0a0e27)
       .setDepth(0);
@@ -102,7 +105,7 @@ export class LevelSelectScene extends Phaser.Scene {
   private startLevel(level: number, secretId?: string): void {
     if (!secretId && !isLevelUnlocked(level)) return;
     initAudio();
-    startMusic();
+    stopMusic();
     this.transitionTo('LaunchCutsceneScene', {
       mode: 'story',
       level,

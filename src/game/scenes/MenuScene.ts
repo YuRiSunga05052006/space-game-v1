@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import { applyAudioSettings, initAudio, startMusic } from '../audioManager';
+import { applyAudioSettings, ensureMusic, initAudio } from '../audioManager';
 import { formatHighScoreLabel } from '../gameFlow';
 import { quitGame } from '../quitGame';
 import { getAutoFire } from '../settings';
@@ -32,6 +32,9 @@ export class MenuScene extends Phaser.Scene {
     this.menuButtonsEnabled = true;
 
     this.cameras.main.fadeIn(400, 0, 0, 0);
+    initAudio();
+    // Returning from pause / game over / victory restarts; otherwise keep playing.
+    ensureMusic();
     this.createStarfield();
     this.createTitle();
     this.createHighScore();
@@ -41,13 +44,13 @@ export class MenuScene extends Phaser.Scene {
     this.input.keyboard?.once('keydown-SPACE', () => {
       if (this.isMenuOverlayOpen()) return;
       initAudio();
-      startMusic();
+      ensureMusic();
       this.openModeSelect();
     });
     this.input.keyboard?.once('keydown-ENTER', () => {
       if (this.isMenuOverlayOpen()) return;
       initAudio();
-      startMusic();
+      ensureMusic();
       this.openModeSelect();
     });
   }
@@ -178,7 +181,7 @@ export class MenuScene extends Phaser.Scene {
       onClick: () => {
         if (this.isMenuOverlayOpen()) return;
         initAudio();
-        startMusic();
+        ensureMusic();
         this.openModeSelect();
       },
     });
@@ -365,7 +368,7 @@ export class MenuScene extends Phaser.Scene {
   private openModeSelect(): void {
     if (this.isMenuOverlayOpen()) return;
     initAudio();
-    startMusic();
+    ensureMusic();
     this.cameras.main.fadeOut(400, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start('ModeSelectScene');

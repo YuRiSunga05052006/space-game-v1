@@ -7,12 +7,25 @@ export type UiClickChannel = 'sound' | 'music';
 let ctx: AudioContext | null = null;
 let sfxGain: GainNode | null = null;
 let musicGain: GainNode | null = null;
-let musicOscillators: OscillatorNode[] = [];
-let musicArpTimer: ReturnType<typeof setInterval> | null = null;
+let mainThemeBuffer: AudioBuffer | null = null;
+let mainThemeLoadPromise: Promise<AudioBuffer | null> | null = null;
+let mainThemeSource: AudioBufferSourceNode | null = null;
+let mainThemeGain: GainNode | null = null;
 let musicPlaying = false;
-let musicMutedByPause = false;
+/** True while gameplay UI has paused themes (pause / loot / victory / game over). */
+let musicSuspended = false;
+/** True while music must stay silent (e.g. launch cutscene) until startMusic(). */
+let musicSuppressed = false;
+let mainThemeResumeOffset = 0;
+let mainThemeStartedAt = 0;
 let explosionBuffers: AudioBuffer[] = [];
 let explosionLoadPromise: Promise<AudioBuffer[]> | null = null;
+let hitBuffers: AudioBuffer[] = [];
+let hitLoadPromise: Promise<AudioBuffer[]> | null = null;
+let rockBuffers: AudioBuffer[] = [];
+let rockLoadPromise: Promise<AudioBuffer[]> | null = null;
+let rockBreakBuffers: AudioBuffer[] = [];
+let rockBreakLoadPromise: Promise<AudioBuffer[]> | null = null;
 let buttonClickBuffer: AudioBuffer | null = null;
 let buttonClickLoadPromise: Promise<AudioBuffer | null> | null = null;
 let laserBuffer: AudioBuffer | null = null;
@@ -28,6 +41,8 @@ let invincibilityThemeSource: AudioBufferSourceNode | null = null;
 let invincibilityThemeGain: GainNode | null = null;
 let invincibilityThemePlaying = false;
 let invincibilityThemeDesired = false;
+let invincibilityThemeResumeOffset = 0;
+let invincibilityThemeStartedAt = 0;
 
 const EXPLOSION_URLS = [
   assetUrl('assets/explosion1.mp3'),
@@ -35,14 +50,33 @@ const EXPLOSION_URLS = [
   assetUrl('assets/explosion3.mp3'),
   assetUrl('assets/explosion4.mp3'),
 ];
+const HIT_URLS = [
+  assetUrl('assets/hit1.mp3'),
+  assetUrl('assets/hit2.mp3'),
+];
+const ROCK_URLS = [
+  assetUrl('assets/rock1.mp3'),
+  assetUrl('assets/rock2.mp3'),
+  assetUrl('assets/rock3.mp3'),
+];
+const ROCK_BREAK_URLS = [
+  assetUrl('assets/rock-break1.mp3'),
+  assetUrl('assets/rock-break2.mp3'),
+  assetUrl('assets/rock-break3.mp3'),
+];
 const BUTTON_CLICK_URL = assetUrl('assets/button-click.mp3');
 const LASER_URL = assetUrl('assets/laser.mp3');
 const ROCKET_ENGINE_URL = assetUrl('assets/rocket-engine.mp3');
 const INVINCIBILITY_THEME_URL = assetUrl('assets/invincibility-theme.mp3');
+const MAIN_THEME_URL = assetUrl('assets/main-theme.mp3');
 const ROCKET_ENGINE_VOLUME = 0.45;
 const INVINCIBILITY_THEME_VOLUME = 0.35;
+const MAIN_THEME_VOLUME = 0.20;
 const BUTTON_CLICK_VOLUME = 0.85;
 const LASER_VOLUME = 0.45;
+const HIT_VOLUME = 0.85;
+const ROCK_VOLUME = 0.8;
+const ROCK_BREAK_VOLUME = 0.9;
 
 function ensureContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -80,8 +114,27 @@ async function getRunningAudioContext(): Promise<AudioContext | null> {
 }
 
 function getEffectiveMusicGain(): number {
-  if (musicMutedByPause) return 0;
   return getMusicVolume() / 100;
+}
+
+function wrapOffset(offsetSec: number, duration: number): number {
+  if (duration <= 0) return 0;
+  const wrapped = offsetSec % duration;
+  return wrapped < 0 ? wrapped + duration : wrapped;
+}
+
+function captureMainThemeOffset(): number {
+  if (!ctx || !mainThemeBuffer || !mainThemeSource || !musicPlaying) {
+    return mainThemeResumeOffset;
+  }
+  return wrapOffset(ctx.currentTime - mainThemeStartedAt, mainThemeBuffer.duration);
+}
+
+function captureInvincibilityOffset(): number {
+  if (!ctx || !invincibilityThemeBuffer || !invincibilityThemeSource || !invincibilityThemePlaying) {
+    return invincibilityThemeResumeOffset;
+  }
+  return wrapOffset(ctx.currentTime - invincibilityThemeStartedAt, invincibilityThemeBuffer.duration);
 }
 
 function getEffectiveSfxGain(): number {
@@ -92,10 +145,44 @@ export async function initAudio(): Promise<void> {
   const audioCtx = await getRunningAudioContext();
   if (!audioCtx) return;
   preloadExplosionSfx();
+  preloadHitSfx();
+  preloadRockSfx();
+  preloadRockBreakSfx();
   preloadButtonClickSfx();
   preloadLaserSfx();
   preloadRocketEngineSfx();
   preloadInvincibilityTheme();
+  preloadMainTheme();
+}
+
+function loadMainThemeBuffer(): Promise<AudioBuffer | null> {
+  if (mainThemeBuffer) {
+    return Promise.resolve(mainThemeBuffer);
+  }
+
+  if (!mainThemeLoadPromise) {
+    mainThemeLoadPromise = (async () => {
+      const audioCtx = await getRunningAudioContext();
+      if (!audioCtx) return null;
+
+      try {
+        const response = await fetch(MAIN_THEME_URL);
+        if (!response.ok) return null;
+
+        const arrayBuffer = await response.arrayBuffer();
+        mainThemeBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        return mainThemeBuffer;
+      } catch {
+        return null;
+      }
+    })();
+  }
+
+  return mainThemeLoadPromise;
+}
+
+export function preloadMainTheme(): void {
+  void loadMainThemeBuffer();
 }
 
 function loadExplosionBuffers(): Promise<AudioBuffer[]> {
@@ -136,6 +223,182 @@ function pickRandomExplosionBuffer(buffers: AudioBuffer[]): AudioBuffer | null {
 
 export function preloadExplosionSfx(): void {
   void loadExplosionBuffers();
+}
+
+function loadHitBuffers(): Promise<AudioBuffer[]> {
+  if (hitBuffers.length > 0) {
+    return Promise.resolve(hitBuffers);
+  }
+
+  if (!hitLoadPromise) {
+    hitLoadPromise = (async () => {
+      const audioCtx = await getRunningAudioContext();
+      if (!audioCtx) return [];
+
+      const loaded: AudioBuffer[] = [];
+      await Promise.all(
+        HIT_URLS.map(async (url) => {
+          try {
+            const response = await fetch(url);
+            if (!response.ok) return;
+            const arrayBuffer = await response.arrayBuffer();
+            loaded.push(await audioCtx.decodeAudioData(arrayBuffer));
+          } catch {
+            // skip failed sample
+          }
+        }),
+      );
+      hitBuffers = loaded;
+      return hitBuffers;
+    })();
+  }
+
+  return hitLoadPromise;
+}
+
+function pickRandomHitBuffer(buffers: AudioBuffer[]): AudioBuffer | null {
+  if (buffers.length === 0) return null;
+  return buffers[Math.floor(Math.random() * buffers.length)];
+}
+
+export function preloadHitSfx(): void {
+  void loadHitBuffers();
+}
+
+function loadRockBuffers(): Promise<AudioBuffer[]> {
+  if (rockBuffers.length > 0) {
+    return Promise.resolve(rockBuffers);
+  }
+
+  if (!rockLoadPromise) {
+    rockLoadPromise = (async () => {
+      const audioCtx = await getRunningAudioContext();
+      if (!audioCtx) return [];
+
+      const loaded: AudioBuffer[] = [];
+      await Promise.all(
+        ROCK_URLS.map(async (url) => {
+          try {
+            const response = await fetch(url);
+            if (!response.ok) return;
+            const arrayBuffer = await response.arrayBuffer();
+            loaded.push(await audioCtx.decodeAudioData(arrayBuffer));
+          } catch {
+            // skip failed sample
+          }
+        }),
+      );
+      rockBuffers = loaded;
+      return rockBuffers;
+    })();
+  }
+
+  return rockLoadPromise;
+}
+
+function loadRockBreakBuffers(): Promise<AudioBuffer[]> {
+  if (rockBreakBuffers.length > 0) {
+    return Promise.resolve(rockBreakBuffers);
+  }
+
+  if (!rockBreakLoadPromise) {
+    rockBreakLoadPromise = (async () => {
+      const audioCtx = await getRunningAudioContext();
+      if (!audioCtx) return [];
+
+      const loaded: AudioBuffer[] = [];
+      await Promise.all(
+        ROCK_BREAK_URLS.map(async (url) => {
+          try {
+            const response = await fetch(url);
+            if (!response.ok) return;
+            const arrayBuffer = await response.arrayBuffer();
+            loaded.push(await audioCtx.decodeAudioData(arrayBuffer));
+          } catch {
+            // skip failed sample
+          }
+        }),
+      );
+      rockBreakBuffers = loaded;
+      return rockBreakBuffers;
+    })();
+  }
+
+  return rockBreakLoadPromise;
+}
+
+function pickRandomBuffer(buffers: AudioBuffer[]): AudioBuffer | null {
+  if (buffers.length === 0) return null;
+  return buffers[Math.floor(Math.random() * buffers.length)];
+}
+
+export function preloadRockSfx(): void {
+  void loadRockBuffers();
+}
+
+export function preloadRockBreakSfx(): void {
+  void loadRockBreakBuffers();
+}
+
+function playHitOscillatorFallback(audioCtx: AudioContext, output: GainNode, now: number): void {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(180, now);
+  osc.frequency.exponentialRampToValueAtTime(90, now + 0.1);
+  gain.gain.setValueAtTime(0.12, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  osc.connect(gain);
+  gain.connect(output);
+  osc.start(now);
+  osc.stop(now + 0.11);
+}
+
+export function playHitSfx(): void {
+  if (getSoundVolume() <= 0) return;
+
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
+
+    void loadHitBuffers().then((buffers) => {
+      const buffer = pickRandomHitBuffer(buffers);
+      playBufferedSample(buffer, HIT_VOLUME, sfxGain!, () => {
+        playHitOscillatorFallback(audioCtx, sfxGain!, audioCtx.currentTime);
+      });
+    });
+  });
+}
+
+/** Laser tick damage on asteroids/comets (randomized rock1–3). */
+export function playRockSfx(): void {
+  if (getSoundVolume() <= 0) return;
+
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
+
+    void loadRockBuffers().then((buffers) => {
+      const buffer = pickRandomBuffer(buffers);
+      playBufferedSample(buffer, ROCK_VOLUME, sfxGain!, () => {
+        playHitOscillatorFallback(audioCtx, sfxGain!, audioCtx.currentTime);
+      });
+    });
+  });
+}
+
+/** Asteroid/comet destroyed by laser, shield, invuln, boost, or mine blast (randomized rock-break1–3). */
+export function playRockBreakSfx(): void {
+  if (getSoundVolume() <= 0) return;
+
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
+
+    void loadRockBreakBuffers().then((buffers) => {
+      const buffer = pickRandomBuffer(buffers);
+      playBufferedSample(buffer, ROCK_BREAK_VOLUME, sfxGain!, () => {
+        playHitOscillatorFallback(audioCtx, sfxGain!, audioCtx.currentTime);
+      });
+    });
+  });
 }
 
 function loadButtonClickBuffer(): Promise<AudioBuffer | null> {
@@ -347,53 +610,63 @@ function stopInvincibilityThemeNodes(): void {
   invincibilityThemePlaying = false;
 }
 
-function beginInvincibilityTheme(): void {
+function beginInvincibilityTheme(offsetSec = 0): void {
   if (!invincibilityThemeDesired) return;
   if (getMusicVolume() <= 0) return;
+  if (musicSuspended) return;
   if (invincibilityThemePlaying) return;
 
   void getRunningAudioContext().then((audioCtx) => {
     if (!audioCtx || !musicGain || !invincibilityThemeDesired) return;
-    if (getMusicVolume() <= 0) return;
+    if (getMusicVolume() <= 0 || musicSuspended) return;
     if (invincibilityThemePlaying) return;
 
-    stopMusic();
+    // Invincibility replaces the main theme (restart main later from the start).
+    musicSuspended = false;
+    mainThemeResumeOffset = 0;
+    stopMusicNodes();
+    musicPlaying = false;
 
     void loadInvincibilityThemeBuffer().then((buffer) => {
-    if (!buffer || !ctx || !musicGain || !invincibilityThemeDesired) return;
-    if (getMusicVolume() <= 0) return;
-    if (invincibilityThemePlaying) return;
+      if (!buffer || !ctx || !musicGain || !invincibilityThemeDesired) return;
+      if (getMusicVolume() <= 0 || musicSuspended) return;
+      if (invincibilityThemePlaying) return;
 
-    stopInvincibilityThemeNodes();
+      stopInvincibilityThemeNodes();
 
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.loop = true;
+      const startOffset = wrapOffset(offsetSec, buffer.duration);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
 
-    const gain = ctx.createGain();
-    gain.gain.value = INVINCIBILITY_THEME_VOLUME;
-    source.connect(gain);
-    gain.connect(musicGain);
-    source.start();
+      const gain = ctx.createGain();
+      gain.gain.value = INVINCIBILITY_THEME_VOLUME;
+      source.connect(gain);
+      gain.connect(musicGain);
+      source.start(0, startOffset);
 
-    invincibilityThemeSource = source;
-    invincibilityThemeGain = gain;
-    invincibilityThemePlaying = true;
+      invincibilityThemeSource = source;
+      invincibilityThemeGain = gain;
+      invincibilityThemePlaying = true;
+      invincibilityThemeResumeOffset = startOffset;
+      invincibilityThemeStartedAt = ctx.currentTime - startOffset;
     });
   });
 }
 
 export function startInvincibilityTheme(): void {
   invincibilityThemeDesired = true;
-  beginInvincibilityTheme();
+  invincibilityThemeResumeOffset = 0;
+  beginInvincibilityTheme(0);
 }
 
 export function stopInvincibilityTheme(): void {
   const wasDesired = invincibilityThemeDesired;
   invincibilityThemeDesired = false;
+  invincibilityThemeResumeOffset = 0;
   stopInvincibilityThemeNodes();
 
-  if (wasDesired && !musicMutedByPause && getMusicVolume() > 0) {
+  if (wasDesired && !musicSuspended && getMusicVolume() > 0) {
     startMusic();
   }
 }
@@ -492,19 +765,29 @@ export function applyAudioSettings(): void {
   if (musicGain) musicGain.gain.value = getEffectiveMusicGain();
 
   if (getMusicVolume() <= 0) {
-    if (musicPlaying) stopMusic();
-    stopInvincibilityThemeNodes();
-    return;
-  }
-
-  if (invincibilityThemeDesired) {
-    if (!invincibilityThemePlaying) {
-      beginInvincibilityTheme();
+    if (musicPlaying) {
+      mainThemeResumeOffset = captureMainThemeOffset();
+      stopMusicNodes();
+      musicPlaying = false;
+    }
+    if (invincibilityThemePlaying) {
+      invincibilityThemeResumeOffset = captureInvincibilityOffset();
+      stopInvincibilityThemeNodes();
     }
     return;
   }
 
-  if (!musicPlaying && !musicMutedByPause) {
+  // Suspended (pause/loot/victory/game over) or suppressed (launch cutscene).
+  if (musicSuspended || musicSuppressed) return;
+
+  if (invincibilityThemeDesired) {
+    if (!invincibilityThemePlaying) {
+      beginInvincibilityTheme(invincibilityThemeResumeOffset);
+    }
+    return;
+  }
+
+  if (!musicPlaying) {
     startMusic();
   }
 }
@@ -580,100 +863,168 @@ export function playSfx(type: SfxType): void {
   }
 
   if (type === 'hit') {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(180, now);
-    osc.frequency.exponentialRampToValueAtTime(90, now + 0.1);
-    gain.gain.setValueAtTime(0.12, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-    osc.connect(gain);
-    gain.connect(output);
-    osc.start(now);
-    osc.stop(now + 0.11);
+    void loadHitBuffers().then((buffers) => {
+      if (!ctx || !sfxGain) return;
+      const sample = pickRandomHitBuffer(buffers);
+      playBufferedSample(sample, HIT_VOLUME, sfxGain, () => {
+        playHitOscillatorFallback(audioCtx, output, now);
+      });
+    });
   }
   });
 }
 
 function stopMusicNodes(): void {
-  for (const osc of musicOscillators) {
+  if (mainThemeSource) {
     try {
-      osc.stop();
-      osc.disconnect();
+      mainThemeSource.stop();
+      mainThemeSource.disconnect();
     } catch {
-      // oscillator may already be stopped
+      // source may already be stopped
     }
+    mainThemeSource = null;
   }
-  musicOscillators = [];
 
-  if (musicArpTimer !== null) {
-    clearInterval(musicArpTimer);
-    musicArpTimer = null;
+  if (mainThemeGain) {
+    try {
+      mainThemeGain.disconnect();
+    } catch {
+      // already disconnected
+    }
+    mainThemeGain = null;
   }
 }
 
-export function startMusic(): void {
-  if (musicPlaying || getMusicVolume() <= 0) return;
+function playMainThemeAt(offsetSec: number): void {
+  if (getMusicVolume() <= 0) return;
   if (invincibilityThemeDesired) return;
+  if (musicSuspended || musicSuppressed) return;
 
   void getRunningAudioContext().then((audioCtx) => {
-    if (!audioCtx || !musicGain || musicPlaying || getMusicVolume() <= 0) return;
-    if (invincibilityThemeDesired) return;
+    if (!audioCtx || !musicGain || getMusicVolume() <= 0) return;
+    if (invincibilityThemeDesired || musicSuspended || musicSuppressed) return;
 
-  const pad1 = audioCtx.createOscillator();
-  const pad2 = audioCtx.createOscillator();
-  pad1.type = 'sine';
-  pad2.type = 'triangle';
-  pad1.frequency.value = 55;
-  pad2.frequency.value = 110;
+    void loadMainThemeBuffer().then((buffer) => {
+      if (!buffer || !ctx || !musicGain || getMusicVolume() <= 0) return;
+      if (invincibilityThemeDesired || musicSuspended || musicSuppressed) return;
 
-  const padGain = audioCtx.createGain();
-  padGain.gain.value = 0.035;
-  pad1.connect(padGain);
-  pad2.connect(padGain);
-  padGain.connect(musicGain);
-  pad1.start();
-  pad2.start();
-  musicOscillators.push(pad1, pad2);
+      stopMusicNodes();
 
-  const arpNotes = [220, 277, 330, 392];
-  let arpIndex = 0;
-  musicArpTimer = setInterval(() => {
-    if (!ctx || !musicGain || musicMutedByPause || getMusicVolume() <= 0) return;
-    if (invincibilityThemeDesired) return;
+      const startOffset = wrapOffset(offsetSec, buffer.duration);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
 
-    const note = arpNotes[arpIndex % arpNotes.length];
-    arpIndex += 1;
+      const gain = ctx.createGain();
+      gain.gain.value = MAIN_THEME_VOLUME;
+      source.connect(gain);
+      gain.connect(musicGain);
+      source.start(0, startOffset);
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = note;
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.025, ctx.currentTime + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
-    osc.connect(gain);
-    gain.connect(musicGain);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.75);
-  }, 900);
-
-  musicPlaying = true;
-  applyAudioSettings();
+      mainThemeSource = source;
+      mainThemeGain = gain;
+      musicPlaying = true;
+      mainThemeResumeOffset = startOffset;
+      mainThemeStartedAt = ctx.currentTime - startOffset;
+      applyAudioSettings();
+    });
   });
 }
 
+/** Start / restart the main theme from the beginning. */
+export function startMusic(): void {
+  musicSuspended = false;
+  musicSuppressed = false;
+  mainThemeResumeOffset = 0;
+
+  if (getMusicVolume() <= 0) return;
+  if (invincibilityThemeDesired) {
+    // Keep invincibility if active; ensure it is audible from its saved/start offset.
+    if (!invincibilityThemePlaying) {
+      beginInvincibilityTheme(invincibilityThemeResumeOffset);
+    }
+    return;
+  }
+
+  stopMusicNodes();
+  musicPlaying = false;
+  playMainThemeAt(0);
+}
+
+/**
+ * Keep music playing across menu navigation.
+ * Restarts from the beginning only when returning from a suspended gameplay state
+ * (pause / loot / victory / game over) or when nothing is playing yet.
+ */
+export function ensureMusic(): void {
+  musicSuppressed = false;
+
+  if (getMusicVolume() <= 0) return;
+
+  if (musicSuspended) {
+    startMusic();
+    return;
+  }
+
+  if (invincibilityThemeDesired) {
+    if (!invincibilityThemePlaying) {
+      beginInvincibilityTheme(invincibilityThemeResumeOffset);
+    }
+    return;
+  }
+
+  if (musicPlaying && mainThemeSource) {
+    applyAudioSettings();
+    return;
+  }
+
+  startMusic();
+}
+
+/** Stop themes and keep them silent until the next startMusic() (launch cutscene). */
 export function stopMusic(): void {
   stopMusicNodes();
   musicPlaying = false;
+  musicSuspended = false;
+  mainThemeResumeOffset = 0;
+  musicSuppressed = true;
+  if (invincibilityThemePlaying) {
+    invincibilityThemeResumeOffset = 0;
+    stopInvincibilityThemeNodes();
+  }
 }
 
+/** Pause main / invincibility themes in place (no seek-to-start on resume). */
 export function pauseMusic(): void {
-  musicMutedByPause = true;
-  applyAudioSettings();
+  if (musicSuspended) return;
+
+  if (invincibilityThemePlaying) {
+    invincibilityThemeResumeOffset = captureInvincibilityOffset();
+    stopInvincibilityThemeNodes();
+  } else if (musicPlaying) {
+    mainThemeResumeOffset = captureMainThemeOffset();
+    stopMusicNodes();
+    musicPlaying = false;
+  }
+
+  musicSuspended = true;
 }
 
+/** Resume the suspended theme from the saved playback position. */
 export function resumeMusic(): void {
-  musicMutedByPause = false;
-  applyAudioSettings();
+  if (!musicSuspended) return;
+
+  musicSuspended = false;
+
+  if (getMusicVolume() <= 0) {
+    applyAudioSettings();
+    return;
+  }
+
+  if (invincibilityThemeDesired) {
+    beginInvincibilityTheme(invincibilityThemeResumeOffset);
+    return;
+  }
+
+  playMainThemeAt(mainThemeResumeOffset);
 }
