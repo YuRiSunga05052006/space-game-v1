@@ -4,11 +4,21 @@ import { formatCoinsLabel, getCoins } from '../coins';
 import {
   equipSkin,
   getEquippedSkinId,
+  getShipTextureKey,
   isSkinOwned,
   PLAYER_SKINS,
   purchaseSkin,
   type PlayerSkinDefinition,
 } from '../playerSkins';
+import {
+  equipShape,
+  getEquippedShapeId,
+  isShapeOwned,
+  PLAYER_SHAPES,
+  purchaseShape,
+  type PlayerShapeDefinition,
+  type RocketShapeId,
+} from '../playerShapes';
 import {
   getDeathBombChargePrice,
   getInventoryCount,
@@ -28,15 +38,27 @@ import { MAX_POWER_UP_LEVEL } from '../powerUpEffects';
 import { createMenuButton } from './MenuButtons';
 import { playSfx } from '../audioManager';
 import {
-  drawElectricRainbowRocket,
   getRainbowCyclePhase,
+  getRocketSkinPalette,
+  makeRainbowPalette,
   sampleRainbowColor,
 } from '../rocketAppearances';
+import {
+  drawLaunchStackPreview,
+  drawShapeAssembled,
+  type StackPreviewIteration,
+} from '../rocketShapes';
 
-const SCROLL_TOP = 150;
-const SCROLL_HEIGHT = 500;
+const POWERUPS_SCROLL_TOP = 150;
+const POWERUPS_SCROLL_HEIGHT = 500;
+const SKINS_SCROLL_TOP = 292;
+const SKINS_SCROLL_HEIGHT = GAME_HEIGHT - SKINS_SCROLL_TOP - 100;
+const HERO_CENTER_Y = 200;
+const HERO_SCALE = 0.72;
+const STACK_ITER_MS = 1400;
 const CARD_HEIGHT = 108;
 const CARD_GAP = 10;
+const SECTION_HEADER_HEIGHT = 36;
 const DEATH_BOMB_CARD_EXTRA = 14;
 const TAB_Y = 108;
 const TAB_WIDTH = 120;
@@ -62,17 +84,51 @@ function getSkinAction(skin: PlayerSkinDefinition): SkinCardAction {
   return 'buy';
 }
 
-function getSkinActionLabel(skin: PlayerSkinDefinition, action: SkinCardAction): string {
+function getShapeAction(shape: PlayerShapeDefinition): SkinCardAction {
+  const equippedId = getEquippedShapeId();
+  if (equippedId === shape.id) return 'equipped';
+  if (isShapeOwned(shape.id)) return 'equip';
+  return 'buy';
+}
+
+function getCatalogActionLabel(price: number, action: SkinCardAction): string {
   switch (action) {
     case 'equipped':
       return 'EQUIPPED';
     case 'equip':
       return 'EQUIP';
     case 'buy':
-      return skin.price === 0 ? 'FREE' : `BUY ${skin.price}`;
+      return price === 0 ? 'FREE' : `BUY ${price}`;
     default:
       return 'LOCKED';
   }
+}
+
+function getSkinActionLabel(skin: PlayerSkinDefinition, action: SkinCardAction): string {
+  return getCatalogActionLabel(skin.price, action);
+}
+
+function getShapeActionLabel(shape: PlayerShapeDefinition, action: SkinCardAction): string {
+  return getCatalogActionLabel(shape.price, action);
+}
+
+function createSectionHeader(
+  scene: Phaser.Scene,
+  title: string,
+  y: number,
+): Phaser.GameObjects.Container {
+  const header = scene.add.container(0, y);
+  header.add(scene.add.text(24, 8, title, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '12px',
+    fontStyle: '700',
+    color: '#8899aa',
+  }));
+  const line = scene.add.graphics();
+  line.lineStyle(1, 0x334455, 0.8);
+  line.lineBetween(24, 28, GAME_WIDTH - 24, 28);
+  header.add(line);
+  return header;
 }
 
 function getPowerUpActionLabel(def: PowerUpDefinition, action: PowerUpCardAction): string {
@@ -104,8 +160,11 @@ function createSkinCard(
   scene: Phaser.Scene,
   skin: PlayerSkinDefinition,
   y: number,
+  previewShapeId: RocketShapeId,
+  selected: boolean,
+  onSelect: () => void,
   onAction: () => void,
-  rainbowPreviews?: Phaser.GameObjects.Graphics[],
+  rainbowCardPreviews: { gfx: Phaser.GameObjects.Graphics; shapeId: RocketShapeId }[],
 ): Phaser.GameObjects.Container {
   const card = scene.add.container(0, y);
   const cardH = CARD_HEIGHT - CARD_GAP;
@@ -113,16 +172,14 @@ function createSkinCard(
   const affordable = skin.price === 0 || getCoins() >= skin.price;
   const actionColor = getActionColor(action, affordable);
   const isEquipped = action === 'equipped';
+  const borderColor = selected ? 0x00d4ff : isEquipped ? 0x33aa66 : 0x223344;
+  const borderWidth = selected || isEquipped ? 2 : 1;
 
   const bg = scene.add.graphics();
-  const drawBg = () => {
-    bg.clear();
-    bg.fillStyle(0x12182a, 0.95);
-    bg.fillRoundedRect(16, 0, GAME_WIDTH - 32, cardH, 8);
-    bg.lineStyle(isEquipped ? 2 : 1, isEquipped ? 0x33aa66 : 0x223344, isEquipped ? 1 : 0.9);
-    bg.strokeRoundedRect(16, 0, GAME_WIDTH - 32, cardH, 8);
-  };
-  drawBg();
+  bg.fillStyle(0x12182a, 0.95);
+  bg.fillRoundedRect(16, 0, GAME_WIDTH - 32, cardH, 8);
+  bg.lineStyle(borderWidth, borderColor, selected || isEquipped ? 1 : 0.9);
+  bg.strokeRoundedRect(16, 0, GAME_WIDTH - 32, cardH, 8);
   card.add(bg);
 
   const preview = skin.id === 'electricRainbow'
@@ -130,10 +187,10 @@ function createSkinCard(
       const previewGfx = scene.add.graphics();
       previewGfx.setPosition(52, cardH / 2);
       previewGfx.setScale(1.4);
-      rainbowPreviews?.push(previewGfx);
+      rainbowCardPreviews.push({ gfx: previewGfx, shapeId: previewShapeId });
       return previewGfx;
     })()
-    : scene.add.image(52, cardH / 2, skin.textureKey).setScale(1.4);
+    : scene.add.image(52, cardH / 2, getShipTextureKey(previewShapeId, skin.id)).setScale(1.4);
   card.add(preview);
 
   const textX = 92;
@@ -208,6 +265,125 @@ function createSkinCard(
   }
 
   card.add(actionBtn);
+
+  const selectZone = scene.add.zone(16, 0, GAME_WIDTH - 148, cardH).setOrigin(0, 0);
+  selectZone.setInteractive({ useHandCursor: true });
+  selectZone.on('pointerup', () => {
+    playSfx('ui');
+    onSelect();
+  });
+  card.add(selectZone);
+
+  return card;
+}
+
+function createShapeCard(
+  scene: Phaser.Scene,
+  shape: PlayerShapeDefinition,
+  y: number,
+  previewSkinId: string,
+  selected: boolean,
+  onSelect: () => void,
+  onAction: () => void,
+  rainbowCardPreviews: { gfx: Phaser.GameObjects.Graphics; shapeId: RocketShapeId }[],
+): Phaser.GameObjects.Container {
+  const card = scene.add.container(0, y);
+  const cardH = CARD_HEIGHT - CARD_GAP;
+  const action = getShapeAction(shape);
+  const affordable = shape.price === 0 || getCoins() >= shape.price;
+  const actionColor = getActionColor(action, affordable);
+  const isEquipped = action === 'equipped';
+  const borderColor = selected ? 0x00d4ff : isEquipped ? 0x33aa66 : 0x223344;
+  const borderWidth = selected || isEquipped ? 2 : 1;
+
+  const bg = scene.add.graphics();
+  bg.fillStyle(0x12182a, 0.95);
+  bg.fillRoundedRect(16, 0, GAME_WIDTH - 32, cardH, 8);
+  bg.lineStyle(borderWidth, borderColor, selected || isEquipped ? 1 : 0.9);
+  bg.strokeRoundedRect(16, 0, GAME_WIDTH - 32, cardH, 8);
+  card.add(bg);
+
+  const preview = previewSkinId === 'electricRainbow'
+    ? (() => {
+      const previewGfx = scene.add.graphics();
+      previewGfx.setPosition(52, cardH / 2);
+      previewGfx.setScale(1.4);
+      rainbowCardPreviews.push({ gfx: previewGfx, shapeId: shape.id });
+      return previewGfx;
+    })()
+    : scene.add.image(52, cardH / 2, getShipTextureKey(shape.id, previewSkinId)).setScale(1.4);
+  card.add(preview);
+
+  const textX = 92;
+  card.add(scene.add.text(textX, 12, shape.name, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '13px',
+    fontStyle: '700',
+    color: '#00d4ff',
+  }));
+
+  card.add(scene.add.text(textX, 30, shape.description, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '9px',
+    color: '#8899aa',
+    wordWrap: { width: GAME_WIDTH - textX - 110 },
+  }));
+
+  const priceLabel = shape.price === 0 ? 'Included' : `${shape.price} coins`;
+  card.add(scene.add.text(textX, cardH - 22, priceLabel, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '9px',
+    fontStyle: '700',
+    color: '#ffcc00',
+  }));
+
+  const actionLabel = getShapeActionLabel(shape, action);
+  const actionBtn = scene.add.container(GAME_WIDTH - 72, cardH / 2);
+  const actionBg = scene.add.graphics();
+  const drawActionBg = (fillAlpha: number) => {
+    actionBg.clear();
+    const enabled = action !== 'equipped' && (action !== 'buy' || affordable);
+    actionBg.fillStyle(actionColor, enabled ? fillAlpha : 0.12);
+    actionBg.fillRoundedRect(-42, -16, 84, 32, 8);
+    actionBg.lineStyle(1, actionColor, enabled ? 0.9 : 0.35);
+    actionBg.strokeRoundedRect(-42, -16, 84, 32, 8);
+  };
+  drawActionBg(0.2);
+
+  const actionText = scene.add.text(0, 0, actionLabel, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '10px',
+    fontStyle: '700',
+    color: `#${actionColor.toString(16).padStart(6, '0')}`,
+  }).setOrigin(0.5);
+
+  actionBtn.add([actionBg, actionText]);
+
+  const canInteract = action !== 'equipped' && (action !== 'buy' || affordable);
+  if (canInteract) {
+    actionBtn.setInteractive(
+      new Phaser.Geom.Rectangle(-42, -16, 84, 32),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    actionBtn.input!.cursor = 'pointer';
+    actionBtn.on('pointerover', () => drawActionBg(0.35));
+    actionBtn.on('pointerout', () => drawActionBg(0.2));
+    actionBtn.on('pointerup', () => {
+      playSfx('ui');
+      onAction();
+    });
+  }
+
+  card.add(actionBtn);
+
+  const selectZone = scene.add.zone(16, 0, GAME_WIDTH - 148, cardH).setOrigin(0, 0);
+  selectZone.setInteractive({ useHandCursor: true });
+  selectZone.on('pointerup', () => {
+    playSfx('ui');
+    onSelect();
+  });
+  card.add(selectZone);
+
   return card;
 }
 
@@ -487,16 +663,64 @@ export function createShopPanel(
   const tabContainers: Phaser.GameObjects.Container[] = [];
   let currentTab: ShopTab = 'skins';
 
+  let previewSkinId = getEquippedSkinId();
+  let previewShapeId: RocketShapeId = getEquippedShapeId();
+  let stackIteration: StackPreviewIteration = 1;
+  let stackIterTimer = 0;
+
+  const heroContainer = scene.add.container(GAME_WIDTH / 2, HERO_CENTER_Y);
+  root.add(heroContainer);
+  const heroBg = scene.add.graphics();
+  heroBg.fillStyle(0x0c1220, 0.9);
+  heroBg.fillRoundedRect(-GAME_WIDTH / 2 + 16, -78, GAME_WIDTH - 32, 156, 10);
+  heroBg.lineStyle(1, 0x223344, 0.9);
+  heroBg.strokeRoundedRect(-GAME_WIDTH / 2 + 16, -78, GAME_WIDTH - 32, 156, 10);
+  heroContainer.add(heroBg);
+  const heroGfx = scene.add.graphics();
+  heroGfx.setScale(HERO_SCALE);
+  heroContainer.add(heroGfx);
+  const heroLabel = scene.add.text(0, 68, 'STACK PREVIEW', {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '9px',
+    fontStyle: '700',
+    color: '#667788',
+  }).setOrigin(0.5);
+  heroContainer.add(heroLabel);
+
+  const redrawHero = (): void => {
+    heroGfx.clear();
+    const skin = PLAYER_SKINS.find((s) => s.id === previewSkinId) ?? PLAYER_SKINS[0];
+    const phase = getRainbowCyclePhase(scene.time.now);
+    const palette = skin.appearanceId === 'electricRainbow'
+      ? makeRainbowPalette(sampleRainbowColor(phase), sampleRainbowColor(phase))
+      : getRocketSkinPalette(skin.appearanceId);
+
+    drawLaunchStackPreview(heroGfx, 0, -8, {
+      iteration: stackIteration,
+      shapeId: previewShapeId,
+      palette,
+      includeCannon: true,
+    });
+    heroLabel.setText(`STACK PREVIEW · ${stackIteration}/3`);
+  };
+
+  let scrollTop = SKINS_SCROLL_TOP;
+  let scrollHeight = SKINS_SCROLL_HEIGHT;
+
   const maskShape = scene.make.graphics({}, false);
-  maskShape.fillStyle(0xffffff);
-  maskShape.fillRect(0, SCROLL_TOP, GAME_WIDTH, SCROLL_HEIGHT);
+  const applyScrollMask = () => {
+    maskShape.clear();
+    maskShape.fillStyle(0xffffff);
+    maskShape.fillRect(0, scrollTop, GAME_WIDTH, scrollHeight);
+  };
+  applyScrollMask();
   const mask = maskShape.createGeometryMask();
 
   const scrollViewport = scene.add.container(0, 0);
   scrollViewport.setMask(mask);
   root.add(scrollViewport);
 
-  const content = scene.add.container(0, SCROLL_TOP);
+  const content = scene.add.container(0, scrollTop);
   scrollViewport.add(content);
 
   let scrollY = 0;
@@ -504,53 +728,134 @@ export function createShopPanel(
   let dragStartY = 0;
   let scrollStartY = 0;
   let maxScroll = 0;
-  const rainbowPreviews: Phaser.GameObjects.Graphics[] = [];
+  const rainbowCardPreviews: { gfx: Phaser.GameObjects.Graphics; shapeId: RocketShapeId }[] = [];
 
-  const updateRainbowPreviews = (): void => {
-    if (rainbowPreviews.length === 0) return;
+  const updateRainbowCardPreviews = (): void => {
+    if (rainbowCardPreviews.length === 0) return;
     const phase = getRainbowCyclePhase(scene.time.now);
     const bodyColor = sampleRainbowColor(phase);
     const engineColor = sampleRainbowColor(phase);
-    for (const gfx of rainbowPreviews) {
-      if (!gfx.active) continue;
-      gfx.clear();
-      drawElectricRainbowRocket(gfx, bodyColor, engineColor, -20, -32);
+    const palette = makeRainbowPalette(bodyColor, engineColor);
+    for (const entry of rainbowCardPreviews) {
+      if (!entry.gfx.active) continue;
+      entry.gfx.clear();
+      drawShapeAssembled(entry.shapeId, entry.gfx, palette, -20, -32);
     }
   };
 
-  const onShopUpdate = (): void => {
-    updateRainbowPreviews();
+  const setHeroVisible = (visible: boolean) => {
+    heroContainer.setVisible(visible);
+  };
+
+  const onShopUpdate = (_time: number, delta: number): void => {
+    if (currentTab === 'skins') {
+      stackIterTimer += delta;
+      if (stackIterTimer >= STACK_ITER_MS) {
+        stackIterTimer = 0;
+        stackIteration = (stackIteration >= 3 ? 1 : stackIteration + 1) as StackPreviewIteration;
+      }
+      redrawHero();
+    }
+    updateRainbowCardPreviews();
   };
   scene.events.on(Phaser.Scenes.Events.UPDATE, onShopUpdate);
 
   const applyScroll = () => {
-    content.setY(SCROLL_TOP - scrollY);
+    content.setY(scrollTop - scrollY);
   };
 
   const rebuildContent = (options?: { resetScroll?: boolean }) => {
     const previousScrollY = scrollY;
     content.removeAll(true);
-    rainbowPreviews.length = 0;
+    rainbowCardPreviews.length = 0;
     coinsText.setText(formatCoinsLabel());
 
-    let y = 0;
     if (currentTab === 'skins') {
+      scrollTop = SKINS_SCROLL_TOP;
+      scrollHeight = SKINS_SCROLL_HEIGHT;
+      setHeroVisible(true);
+      applyScrollMask();
+      redrawHero();
+
+      let y = 0;
+      content.add(createSectionHeader(scene, 'SHIP SKINS', y));
+      y += SECTION_HEADER_HEIGHT;
+
       for (const skin of PLAYER_SKINS) {
         const handleAction = () => {
           const action = getSkinAction(skin);
           if (action === 'buy') {
             if (!purchaseSkin(skin.id)) return;
+            equipSkin(skin.id);
           } else if (action === 'equip') {
             if (!equipSkin(skin.id)) return;
           } else {
             return;
           }
+          previewSkinId = skin.id;
           rebuildContent();
         };
-        content.add(createSkinCard(scene, skin, y, handleAction, rainbowPreviews));
+        content.add(createSkinCard(
+          scene,
+          skin,
+          y,
+          previewShapeId,
+          previewSkinId === skin.id,
+          () => {
+            previewSkinId = skin.id;
+            stackIteration = 1;
+            stackIterTimer = 0;
+            rebuildContent();
+          },
+          handleAction,
+          rainbowCardPreviews,
+        ));
         y += CARD_HEIGHT;
       }
+
+      content.add(createSectionHeader(scene, 'SHIP SHAPES', y));
+      y += SECTION_HEADER_HEIGHT;
+
+      for (const shape of PLAYER_SHAPES) {
+        const handleAction = () => {
+          const action = getShapeAction(shape);
+          if (action === 'buy') {
+            if (!purchaseShape(shape.id)) return;
+            equipShape(shape.id);
+          } else if (action === 'equip') {
+            if (!equipShape(shape.id)) return;
+          } else {
+            return;
+          }
+          previewShapeId = shape.id;
+          rebuildContent();
+        };
+        content.add(createShapeCard(
+          scene,
+          shape,
+          y,
+          previewSkinId,
+          previewShapeId === shape.id,
+          () => {
+            previewShapeId = shape.id;
+            stackIteration = 1;
+            stackIterTimer = 0;
+            rebuildContent();
+          },
+          handleAction,
+          rainbowCardPreviews,
+        ));
+        y += CARD_HEIGHT;
+      }
+
+      maxScroll = Math.max(0, y - scrollHeight);
     } else {
+      scrollTop = POWERUPS_SCROLL_TOP;
+      scrollHeight = POWERUPS_SCROLL_HEIGHT;
+      setHeroVisible(false);
+      applyScrollMask();
+
+      let y = 0;
       for (const def of POWER_UPS) {
         if (def.id === 'deathBomb') {
           content.add(createDeathBombCard(scene, y, rebuildContent));
@@ -571,12 +876,12 @@ export function createShopPanel(
         content.add(createPowerUpCard(scene, def, y, handleAction));
         y += CARD_HEIGHT;
       }
+      maxScroll = Math.max(0, y - scrollHeight);
     }
 
-    maxScroll = Math.max(0, y - SCROLL_HEIGHT);
     scrollY = options?.resetScroll ? 0 : Phaser.Math.Clamp(previousScrollY, 0, maxScroll);
     applyScroll();
-    updateRainbowPreviews();
+    updateRainbowCardPreviews();
   };
 
   const drawTabs = () => {
@@ -637,8 +942,8 @@ export function createShopPanel(
   rebuildContent();
 
   const isInScrollArea = (pointer: Phaser.Input.Pointer) => (
-    pointer.y >= SCROLL_TOP &&
-    pointer.y <= SCROLL_TOP + SCROLL_HEIGHT &&
+    pointer.y >= scrollTop &&
+    pointer.y <= scrollTop + scrollHeight &&
     pointer.x >= 0 &&
     pointer.x <= GAME_WIDTH
   );

@@ -1,4 +1,5 @@
 ﻿import Phaser from 'phaser';
+import { stopMusic } from '../audioManager';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { createMenuButton } from '../ui/MenuButtons';
 
@@ -29,8 +30,8 @@ export class ModeSelectScene extends Phaser.Scene {
       color: '#00d4ff',
     }).setOrigin(0.5);
 
-    const startY = GAME_HEIGHT / 2 - 50;
-    const gap = 58;
+    const startY = GAME_HEIGHT / 2 - 90;
+    const gap = 56;
 
     const buttons = [
       {
@@ -42,6 +43,14 @@ export class ModeSelectScene extends Phaser.Scene {
         label: 'SURVIVAL',
         color: 0xffcc00,
         onClick: () => this.transitionTo('WorldSelectScene', { mode: 'survival' }),
+      },
+      {
+        label: 'EDITOR',
+        color: 0x44ff88,
+        onClick: () => {
+          stopMusic();
+          this.transitionTo('EditorHubScene');
+        },
       },
       {
         label: 'BACK',

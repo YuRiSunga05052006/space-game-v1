@@ -13,16 +13,17 @@ import {
 } from '../boosterAppearances';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { normalizeGameSceneData, type GameSceneData } from '../gameMode';
+import { getEquippedShapeId } from '../playerShapes';
 import { getEquippedSkinId, PLAYER_SKINS } from '../playerSkins';
 import {
-  drawAssembledRocket,
-  drawElectricRainbowRocket,
   getRainbowCyclePhase,
   getRocketSkinPalette,
+  makeRainbowPalette,
   ROCKET_TEXTURE_HEIGHT,
   ROCKET_TEXTURE_WIDTH,
   sampleRainbowColor,
 } from '../rocketAppearances';
+import { drawShapeAssembled } from '../rocketShapes';
 
 const COUNTDOWN_SECONDS = 12;
 const IGNITION_AT_SECONDS = 5;
@@ -377,14 +378,17 @@ export class LaunchCutsceneScene extends Phaser.Scene {
     const opts = {
       includeCannon: true,
       lowerWingsDeployed: this.shipWingsDeployed,
+      wingsDeployed: false,
     };
+    const shapeId = getEquippedShapeId();
 
     if (this.electricRainbow) {
       const phase = getRainbowCyclePhase(this.time.now);
-      drawElectricRainbowRocket(
+      const color = sampleRainbowColor(phase);
+      drawShapeAssembled(
+        shapeId,
         this.shipGfx,
-        sampleRainbowColor(phase),
-        sampleRainbowColor(phase),
+        makeRainbowPalette(color, color),
         ox,
         oy,
         opts,
@@ -393,7 +397,8 @@ export class LaunchCutsceneScene extends Phaser.Scene {
     }
 
     const skin = PLAYER_SKINS.find((s) => s.id === getEquippedSkinId()) ?? PLAYER_SKINS[0];
-    drawAssembledRocket(
+    drawShapeAssembled(
+      shapeId,
       this.shipGfx,
       getRocketSkinPalette(skin.appearanceId),
       ox,

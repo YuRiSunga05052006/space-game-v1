@@ -45,8 +45,6 @@ export type AlmanacCategory =
   | 'storyEnemy'
   | 'enemy'
   | 'boss'
-  | 'comet'
-  | 'goldComet'
   | 'mine';
 export type AlmanacPage = 'shared' | 'world1' | 'world2' | 'world3';
 
@@ -297,36 +295,37 @@ function buildBossEntries(
     });
 }
 
-function buildCometEntries(): AlmanacEntry[] {
+function buildCometEntry(): AlmanacEntry {
+  return {
+    id: 'comet-normal',
+    category: 'asteroid',
+    name: 'Comet',
+    textureKey: 'comet',
+    textureScale: 1,
+    subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival',
+    description:
+      'Fast icy hazard with a glowing tail. Appears from Saturn onward in World 2 (including Titan, Uranus, and Neptune). More frequent from the Kuiper Belt (L16+) and throughout World 3+.',
+    stats: `DMG ${COMET_DAMAGE} · ${COMET_POINTS} pts`,
+    almanacPage: 'shared',
+    requiresWorld2: true,
+  };
+}
+
+function buildGoldCometEntry(): AlmanacEntry {
   const goldCoins = getGoldCometCoinReward();
-  return [
-    {
-      id: 'comet-normal',
-      category: 'comet',
-      name: 'Comet',
-      textureKey: 'comet',
-      textureScale: 1,
-      subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival',
-      description:
-        'Fast icy hazard with a glowing tail. Appears from Saturn onward in World 2 (including Titan, Uranus, and Neptune). More frequent from the Kuiper Belt (L16+) and throughout World 3+.',
-      stats: `DMG ${COMET_DAMAGE} · ${COMET_POINTS} pts`,
-      almanacPage: 'shared',
-      requiresWorld2: true,
-    },
-    {
-      id: 'comet-gold',
-      category: 'goldComet',
-      name: 'Gold Comet',
-      textureKey: 'comet-gold',
-      textureScale: 1,
-      subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival',
-      description:
-        'Rare golden comet. Destroy to earn bonus coins. Same regions as normal comets; more common from L16+ and World 3+.',
-      stats: `DMG ${COMET_DAMAGE} · ${GOLD_COMET_POINTS} pts · +${goldCoins} coins`,
-      almanacPage: 'shared',
-      requiresWorld2: true,
-    },
-  ];
+  return {
+    id: 'comet-gold',
+    category: 'goldAsteroid',
+    name: 'Gold Comet',
+    textureKey: 'comet-gold',
+    textureScale: 1,
+    subtitle: 'Story L12+ (Saturn–Oort) · World 2+ Survival',
+    description:
+      'Rare golden comet. Destroy to earn bonus coins. Same regions as normal comets; more common from L16+ and World 3+.',
+    stats: `DMG ${COMET_DAMAGE} · ${GOLD_COMET_POINTS} pts · +${goldCoins} coins`,
+    almanacPage: 'shared',
+    requiresWorld2: true,
+  };
 }
 
 function buildGalileanMoonEntries(): AlmanacEntry[] {
@@ -350,10 +349,11 @@ function buildGalileanMoonEntries(): AlmanacEntry[] {
 
 export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   ...buildAsteroidEntries(),
+  buildCometEntry(),
   ...buildGoldAsteroidEntries(),
+  buildGoldCometEntry(),
   ...ENEMY_ENTRIES,
   ...buildMineEntries(),
-  ...buildCometEntries(),
   ...buildStoryEnemyEntries(WORLD1_STORY_ENEMIES, 'world1', 'Story W1'),
   ...buildBossEntries(WORLD1_BOSSES, 'world1', 'Story W1'),
   ...buildStoryEnemyEntries(WORLD2_STORY_ENEMIES, 'world2', 'Story W2'),
@@ -365,12 +365,10 @@ export const ALMANAC_ENTRIES: AlmanacEntry[] = [
 
 const PAGE_SECTIONS: Record<AlmanacPage, { label: string; category: AlmanacCategory }[]> = {
   shared: [
-    { label: 'ASTEROIDS', category: 'asteroid' },
-    { label: 'GOLD ASTEROIDS', category: 'goldAsteroid' },
+    { label: 'ROCKS', category: 'asteroid' },
+    { label: 'GOLD ROCKS', category: 'goldAsteroid' },
     { label: 'SURVIVAL ENEMIES', category: 'enemy' },
     { label: 'MINES', category: 'mine' },
-    { label: 'COMETS', category: 'comet' },
-    { label: 'GOLD COMETS', category: 'goldComet' },
   ],
   world1: [
     { label: 'STORY ENEMIES', category: 'storyEnemy' },

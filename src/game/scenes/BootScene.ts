@@ -13,6 +13,7 @@ import { BOSS_DEFINITIONS as WORLD3_BOSSES } from '../world3/bosses';
 import { drawBossAppearance as drawWorld3Boss, getBossAppearancePalette as getWorld3BossPalette } from '../world3/bossAppearances';
 import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from '../world3/storyEnemyDefinitions';
 import { drawStoryEnemyAppearance as drawWorld3StoryEnemy, getStoryEnemyAppearancePalette as getWorld3StoryEnemyPalette } from '../world3/storyEnemyAppearances';
+import { PLAYER_SHAPES, shipTextureKey } from '../playerShapes';
 import { PLAYER_SKINS } from '../playerSkins';
 import {
   BOOSTER_DEPLOYED_TEXTURE_KEY,
@@ -23,11 +24,11 @@ import {
 } from '../boosterAppearances';
 import {
   drawCannonTexture,
-  drawEscapeUpperSkin,
-  drawLowerModuleSkin,
-  drawRocketSkin,
   escapeUpperTextureKey,
+  getRocketSkinPalette,
   lowerModuleTextureKey,
+  makeRainbowPalette,
+  RAINBOW_CYCLE_COLORS,
   ROCKET_CANNON_TEXTURE_HEIGHT,
   ROCKET_CANNON_TEXTURE_KEY,
   ROCKET_CANNON_TEXTURE_WIDTH,
@@ -38,6 +39,11 @@ import {
   ROCKET_TEXTURE_HEIGHT,
   ROCKET_TEXTURE_WIDTH,
 } from '../rocketAppearances';
+import {
+  drawShapeAssembled,
+  drawShapeEscapeUpper,
+  drawShapeLowerOnly,
+} from '../rocketShapes';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -84,29 +90,36 @@ export class BootScene extends Phaser.Scene {
   }
 
   private createRocketSkinTextures(): void {
-    for (const skin of PLAYER_SKINS) {
-      const assembled = this.make.graphics({ x: 0, y: 0 }, false);
-      drawRocketSkin(assembled, skin.appearanceId, { includeCannon: false });
-      assembled.generateTexture(skin.textureKey, ROCKET_TEXTURE_WIDTH, ROCKET_TEXTURE_HEIGHT);
-      assembled.destroy();
+    for (const shape of PLAYER_SHAPES) {
+      for (const skin of PLAYER_SKINS) {
+        const textureKey = shipTextureKey(shape.id, skin.id);
+        const palette = skin.appearanceId === 'electricRainbow'
+          ? makeRainbowPalette(RAINBOW_CYCLE_COLORS[0], RAINBOW_CYCLE_COLORS[0])
+          : getRocketSkinPalette(skin.appearanceId);
 
-      const escape = this.make.graphics({ x: 0, y: 0 }, false);
-      drawEscapeUpperSkin(escape, skin.appearanceId);
-      escape.generateTexture(
-        escapeUpperTextureKey(skin.textureKey),
-        ROCKET_ESCAPE_TEXTURE_WIDTH,
-        ROCKET_ESCAPE_TEXTURE_HEIGHT,
-      );
-      escape.destroy();
+        const assembled = this.make.graphics({ x: 0, y: 0 }, false);
+        drawShapeAssembled(shape.id, assembled, palette, 0, 0, { includeCannon: false });
+        assembled.generateTexture(textureKey, ROCKET_TEXTURE_WIDTH, ROCKET_TEXTURE_HEIGHT);
+        assembled.destroy();
 
-      const lower = this.make.graphics({ x: 0, y: 0 }, false);
-      drawLowerModuleSkin(lower, skin.appearanceId);
-      lower.generateTexture(
-        lowerModuleTextureKey(skin.textureKey),
-        ROCKET_LOWER_TEXTURE_WIDTH,
-        ROCKET_LOWER_TEXTURE_HEIGHT,
-      );
-      lower.destroy();
+        const escape = this.make.graphics({ x: 0, y: 0 }, false);
+        drawShapeEscapeUpper(shape.id, escape, palette);
+        escape.generateTexture(
+          escapeUpperTextureKey(textureKey),
+          ROCKET_ESCAPE_TEXTURE_WIDTH,
+          ROCKET_ESCAPE_TEXTURE_HEIGHT,
+        );
+        escape.destroy();
+
+        const lower = this.make.graphics({ x: 0, y: 0 }, false);
+        drawShapeLowerOnly(shape.id, lower, palette);
+        lower.generateTexture(
+          lowerModuleTextureKey(textureKey),
+          ROCKET_LOWER_TEXTURE_WIDTH,
+          ROCKET_LOWER_TEXTURE_HEIGHT,
+        );
+        lower.destroy();
+      }
     }
 
     const cannon = this.make.graphics({ x: 0, y: 0 }, false);

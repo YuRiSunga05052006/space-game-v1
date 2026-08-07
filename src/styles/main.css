@@ -39,4 +39,14 @@ body {
   height: min(100cqh, calc(100cqw * 844 / 390));
   overflow: hidden;
   flex-shrink: 0;
+  position: relative;
+}
+
+/* Allow typing in Phaser DOM editor inputs (body disables user-select globally). */
+#game-container input,
+#game-container textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  touch-action: manipulation;
+  pointer-events: auto;
 }

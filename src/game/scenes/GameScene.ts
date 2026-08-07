@@ -65,12 +65,30 @@ import {
 import { createMenuOverlay, createMenuButton } from '../ui/MenuButtons';
 import {
   formatHighScoreLabel,
+  goToEditorHub,
   goToLevelSelect,
   goToTitleScreen,
   restartGame,
   saveScoreAndGoToTitle,
   updateHighScore,
 } from '../gameFlow';
+import {
+  canUseComets,
+  canUseMineCarriers,
+  canUsePurpleMines,
+  canUseRedMines,
+  getAreaContent,
+  getCustomLevel,
+  getEffectiveIntervalMs,
+  type CustomAreaContent,
+  type CustomLevelDefinition,
+} from '../editor/customLevels';
+import {
+  isBossIdUnlocked,
+  isStoryEnemyIdUnlocked,
+  parseEditorBossId,
+  parseEditorStoryId,
+} from '../editor/editorCatalog';
 import { addCoins, formatRunCoinsLabel } from '../coins';
 import { hasSurvivalGoldSpawnBonus } from '../playerSkins';
 import {
@@ -234,6 +252,8 @@ export class GameScene extends Phaser.Scene {
   private enemySpawnTimer = 0;
   private storyEnemySpawnTimer = 0;
   private isHitStunned = false;
+  /** Prevents hit-SFX spam while overlapping a boss under invincibility/boost/shield. */
+  private bossRamHitSfxAt = 0;
   private isChoosingWeapon = false;
   private weaponSelectPanel?: Phaser.GameObjects.Container;
   private weaponHudText?: Phaser.GameObjects.Text;
@@ -293,17 +313,53 @@ export class GameScene extends Phaser.Scene {
   private deathBombArmed = false;
   private deathBombHudBtn?: Phaser.GameObjects.Container;
 
+  private customSlotIndex = 0;
+  private customSubAreaId?: string;
+  private carryScoreOnStart = 0;
+  private editorLevel: CustomLevelDefinition | null = null;
+  private editorArea: CustomAreaContent | null = null;
+  private editorBossesDefeated = 0;
+  private editorBonusPoints = 0;
+  private editorPendingWarpSubAreaId?: string;
+  private editorSpawnedMiscIds = new Set<string>();
+  private editorSurvivalTimers: Record<string, number> = {};
+  private editorStoryTimers: Record<string, number> = {};
+  private editorBossTimer = 0;
+
   constructor() {
     super({ key: 'GameScene' });
   }
 
-  init(data: { mode?: GameMode; level?: number; worldId?: string; secretId?: string; continueMusic?: boolean }): void {
+  init(data: {
+    mode?: GameMode;
+    level?: number;
+    worldId?: string;
+    secretId?: string;
+    continueMusic?: boolean;
+    customSlotIndex?: number;
+    customSubAreaId?: string;
+    carryScore?: number;
+  }): void {
     const normalized = normalizeGameSceneData(data);
     this.gameMode = normalized.mode;
     this.storyLevel = normalized.level;
     this.worldId = resolveWorldId(normalized.worldId, normalized.level, normalized.secretId);
     this.secretId = normalized.secretId;
     this.continueMusic = normalized.continueMusic === true;
+    this.customSlotIndex = typeof normalized.customSlotIndex === 'number' ? normalized.customSlotIndex : 0;
+    this.customSubAreaId = normalized.customSubAreaId;
+    this.carryScoreOnStart = typeof normalized.carryScore === 'number' ? normalized.carryScore : 0;
+
+    if (this.gameMode === 'editor') {
+      this.editorLevel = getCustomLevel(this.customSlotIndex);
+      this.editorArea = this.editorLevel
+        ? getAreaContent(this.editorLevel, this.customSubAreaId)
+        : null;
+      this.worldId = 'world1';
+    } else {
+      this.editorLevel = null;
+      this.editorArea = null;
+    }
   }
 
   create(): void {
@@ -378,18 +434,50 @@ export class GameScene extends Phaser.Scene {
     this.deathBombHudBtn = undefined;
     this.starSpeedBoostMultiplier = 1;
     this.boostPointMeter?.destroy();
+    this.editorBossesDefeated = 0;
+    this.editorBonusPoints = 0;
+    this.editorPendingWarpSubAreaId = undefined;
+    this.editorSpawnedMiscIds = new Set();
+    this.editorSurvivalTimers = {};
+    this.editorStoryTimers = {};
+    this.editorBossTimer = 0;
+
+    if (this.gameMode === 'editor' && !this.editorArea) {
+      goToEditorHub(this, this.customSlotIndex);
+      return;
+    }
 
     const secretDef = this.secretId ? getSecretLevel(this.secretId) : undefined;
-    const isDarkLevel = secretDef?.darkLevel === true;
+    const editorBg = this.editorArea?.background;
+    const isDarkLevel = secretDef?.darkLevel === true
+      || (this.gameMode === 'editor'
+        && editorBg != null
+        && !editorBg.starsEnabled
+        && editorBg.obstructionEnabled);
 
-    if (!isDarkLevel) {
+    const showStars = this.gameMode === 'editor'
+      ? editorBg?.starsEnabled !== false
+      : !isDarkLevel;
+
+    if (showStars) {
       this.createStarfield();
     } else {
       this.stars = [];
       this.starSpeeds = [];
     }
 
-    if (this.gameMode === 'story') {
+    if (this.gameMode === 'editor' && editorBg) {
+      applyStoryBackground(this, GAME_WIDTH, GAME_HEIGHT, {
+        id: 'editor',
+        skyTop: editorBg.skyTop,
+        skyBottom: editorBg.skyBottom,
+        starColor: editorBg.starColor,
+        planetColor: 0x000000,
+        planetSize: 0,
+        planetX: 0.5,
+        accentColor: 0x44ff88,
+      });
+    } else if (this.gameMode === 'story') {
       const levelMeta = getLevelMeta(this.worldId, this.storyLevel, this.secretId);
       const theme = getBackgroundTheme(this.worldId, levelMeta.themeId);
       applyStoryBackground(this, GAME_WIDTH, GAME_HEIGHT, theme);
@@ -406,10 +494,10 @@ export class GameScene extends Phaser.Scene {
     this.darknessOverlay?.destroy();
     this.darknessOverlay = undefined;
     if (isDarkLevel) {
-      this.darknessOverlay = new DarknessOverlay(
-        this,
-        secretDef?.darkObstructionColor ?? 0x000000,
-      );
+      const obstructionColor = this.gameMode === 'editor'
+        ? (editorBg?.obstructionColor ?? 0x000000)
+        : (secretDef?.darkObstructionColor ?? 0x000000);
+      this.darknessOverlay = new DarknessOverlay(this, obstructionColor);
     }
 
     initAudio();
@@ -427,6 +515,12 @@ export class GameScene extends Phaser.Scene {
       this.darknessOverlay = undefined;
     });
 
+    if (this.carryScoreOnStart > 0) {
+      this.score = this.carryScoreOnStart;
+      this.scoreText.setText(`SCORE ${this.score}`);
+      this.carryScoreOnStart = 0;
+    }
+
     this.spawnAsteroid('lg');
     for (let i = 0; i < 4; i++) {
       this.time.delayedCall(100 + i * 400, () => this.spawnAsteroid());
@@ -437,9 +531,11 @@ export class GameScene extends Phaser.Scene {
     this.stars = [];
     this.starSpeeds = [];
 
-    const starTint = this.gameMode === 'story'
-      ? getBackgroundTheme(this.worldId, getLevelMeta(this.worldId, this.storyLevel, this.secretId).themeId).starColor
-      : getSurvivalBackgroundTheme(this.worldId).starColor;
+    const starTint = this.gameMode === 'editor' && this.editorArea
+      ? this.editorArea.background.starColor
+      : this.gameMode === 'story'
+        ? getBackgroundTheme(this.worldId, getLevelMeta(this.worldId, this.storyLevel, this.secretId).themeId).starColor
+        : getSurvivalBackgroundTheme(this.worldId).starColor;
 
     for (let i = 0; i < 80; i++) {
       const x = Phaser.Math.Between(0, GAME_WIDTH);
@@ -516,7 +612,8 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(hudTextDepth);
 
     const coinY = this.gameMode === 'story' ? 44 : 36;
-    this.coinText = this.add.text(16, coinY, formatRunCoinsLabel(0), {
+    const coinLabel = this.gameMode === 'editor' ? 'BONUS 0' : formatRunCoinsLabel(0);
+    this.coinText = this.add.text(16, coinY, coinLabel, {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '12px',
       color: '#ffcc00',
@@ -552,6 +649,16 @@ export class GameScene extends Phaser.Scene {
         align: 'right',
         wordWrap: { width: topLabelMaxWidth },
       }).setOrigin(1, 0).setScrollFactor(0).setDepth(hudTextDepth);
+    } else if (this.gameMode === 'editor') {
+      const name = this.editorLevel?.name ?? 'CUSTOM';
+      this.add.text(topLabelX, 12, name.toUpperCase(), {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '10px',
+        fontStyle: '700',
+        color: '#44ff88',
+        align: 'right',
+        wordWrap: { width: topLabelMaxWidth },
+      }).setOrigin(1, 0).setScrollFactor(0).setDepth(hudTextDepth);
     }
 
     this.healthBar = new HealthBar(this, GAME_WIDTH / 2, 58);
@@ -565,8 +672,10 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setScrollFactor(0).setDepth(hudTextDepth);
     this.layoutTopCenterHud();
     this.updateFireModeUI();
-    this.createSurvivalPowerUpHud();
-    this.createDeathBombHud();
+    if (this.gameMode !== 'editor') {
+      this.createSurvivalPowerUpHud();
+      this.createDeathBombHud();
+    }
     if (this.gameMode === 'survival') {
       this.time.delayedCall(SURVIVAL_INVENTORY_BOOST_WINDOW_MS, () => {
         this.inventoryBoostWindowClosed = true;
@@ -1181,8 +1290,13 @@ export class GameScene extends Phaser.Scene {
     const boss = bossObj as BossShip;
 
     // Shield / invincibility / boost: hit SFX only (boss is not destroyed by ramming).
+    // Overlap fires every frame while contacting, so throttle the SFX.
     if (this.player.isInvincible() || this.player.isBoosting() || this.player.isShielded()) {
-      playHitSfx();
+      const now = this.time.now;
+      if (now - this.bossRamHitSfxAt >= 450) {
+        this.bossRamHitSfxAt = now;
+        playHitSfx();
+      }
       if (this.player.isShielded() && !this.player.isInvincible() && !this.player.isBoosting()) {
         this.player.absorbHit();
       }
@@ -1279,13 +1393,23 @@ export class GameScene extends Phaser.Scene {
     pauseButtons.push(
       { label: 'ALMANAC', y: 0, color: 0x8899bb, onClick: () => this.showAlmanacFromPause() },
       { label: 'SETTINGS', y: 0, color: 0x8899bb, onClick: () => this.showSettingsFromPause() },
-      {
+    );
+
+    if (this.gameMode === 'editor') {
+      pauseButtons.push({
+        label: 'EDITOR',
+        y: 0,
+        color: 0xff4466,
+        onClick: () => this.showPauseConfirm('Return to the editor?', () => this.quitToEditor()),
+      });
+    } else {
+      pauseButtons.push({
         label: 'QUIT',
         y: 0,
         color: 0xff4466,
         onClick: () => this.showPauseConfirm('Return to main menu?', () => this.quitToTitle()),
-      },
-    );
+      });
+    }
 
     const buttonStartY = this.gameMode === 'story'
       ? GAME_HEIGHT / 2 - 20
@@ -1359,7 +1483,28 @@ export class GameScene extends Phaser.Scene {
     this.destroyAlmanacPanel();
     this.bankRunCoins();
     // GameScene.create() restarts main theme from the beginning.
-    restartGame(this, this.score, this.gameMode, this.storyLevel, this.worldId, this.secretId);
+    restartGame(
+      this,
+      this.score,
+      this.gameMode,
+      this.storyLevel,
+      this.worldId,
+      this.secretId,
+      this.customSlotIndex,
+      this.customSubAreaId,
+    );
+  }
+
+  private quitToEditor(): void {
+    this.isPaused = false;
+    this.pauseMenu?.destroy();
+    this.pauseMenu = undefined;
+    this.settingsPanel?.destroy();
+    this.settingsPanel = undefined;
+    this.destroyAlmanacPanel();
+    this.pauseConfirmOverlay?.destroy();
+    this.pauseConfirmOverlay = undefined;
+    goToEditorHub(this, this.customSlotIndex);
   }
 
   private showSettingsFromPause(): void {
@@ -1672,6 +1817,11 @@ export class GameScene extends Phaser.Scene {
   private checkSecretMilestones(): void {
     if (this.isGameOver || this.isPaused) return;
 
+    if (this.gameMode === 'editor') {
+      this.checkEditorMilestones();
+      return;
+    }
+
     if (this.gameMode === 'story' && !this.secretId) {
       for (const secret of getSecretsForWorld(this.worldId)) {
         if (
@@ -1696,6 +1846,25 @@ export class GameScene extends Phaser.Scene {
         } else {
           this.spawnWarpPanel();
         }
+      }
+    }
+  }
+
+  private checkEditorMilestones(): void {
+    if (!this.editorArea) return;
+
+    for (const finish of this.editorArea.misc.finishPanels) {
+      if (this.score >= finish.scoreThreshold && !this.editorSpawnedMiscIds.has(finish.id)) {
+        this.editorSpawnedMiscIds.add(finish.id);
+        this.spawnFinishPanel();
+      }
+    }
+
+    for (const warp of this.editorArea.misc.warpHoles) {
+      if (this.score >= warp.scoreThreshold && !this.editorSpawnedMiscIds.has(warp.id)) {
+        this.editorSpawnedMiscIds.add(warp.id);
+        this.editorPendingWarpSubAreaId = warp.subAreaId;
+        this.spawnWarpPanel();
       }
     }
   }
@@ -1795,7 +1964,34 @@ export class GameScene extends Phaser.Scene {
     _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
     panelObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
-    if (this.isGameOver || this.isPaused || !this.secretId) return;
+    if (this.isGameOver || this.isPaused) return;
+
+    if (this.gameMode === 'editor') {
+      const panel = panelObj as WarpPanel | FinishPanel;
+      const isFinish = panel instanceof FinishPanel;
+      panel.destroy();
+      if (isFinish) {
+        this.triggerVictory(true);
+        return;
+      }
+      const subAreaId = this.editorPendingWarpSubAreaId;
+      if (!subAreaId) return;
+      this.cameras.main.fadeOut(400, 0, 0, 0);
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+        this.scene.start('GameScene', {
+          mode: 'editor',
+          customSlotIndex: this.customSlotIndex,
+          customSubAreaId: subAreaId,
+          continueMusic: true,
+          carryScore: this.score,
+          level: 1,
+          worldId: 'world1',
+        });
+      });
+      return;
+    }
+
+    if (!this.secretId) return;
     const panel = panelObj as WarpPanel | FinishPanel;
     panel.destroy();
     this.triggerSecretVictory();
@@ -2126,6 +2322,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private checkLootMilestones(): void {
+    if (this.gameMode === 'editor' && this.editorArea && !this.editorArea.objects.lootBoxes.enabled) {
+      return;
+    }
     while (shouldSpawnLootAtScore(this.score, this.nextLootMilestone)) {
       this.pendingLootSpawns += 1;
       this.lastClaimedLootMilestone = this.nextLootMilestone;
@@ -2352,32 +2551,50 @@ export class GameScene extends Phaser.Scene {
         color: 0xffcc00,
         onClick: () => {
           this.bankRunCoins();
-          restartGame(this, this.score, this.gameMode, this.storyLevel, this.worldId, this.secretId);
+          restartGame(
+            this,
+            this.score,
+            this.gameMode,
+            this.storyLevel,
+            this.worldId,
+            this.secretId,
+            this.customSlotIndex,
+            this.customSubAreaId,
+          );
         },
       },
     ];
 
-    if (this.gameMode === 'story') {
+    if (this.gameMode === 'editor') {
       buttons.push({
-        label: 'LEVEL SELECT',
+        label: 'EDITOR',
         y: 0,
-        color: 0x8899bb,
+        color: 0xff4466,
+        onClick: () => goToEditorHub(this, this.customSlotIndex),
+      });
+    } else {
+      if (this.gameMode === 'story') {
+        buttons.push({
+          label: 'LEVEL SELECT',
+          y: 0,
+          color: 0x8899bb,
+          onClick: () => {
+            this.bankRunCoins();
+            goToLevelSelect(this, this.worldId);
+          },
+        });
+      }
+
+      buttons.push({
+        label: 'QUIT',
+        y: 0,
+        color: 0xff4466,
         onClick: () => {
           this.bankRunCoins();
-          goToLevelSelect(this, this.worldId);
+          goToTitleScreen(this);
         },
       });
     }
-
-    buttons.push({
-      label: 'QUIT',
-      y: 0,
-      color: 0xff4466,
-      onClick: () => {
-        this.bankRunCoins();
-        goToTitleScreen(this);
-      },
-    });
 
     const gameOverButtonY = this.gameMode === 'story'
       ? GAME_HEIGHT / 2 + 10
@@ -2390,7 +2607,9 @@ export class GameScene extends Phaser.Scene {
       color: '#8899bb',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
-    if (bankedCoins > 0) {
+    if (this.gameMode === 'editor') {
+      // No coin banking in editor.
+    } else if (bankedCoins > 0) {
       this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 58, `+${bankedCoins} COINS SAVED`, {
         fontFamily: 'Orbitron, sans-serif',
         fontSize: '14px',
@@ -2422,7 +2641,32 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    if (this.gameMode === 'editor') {
+      this.onEditorBossDefeated();
+      return;
+    }
+
     this.onSurvivalBossDefeated();
+  }
+
+  private onEditorBossDefeated(): void {
+    this.bossActive = false;
+    this.activeBossDefinition = null;
+    this.bossChargeRing?.destroy();
+    this.bossChargeRing = undefined;
+    this.bossSkillText?.destroy();
+    this.bossSkillText = undefined;
+    this.bossHealthBar.hide();
+    this.layoutTopCenterHud();
+
+    this.awardCoins(this.lastBossCoinReward, this.lastDefeatedBossX, this.lastDefeatedBossY);
+    this.editorBossesDefeated += 1;
+    this.editorBossTimer = 0;
+
+    const bossCount = this.editorArea?.enemies.bossCount ?? 0;
+    if (bossCount > 0 && this.editorBossesDefeated >= bossCount) {
+      this.triggerVictory(true);
+    }
   }
 
   private onSurvivalBossDefeated(): void {
@@ -2452,6 +2696,11 @@ export class GameScene extends Phaser.Scene {
     pauseMusic();
     this.physics.pause();
     this.player.stopMove();
+
+    if (this.gameMode === 'editor') {
+      this.showEditorVictory();
+      return;
+    }
 
     if (!isSecretClear) {
       this.awardCoins(this.lastBossCoinReward);
@@ -2567,6 +2816,63 @@ export class GameScene extends Phaser.Scene {
       ? GAME_HEIGHT / 2 - 40
       : GAME_HEIGHT / 2 - 10;
     for (const btn of victoryButtons) {
+      const { container } = createMenuButton(this, {
+        label: btn.label,
+        y: buttonY,
+        color: btn.color,
+        onClick: btn.onClick,
+      });
+      container.setX(GAME_WIDTH / 2);
+      root.add(container);
+      buttonY += 58;
+    }
+  }
+
+  private showEditorVictory(): void {
+    this.cameras.main.flash(300, 255, 204, 0, false);
+
+    const root = this.add.container(0, 0).setDepth(270).setScrollFactor(0);
+    this.victoryMenu = root;
+    root.add(this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.8));
+
+    const title = (this.editorLevel?.name ?? 'LEVEL').toUpperCase() + ' CLEAR!';
+    root.add(this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 100, title, {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '28px',
+      fontStyle: '900',
+      color: '#44ff88',
+    }).setOrigin(0.5));
+
+    root.add(this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 55, `Score: ${this.score}`, {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '16px',
+      color: '#8899bb',
+    }).setOrigin(0.5));
+
+    let buttonY = GAME_HEIGHT / 2 + 10;
+    for (const btn of [
+      {
+        label: 'RESTART',
+        color: 0xffcc00,
+        onClick: () => {
+          restartGame(
+            this,
+            this.score,
+            'editor',
+            this.storyLevel,
+            this.worldId,
+            undefined,
+            this.customSlotIndex,
+            this.customSubAreaId,
+          );
+        },
+      },
+      {
+        label: 'EDITOR',
+        color: 0xff4466,
+        onClick: () => goToEditorHub(this, this.customSlotIndex),
+      },
+    ]) {
       const { container } = createMenuButton(this, {
         label: btn.label,
         y: buttonY,
@@ -2832,6 +3138,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateStoryTimer(delta: number): void {
+    if (this.gameMode === 'editor') {
+      this.levelTimer += delta;
+      return;
+    }
     if (this.gameMode !== 'story' || this.secretId) return;
 
     this.levelTimer += delta;
@@ -2880,7 +3190,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showCoinPickup(x: number, y: number, amount: number): void {
-    const text = this.add.text(x, y, `+${amount} COINS`, {
+    const label = this.gameMode === 'editor' ? `+${amount} BONUS` : `+${amount} COINS`;
+    const text = this.add.text(x, y, label, {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '12px',
       fontStyle: '700',
@@ -2898,6 +3209,16 @@ export class GameScene extends Phaser.Scene {
 
   private awardCoins(amount: number, x?: number, y?: number): void {
     if (amount <= 0) return;
+    if (this.gameMode === 'editor') {
+      // Coins convert to bonus score points — never banked as wallet coins.
+      this.editorBonusPoints += amount;
+      this.addScore(amount);
+      this.updateCoinHud(true);
+      if (x !== undefined && y !== undefined) {
+        this.showCoinPickup(x, y, amount);
+      }
+      return;
+    }
     this.runCoins += amount;
     this.updateCoinHud(true);
     if (x !== undefined && y !== undefined) {
@@ -2906,7 +3227,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateCoinHud(animate = false): void {
-    this.coinText.setText(formatRunCoinsLabel(this.runCoins));
+    if (this.gameMode === 'editor') {
+      this.coinText.setText(`BONUS ${this.editorBonusPoints}`);
+    } else {
+      this.coinText.setText(formatRunCoinsLabel(this.runCoins));
+    }
     if (animate) {
       this.tweens.add({
         targets: this.coinText,
@@ -2919,6 +3244,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private bankRunCoins(): number {
+    if (this.gameMode === 'editor') {
+      this.runCoins = 0;
+      return 0;
+    }
     const amount = this.runCoins;
     if (amount > 0) {
       addCoins(amount);
@@ -3664,6 +3993,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private shouldSpawnComets(): boolean {
+    if (this.gameMode === 'editor') {
+      return (this.editorArea?.obstacles.comets.enabled === true) && canUseComets();
+    }
     // WISE (World 3) has comets; ISS / Dawn / Galilean do not.
     if (this.secretId === 'wise0855') return true;
     if (this.secretId) return false;
@@ -3693,16 +4025,19 @@ export class GameScene extends Phaser.Scene {
     if (this.isGameOver || this.isPaused || !this.shouldSpawnComets()) return;
     if (this.countCometsOnScreen() >= MAX_COMETS_ON_SCREEN) return;
 
-    const goldBonus = this.gameMode === 'survival' && hasSurvivalGoldSpawnBonus();
-    const frequent = this.hasFrequentComets();
-
-    let variant: 'normal' | 'gold' | undefined;
-    if (Math.random() < getGoldCometSpawnChance(goldBonus, frequent)) {
-      variant = 'gold';
-    } else if (Math.random() < getCometSpawnChance(frequent)) {
-      variant = 'normal';
+    let variant: 'normal' | 'gold' = 'normal';
+    if (this.gameMode === 'editor') {
+      variant = Math.random() < 0.15 ? 'gold' : 'normal';
     } else {
-      return;
+      const goldBonus = this.gameMode === 'survival' && hasSurvivalGoldSpawnBonus();
+      const frequent = this.hasFrequentComets();
+      if (Math.random() < getGoldCometSpawnChance(goldBonus, frequent)) {
+        variant = 'gold';
+      } else if (Math.random() < getCometSpawnChance(frequent)) {
+        variant = 'normal';
+      } else {
+        return;
+      }
     }
 
     const config = Comet.randomConfig(variant);
@@ -3712,6 +4047,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private shouldSpawnMines(): boolean {
+    if (this.gameMode === 'editor') {
+      return this.editorArea?.obstacles.mines.enabled === true;
+    }
     // Gray/Blue also appear in ISS / Dawn / Galilean / WISE secrets and W1–W2 Survival.
     if (
       this.secretId === 'iss'
@@ -3735,6 +4073,17 @@ export class GameScene extends Phaser.Scene {
 
   private pickMineVariant(): MineVariant | null {
     if (!this.shouldSpawnMines()) return null;
+
+    if (this.gameMode === 'editor') {
+      const variants: MineVariant[] = ['gray', 'blue'];
+      if (this.editorArea?.obstacles.redMines && canUseRedMines()) {
+        variants.push('red');
+      }
+      if (this.editorArea?.obstacles.purpleMines && canUsePurpleMines()) {
+        variants.push('purple');
+      }
+      return variants[Phaser.Math.Between(0, variants.length - 1)];
+    }
 
     // WISE: blue / gray / red from the start (no purple).
     if (this.secretId === 'wise0855') {
@@ -3769,7 +4118,8 @@ export class GameScene extends Phaser.Scene {
   private spawnMine(): void {
     if (this.isGameOver || this.isPaused || !this.shouldSpawnMines()) return;
     if (this.countMinesOnScreen() >= MAX_MINES_ON_SCREEN) return;
-    if (Math.random() >= MINE_SPAWN_CHANCE) return;
+    // Editor already applies its own chance before calling spawnMine.
+    if (this.gameMode !== 'editor' && Math.random() >= MINE_SPAWN_CHANCE) return;
 
     const variant = this.pickMineVariant();
     if (!variant) return;
@@ -4032,6 +4382,11 @@ export class GameScene extends Phaser.Scene {
     this.updateSurvivalBossSpawn(delta);
     this.cleanupOffscreen();
 
+    if (this.gameMode === 'editor') {
+      this.updateEditorSpawns(delta);
+      return;
+    }
+
     this.spawnTimer += delta;
     const asteroidInterval = getEscalatedAsteroidSpawnInterval(this.spawnInterval, this.score);
     if (this.spawnTimer >= asteroidInterval) {
@@ -4150,5 +4505,173 @@ export class GameScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  private updateEditorSpawns(delta: number): void {
+    const area = this.editorArea;
+    if (!area) return;
+
+    const elapsed = this.levelTimer;
+
+    // Asteroids
+    const rock = area.obstacles.asteroids;
+    if (rock.enabled) {
+      this.spawnTimer += delta;
+      const interval = getEffectiveIntervalMs(rock, this.score, elapsed);
+      if (this.spawnTimer >= interval) {
+        this.spawnTimer = 0;
+        this.spawnCount += 1;
+        this.spawnAsteroid(this.spawnCount % 4 === 0 ? 'lg' : undefined);
+      }
+    }
+
+    // Comets
+    const cometRule = area.obstacles.comets;
+    if (cometRule.enabled && canUseComets()) {
+      this.cometSpawnTimer += delta;
+      const interval = getEffectiveIntervalMs(cometRule, this.score, elapsed);
+      if (this.cometSpawnTimer >= interval) {
+        this.cometSpawnTimer = 0;
+        if (Math.random() < cometRule.chance) this.spawnComet();
+      }
+    }
+
+    // Mines
+    const mineRule = area.obstacles.mines;
+    if (mineRule.enabled) {
+      this.mineSpawnTimer += delta;
+      const interval = getEffectiveIntervalMs(mineRule, this.score, elapsed);
+      if (this.mineSpawnTimer >= interval) {
+        this.mineSpawnTimer = 0;
+        if (Math.random() < mineRule.chance) this.spawnMine();
+      }
+    }
+
+    // Hearts / power-ups
+    const tickPickup = (
+      rule: typeof area.objects.hearts,
+      timerKey: 'heartSpawnTimer' | 'powerStarSpawnTimer' | 'shieldSpawnTimer' | 'invisibilitySpawnTimer',
+      spawn: () => void,
+    ) => {
+      if (!rule.enabled) return;
+      this[timerKey] += delta;
+      const interval = getEffectiveIntervalMs(rule, this.score, elapsed);
+      if (this[timerKey] >= interval) {
+        this[timerKey] = 0;
+        spawn();
+      }
+    };
+
+    tickPickup(area.objects.hearts, 'heartSpawnTimer', () => this.spawnHeart());
+    tickPickup(area.objects.powerStar, 'powerStarSpawnTimer', () => this.spawnPowerStar());
+    if (isPowerUpOwned('shield')) {
+      tickPickup(area.objects.shield, 'shieldSpawnTimer', () => this.spawnShieldPickup());
+    }
+    if (isPowerUpOwned('invisibility')) {
+      tickPickup(area.objects.invisibility, 'invisibilitySpawnTimer', () => this.spawnInvisibilityPickup());
+    }
+
+    // Survival enemies
+    if (!this.bossActive) {
+      for (const rule of area.enemies.survival) {
+        if (!rule.enabled) continue;
+        if (rule.id === 'mineCarrier' && !canUseMineCarriers()) continue;
+        const id = String(rule.id);
+        this.editorSurvivalTimers[id] = (this.editorSurvivalTimers[id] ?? 0) + delta;
+        const interval = getEffectiveIntervalMs(rule, this.score, elapsed);
+        if (this.editorSurvivalTimers[id] >= interval) {
+          this.editorSurvivalTimers[id] = 0;
+          const kind = rule.id as EnemyKind;
+          const counts = this.getEnemyCounts();
+          const onScreen = counts[kind] ?? 0;
+          if (onScreen < rule.maxOnScreen) {
+            this.spawnEnemy(kind);
+          }
+        }
+      }
+
+      for (const rule of area.enemies.story) {
+        if (!rule.enabled || !isStoryEnemyIdUnlocked(rule.id)) continue;
+        const parsed = parseEditorStoryId(rule.id);
+        if (!parsed) continue;
+        const id = String(rule.id);
+        this.editorStoryTimers[id] = (this.editorStoryTimers[id] ?? 0) + delta;
+        const interval = getEffectiveIntervalMs(rule, this.score, elapsed);
+        if (this.editorStoryTimers[id] >= interval) {
+          this.editorStoryTimers[id] = 0;
+          const counts = this.getStoryEnemyCounts();
+          if ((counts[parsed.level] ?? 0) >= rule.maxOnScreen) continue;
+          if (parsed.galilean || isGalileanMoonLevel(parsed.level)) {
+            const definition = getGalileanMoonEnemyDefinition(parsed.level);
+            this.addStoryEnemy(definition);
+          } else {
+            // Temporarily use target world for definition lookup.
+            const prevWorld = this.worldId;
+            this.worldId = parsed.worldId;
+            this.spawnSurvivalStoryEnemy(parsed.level);
+            this.worldId = prevWorld;
+          }
+        }
+      }
+
+      const enabledBosses = area.enemies.bosses.filter((r) => r.enabled && isBossIdUnlocked(r.id));
+      if (enabledBosses.length > 0) {
+        const bossCount = area.enemies.bossCount;
+        const canSpawnMore = bossCount === 0 || this.editorBossesDefeated < bossCount;
+        if (canSpawnMore && this.bossShips.countActive(true) === 0) {
+          // Use the shortest interval among enabled bosses; pick one when ready.
+          for (const bossRule of enabledBosses) {
+            const key = String(bossRule.id);
+            this.editorSurvivalTimers[`boss:${key}`] = (this.editorSurvivalTimers[`boss:${key}`] ?? 0) + delta;
+          }
+          this.editorBossTimer += delta;
+          const minInterval = Math.min(
+            ...enabledBosses.map((r) => getEffectiveIntervalMs(r, this.score, elapsed)),
+          );
+          if (this.editorBossTimer >= minInterval) {
+            this.editorBossTimer = 0;
+            const pick = Phaser.Utils.Array.GetRandom(enabledBosses);
+            this.spawnEditorBoss(pick.id);
+          }
+        }
+      }
+    }
+  }
+
+  private spawnEditorBoss(bossId: string): void {
+    if (this.bossActive || this.bossShips.countActive(true) > 0) return;
+    const parsed = parseEditorBossId(bossId);
+    if (!parsed || !isBossIdUnlocked(parsed.id)) return;
+
+    const levelConfig = getBossConfigForLevel(parsed.level);
+    const definition = getBossDefinition(parsed.worldId, parsed.level);
+    const scaledHealth = computeSurvivalBossHealth(
+      definition.baseHealth,
+      this.player.getPowerScore(),
+      this.score,
+    );
+    const scaledPoints = computeSurvivalBossPoints(definition.points, this.score);
+
+    this.activeBossDefinition = definition;
+    this.bossMaxHealth = scaledHealth;
+    this.lastBossCoinReward = levelConfig.coinReward;
+    this.bossActive = true;
+
+    this.createBossInstance(definition, scaledHealth, scaledHealth, scaledPoints);
+
+    this.cameras.main.shake(400, 0.012);
+    const warning = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, definition.bossName.toUpperCase(), {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '24px',
+      fontStyle: '900',
+      color: '#ff2244',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(150);
+
+    this.tweens.add({
+      targets: warning,
+      alpha: 0,
+      duration: 2000,
+      onComplete: () => warning.destroy(),
+    });
   }
 }

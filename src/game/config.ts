@@ -5,6 +5,8 @@ import { MenuScene } from './scenes/MenuScene';
 import { ModeSelectScene } from './scenes/ModeSelectScene';
 import { WorldSelectScene } from './scenes/WorldSelectScene';
 import { LevelSelectScene } from './scenes/LevelSelectScene';
+import { EditorHubScene } from './scenes/EditorHubScene';
+import { EditorEditScene } from './scenes/EditorEditScene';
 import { LaunchCutsceneScene } from './scenes/LaunchCutsceneScene';
 import { GameScene } from './scenes/GameScene';
 
@@ -16,6 +18,9 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   width: GAME_WIDTH,
   height: GAME_HEIGHT,
   backgroundColor: '#0a0e27',
+  dom: {
+    createContainer: true,
+  },
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -41,6 +46,8 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     ModeSelectScene,
     WorldSelectScene,
     LevelSelectScene,
+    EditorHubScene,
+    EditorEditScene,
     LaunchCutsceneScene,
     GameScene,
   ],

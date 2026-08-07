@@ -1,4 +1,5 @@
 import { canAfford, spendCoins } from './coins';
+import { getEquippedShapeId, shipTextureKey } from './playerShapes';
 import type { RocketSkinAppearanceId } from './rocketAppearances';
 
 const OWNED_SKINS_KEY = 'star-blaster-owned-skins';
@@ -180,7 +181,13 @@ export function purchaseSkin(id: string): boolean {
 
 export function getEquippedSkinTextureKey(): string {
   const equipped = getEquippedSkinId();
-  return getSkinById(equipped)?.textureKey ?? 'rocket-classic';
+  const skinId = getSkinById(equipped)?.id ?? DEFAULT_SKIN_ID;
+  return shipTextureKey(getEquippedShapeId(), skinId);
+}
+
+/** Texture key for a specific shape + skin combo (baked in BootScene). */
+export function getShipTextureKey(shapeId: string, skinId: string): string {
+  return shipTextureKey(shapeId, skinId);
 }
 
 export function hasSurvivalGoldSpawnBonus(): boolean {

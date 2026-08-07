@@ -381,7 +381,8 @@ export function drawAssembledRocket(
 ): void {
   const includeCannon = options.includeCannon === true;
   const lowerWingsDeployed = options.lowerWingsDeployed !== false;
-  drawUpperModule(g, p, originX, originY, { wingsDeployed: false });
+  const wingsDeployed = options.wingsDeployed === true;
+  drawUpperModule(g, p, originX, originY, { wingsDeployed });
   drawLowerModule(g, p, originX, originY + 28, { includeCannon, lowerWingsDeployed });
 }
 
@@ -403,6 +404,15 @@ export function drawLowerOnly(
   drawLowerModule(g, p, originX, originY, { includeCannon: false });
 }
 
+export function makeRainbowPalette(bodyColor: number, engineColor: number): RocketSkinPalette {
+  return paletteFromColors(
+    shadeColor(bodyColor, 0.38),
+    bodyColor,
+    engineColor,
+    brightenColor(engineColor, 1.28),
+  );
+}
+
 export function drawElectricRainbowRocket(
   g: Phaser.GameObjects.Graphics,
   bodyColor: number,
@@ -411,15 +421,10 @@ export function drawElectricRainbowRocket(
   originY = 0,
   options: ModuleDrawOptions = {},
 ): void {
-  const p = paletteFromColors(
-    shadeColor(bodyColor, 0.38),
-    bodyColor,
-    engineColor,
-    brightenColor(engineColor, 1.28),
-  );
-  drawAssembledRocket(g, p, originX, originY, {
+  drawAssembledRocket(g, makeRainbowPalette(bodyColor, engineColor), originX, originY, {
     includeCannon: options.includeCannon === true,
     lowerWingsDeployed: options.lowerWingsDeployed,
+    wingsDeployed: options.wingsDeployed,
   });
 }
 

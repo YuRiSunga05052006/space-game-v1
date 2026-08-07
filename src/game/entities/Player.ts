@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { startInvincibilityTheme, stopInvincibilityTheme } from '../audioManager';
+import { getEquippedShapeId } from '../playerShapes';
 import { getEquippedSkinTextureKey, getEquippedSkinId, PLAYER_SKINS } from '../playerSkins';
 import {
-  drawElectricRainbowRocket,
   escapeUpperTextureKey,
   getRainbowCyclePhase,
   getThrusterTints,
   lowerModuleTextureKey,
+  makeRainbowPalette,
   ROCKET_CANNON_OFFSET_Y,
   ROCKET_CANNON_TEXTURE_KEY,
   ROCKET_ENGINE_OFFSET_Y,
@@ -18,6 +19,7 @@ import {
   ROCKET_UPPER_OFFSET_Y,
   sampleRainbowColor,
 } from '../rocketAppearances';
+import { drawShapeAssembled } from '../rocketShapes';
 import {
   buildFirePattern,
   computePlayerPowerScore,
@@ -215,10 +217,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.rainbowShipGfx.setVisible(true);
     this.rainbowShipGfx.setAlpha(this.invisible ? this.alpha : 1);
 
-    drawElectricRainbowRocket(
+    drawShapeAssembled(
+      getEquippedShapeId(),
       this.rainbowShipGfx,
-      bodyColor,
-      engineColor,
+      makeRainbowPalette(bodyColor, engineColor),
       -ROCKET_TEXTURE_WIDTH / 2,
       -ROCKET_TEXTURE_HEIGHT / 2,
     );
