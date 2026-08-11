@@ -75,6 +75,7 @@ export class BootScene extends Phaser.Scene {
     this.createBossSpecialLaserTexture();
     this.createLootBoxTexture();
     this.createHeavyBulletTexture();
+    this.createIceBulletTexture();
     this.createSeekerDroneTexture();
     this.createKamikazeWaspTexture();
     this.createPlasmaTurretTexture();
@@ -352,6 +353,23 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(0xffcc88, 0.9);
     g.fillRoundedRect(2, 2, 6, 8, 2);
     g.generateTexture('bullet-heavy', 10, 20);
+    g.destroy();
+  }
+
+  /** Cold ice-blue laser — distinct from default cyan (0x00ffcc) and heavy orange. */
+  private createIceBulletTexture(): void {
+    const g = this.make.graphics({ x: 0, y: 0 }, false);
+    const w = 8;
+    const h = 18;
+    g.fillStyle(0x4ec8ff, 0.55);
+    g.fillRoundedRect(0, 0, w, h, 3);
+    g.fillStyle(0x66ddff, 1);
+    g.fillRoundedRect(1, 1, 6, 16, 3);
+    g.fillStyle(0xe8f9ff, 0.95);
+    g.fillRoundedRect(2, 3, 4, 7, 2);
+    g.fillStyle(0xffffff, 0.95);
+    g.fillRoundedRect(3, 4, 2, 3, 1);
+    g.generateTexture('bullet-ice', w, h);
     g.destroy();
   }
 

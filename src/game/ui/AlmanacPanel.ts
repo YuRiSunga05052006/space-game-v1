@@ -11,14 +11,16 @@ import {
 import { createMenuButton } from './MenuButtons';
 import { playSfx } from '../audioManager';
 
-const SCROLL_TOP = 148;
-const SCROLL_HEIGHT = 500;
+const SCROLL_TOP = 172;
+const SCROLL_HEIGHT = 476;
 const SECTION_HEADER_HEIGHT = 34;
 const ENTRY_HEIGHT = 92;
 const ENTRY_GAP = 8;
 const TAB_Y = 108;
-const TAB_WIDTH = 88;
-const TAB_GAP = 6;
+const TAB_ROW_HEIGHT = 30;
+const TAB_GAP = 4;
+const TAB_SIDE_PAD = 10;
+const TABS_PER_ROW = 5;
 
 export interface AlmanacPanelOptions {
   onBack: () => void;
@@ -167,24 +169,32 @@ export function createAlmanacPanel(
     tabContainers.forEach((tab) => tab.destroy());
     tabContainers.length = 0;
 
-    const totalWidth = ALMANAC_PAGES.length * TAB_WIDTH + (ALMANAC_PAGES.length - 1) * TAB_GAP;
-    let tabX = GAME_WIDTH / 2 - totalWidth / 2 + TAB_WIDTH / 2;
+    const available = GAME_WIDTH - TAB_SIDE_PAD * 2;
+    const cols = Math.min(TABS_PER_ROW, ALMANAC_PAGES.length);
+    const tabWidth = Math.floor((available - (cols - 1) * TAB_GAP) / cols);
 
-    for (const page of ALMANAC_PAGES) {
+    ALMANAC_PAGES.forEach((page, index) => {
+      const row = Math.floor(index / TABS_PER_ROW);
+      const col = index % TABS_PER_ROW;
+      const rowPages = Math.min(TABS_PER_ROW, ALMANAC_PAGES.length - row * TABS_PER_ROW);
+      const rowWidth = rowPages * tabWidth + (rowPages - 1) * TAB_GAP;
+      const tabX = GAME_WIDTH / 2 - rowWidth / 2 + tabWidth / 2 + col * (tabWidth + TAB_GAP);
+      const tabY = TAB_Y + row * TAB_ROW_HEIGHT;
+
       const unlocked = isAlmanacPageUnlocked(page.id);
       const active = page.id === currentPage;
-      const tab = scene.add.container(tabX, TAB_Y);
+      const tab = scene.add.container(tabX, tabY);
       const bg = scene.add.graphics();
       const color = active ? 0x00d4ff : unlocked ? 0x334455 : 0x222233;
       bg.fillStyle(color, active ? 0.25 : 0.15);
-      bg.fillRoundedRect(-TAB_WIDTH / 2, -14, TAB_WIDTH, 28, 6);
+      bg.fillRoundedRect(-tabWidth / 2, -12, tabWidth, 24, 6);
       bg.lineStyle(1, active ? 0x00d4ff : 0x445566, active ? 1 : 0.6);
-      bg.strokeRoundedRect(-TAB_WIDTH / 2, -14, TAB_WIDTH, 28, 6);
+      bg.strokeRoundedRect(-tabWidth / 2, -12, tabWidth, 24, 6);
       tab.add(bg);
 
       const label = scene.add.text(0, 0, page.label, {
         fontFamily: 'Orbitron, sans-serif',
-        fontSize: '8px',
+        fontSize: '7px',
         fontStyle: '700',
         color: unlocked ? (active ? '#00d4ff' : '#8899aa') : '#445566',
       }).setOrigin(0.5);
@@ -192,7 +202,7 @@ export function createAlmanacPanel(
 
       if (unlocked) {
         tab.setInteractive(
-          new Phaser.Geom.Rectangle(-TAB_WIDTH / 2, -14, TAB_WIDTH, 28),
+          new Phaser.Geom.Rectangle(-tabWidth / 2, -12, tabWidth, 24),
           Phaser.Geom.Rectangle.Contains,
         );
         tab.input!.cursor = 'pointer';
@@ -208,8 +218,7 @@ export function createAlmanacPanel(
 
       root.add(tab);
       tabContainers.push(tab);
-      tabX += TAB_WIDTH + TAB_GAP;
-    }
+    });
   };
 
   drawTabs();

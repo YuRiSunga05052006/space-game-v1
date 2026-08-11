@@ -703,6 +703,52 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.boostGlow.strokeCircle(0, 0, 28);
   }
 
+  /**
+   * Sampled thruster lights for obstruction punch-outs.
+   * Intensity tracks particle alpha; dead particles are skipped.
+   * Capped + strided so dark levels stay smooth (smoke is omitted — too dense).
+   */
+  collectTrailDarknessLights(
+    trailRadius: number,
+  ): Array<{ x: number; y: number; radius: number; intensity: number; quality: 'simple' }> {
+    const lights: Array<{
+      x: number;
+      y: number;
+      radius: number;
+      intensity: number;
+      quality: 'simple';
+    }> = [];
+
+    const emitter = this.thruster;
+    if (!emitter || !emitter.active || !emitter.visible) return lights;
+
+    const maxLights = 12;
+    const alive = emitter.getAliveParticleCount();
+    if (alive <= 0) return lights;
+
+    // Keep roughly maxLights samples evenly across the living trail.
+    const stride = Math.max(1, Math.ceil(alive / maxLights));
+    let index = 0;
+    emitter.forEachAlive((particle) => {
+      const take = index % stride === 0;
+      index += 1;
+      if (!take || lights.length >= maxLights) return;
+
+      const alpha = particle.alpha;
+      if (alpha <= 0.05) return;
+      const scale = Math.max(particle.scaleX, particle.scaleY);
+      lights.push({
+        x: particle.x,
+        y: particle.y,
+        radius: trailRadius * Math.max(0.4, Math.min(1.35, scale)),
+        intensity: Math.min(1, alpha),
+        quality: 'simple',
+      });
+    }, this);
+
+    return lights;
+  }
+
   destroy(fromScene?: boolean): void {
     this.deactivateInvincibility();
     this.deactivateShield(false);

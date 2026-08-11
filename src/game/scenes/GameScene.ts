@@ -15,6 +15,12 @@ import {
 import { FirePlume, FIRE_DAMAGE, FIRE_TICK_MS } from '../entities/FirePlume';
 import { StoryEnemy, storyEnemyNeedsFire } from '../entities/StoryEnemy';
 import { BossShip } from '../entities/BossShip';
+import {
+  applyChill,
+  applyChillAfterAi,
+  applyChillDriftVelocity,
+  applyChillScaleToVelocity,
+} from '../chill';
 import { Wormhole } from '../entities/Wormhole';
 import { FinishPanel } from '../entities/FinishPanel';
 import { WarpPanel } from '../entities/WarpPanel';
@@ -107,6 +113,7 @@ import {
   MAX_COMETS_ON_SCREEN,
   MINE_SPAWN_CHANCE,
   MAX_MINES_ON_SCREEN,
+  MAX_MINES_PER_VARIANT_EDITOR,
 } from '../coinDrops';
 import { unlockLevel, isLevelUnlocked, getMaxLevelSlots } from '../storyProgress';
 import {
@@ -335,6 +342,8 @@ export class GameScene extends Phaser.Scene {
   private editorSurvivalTimers: Record<string, number> = {};
   private editorStoryTimers: Record<string, number> = {};
   private editorMineTimers: Record<string, number> = {};
+  /** Cap-blocked editor mine spawns waiting for a free slot (chance already rolled). */
+  private editorMinePending: Record<string, boolean> = {};
   private editorBossTimer = 0;
 
   constructor() {
@@ -453,6 +462,7 @@ export class GameScene extends Phaser.Scene {
     this.editorSurvivalTimers = {};
     this.editorStoryTimers = {};
     this.editorMineTimers = {};
+    this.editorMinePending = {};
     this.editorBossTimer = 0;
 
     if (this.gameMode === 'editor' && !this.editorArea) {
@@ -1230,6 +1240,7 @@ export class GameScene extends Phaser.Scene {
     const bullet = bulletObj as Phaser.Physics.Arcade.Sprite;
     const boss = bossObj as BossShip;
     const damage = (bullet.getData('damage') as number) ?? 1;
+    const chill = bullet.getData('chill') === true;
 
     if (boss.takeDamage(damage)) {
       const { x, y } = boss;
@@ -1245,21 +1256,30 @@ export class GameScene extends Phaser.Scene {
       playHitSfx();
       this.bossHealthRemaining = boss.health;
       this.bossHealthBar.setHp(boss.health);
+      if (chill) applyChill(boss);
     }
     this.consumeBulletHit(bullet);
   }
 
   private applyBulletToScoredEnemy(
     bullet: Phaser.Physics.Arcade.Sprite,
-    enemy: { takeDamage(amount: number): boolean; points: number; x: number; y: number },
+    enemy: {
+      takeDamage(amount: number): boolean;
+      points: number;
+      x: number;
+      y: number;
+    },
     explosionCount: number,
   ): void {
     const damage = (bullet.getData('damage') as number) ?? 1;
+    const chill = bullet.getData('chill') === true;
     playHitSfx();
     if (enemy.takeDamage(damage)) {
       this.addScore(enemy.points);
       this.spawnExplosion(enemy.x, enemy.y, explosionCount);
       this.tryAwardEnemyCoins(enemy.x, enemy.y);
+    } else if (chill) {
+      applyChill(enemy as Phaser.Physics.Arcade.Sprite);
     }
     this.consumeBulletHit(bullet);
   }
@@ -3259,6 +3279,7 @@ export class GameScene extends Phaser.Scene {
     this.bossShips.children.each((child) => {
       const boss = child as BossShip;
       boss.updateMovement();
+      applyChillScaleToVelocity(boss, time);
       boss.updateSpecial(time);
       boss.tryFire(time, this.player.x, this.player.y);
       this.updateBossChargeRing(boss);
@@ -3839,32 +3860,45 @@ export class GameScene extends Phaser.Scene {
     const py = this.player.y;
 
     this.storyEnemies.children.each((child) => {
-      (child as StoryEnemy).updateEnemy(time, px, py, delta);
+      const enemy = child as StoryEnemy;
+      enemy.updateEnemy(time, px, py, delta);
+      applyChillScaleToVelocity(enemy, time);
       return true;
     });
 
     this.spiderShips.children.each((child) => {
-      (child as SpiderShip).tryFire(time, px, py);
+      const spider = child as SpiderShip;
+      spider.tryFire(time, px, py);
+      applyChillDriftVelocity(spider, time);
       return true;
     });
 
     this.seekerDrones.children.each((child) => {
-      (child as SeekerDrone).updateSeeker(px, py, delta);
+      const seeker = child as SeekerDrone;
+      seeker.updateSeeker(px, py, delta);
+      applyChillScaleToVelocity(seeker, time);
       return true;
     });
 
     this.kamikazeWasps.children.each((child) => {
-      (child as KamikazeWasp).updateWasp(time, delta);
+      const wasp = child as KamikazeWasp;
+      wasp.updateWasp(time, delta);
+      // Wasp refreshes X zigzag each frame; Y is drift-only.
+      applyChillAfterAi(wasp, time, { x: true, y: false });
       return true;
     });
 
     this.plasmaTurrets.children.each((child) => {
-      (child as PlasmaTurret).tryFire(time, px, py);
+      const turret = child as PlasmaTurret;
+      turret.tryFire(time, px, py);
+      applyChillDriftVelocity(turret, time);
       return true;
     });
 
     this.flamethrowerShips.children.each((child) => {
-      (child as FlamethrowerShip).tryFire(time, px, py);
+      const ship = child as FlamethrowerShip;
+      ship.tryFire(time, px, py);
+      applyChillDriftVelocity(ship, time);
       return true;
     });
 
@@ -3874,7 +3908,9 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.mineCarriers.children.each((child) => {
-      (child as MineCarrier).updateCarrier(px, py, delta);
+      const carrier = child as MineCarrier;
+      carrier.updateCarrier(px, py, delta);
+      applyChillScaleToVelocity(carrier, time);
       return true;
     });
 
@@ -4002,6 +4038,7 @@ export class GameScene extends Phaser.Scene {
       body.setOffset(isHeavy ? 1 : 2, isHeavy ? 2 : 2);
       bullet.setData('damage', spawn.damage);
       bullet.setData('pierce', spawn.pierce);
+      bullet.setData('chill', spawn.chill === true);
       bullet.setRotation(spawn.angle + Math.PI / 2);
       bullet.setVelocity(
         Math.cos(spawn.angle) * spawn.speed,
@@ -4261,13 +4298,41 @@ export class GameScene extends Phaser.Scene {
     return this.secretId === 'wise0855' ? undefined : this.storyLevel;
   }
 
-  private countMinesOnScreen(): number {
-    return this.mines.countActive(true);
+  /** Gray / red / purple only — blue mines do not count toward the mine limit. */
+  private countLimitedMinesOnScreen(): number {
+    let count = 0;
+    this.mines.children.each((child) => {
+      const mine = child as Mine;
+      if (mine.active && mine.variant !== 'blue') count += 1;
+      return true;
+    });
+    return count;
+  }
+
+  private countMinesOfVariant(variant: MineVariant): number {
+    let count = 0;
+    this.mines.children.each((child) => {
+      const mine = child as Mine;
+      if (mine.active && mine.variant === variant) count += 1;
+      return true;
+    });
+    return count;
+  }
+
+  /** Editor play: scale total cap by enabled limited (non-blue) mine colors. */
+  private getEditorMineCap(): number {
+    const o = this.editorArea?.obstacles;
+    if (!o) return MAX_MINES_ON_SCREEN;
+    let enabled = 0;
+    if (o.grayMines.enabled) enabled += 1;
+    if (o.redMines.enabled && canUseRedMines()) enabled += 1;
+    if (o.purpleMines.enabled && canUsePurpleMines()) enabled += 1;
+    if (enabled === 0) return MAX_MINES_ON_SCREEN;
+    return Math.max(MAX_MINES_ON_SCREEN, enabled * MAX_MINES_PER_VARIANT_EDITOR);
   }
 
   private spawnMine(): void {
     if (this.isGameOver || this.isPaused || !this.shouldSpawnMines()) return;
-    if (this.countMinesOnScreen() >= MAX_MINES_ON_SCREEN) return;
     if (Math.random() >= MINE_SPAWN_CHANCE) return;
 
     const variant = this.pickMineVariant();
@@ -4275,16 +4340,27 @@ export class GameScene extends Phaser.Scene {
     this.spawnMineOfVariant(variant);
   }
 
-  private spawnMineOfVariant(variant: MineVariant): void {
-    if (this.isGameOver || this.isPaused) return;
-    if (this.countMinesOnScreen() >= MAX_MINES_ON_SCREEN) return;
-    if (variant === 'red' && !canUseRedMines()) return;
-    if (variant === 'purple' && !canUsePurpleMines()) return;
+  /** @returns true if a mine was spawned. */
+  private spawnMineOfVariant(variant: MineVariant): boolean {
+    if (this.isGameOver || this.isPaused) return false;
+    if (variant === 'red' && !canUseRedMines()) return false;
+    if (variant === 'purple' && !canUsePurpleMines()) return false;
+
+    // Blue mines ignore the on-screen mine limit entirely.
+    if (variant !== 'blue') {
+      if (this.gameMode === 'editor') {
+        if (this.countMinesOfVariant(variant) >= MAX_MINES_PER_VARIANT_EDITOR) return false;
+        if (this.countLimitedMinesOnScreen() >= this.getEditorMineCap()) return false;
+      } else if (this.countLimitedMinesOnScreen() >= MAX_MINES_ON_SCREEN) {
+        return false;
+      }
+    }
 
     const config = Mine.randomConfig(variant);
     const mine = new Mine(this, config);
     this.mines.add(mine);
     mine.setVelocity(config.velocityX, config.velocityY);
+    return true;
   }
 
   private isMovementInputHeld(): boolean {
@@ -4332,6 +4408,11 @@ export class GameScene extends Phaser.Scene {
       halfWidth: LIGHT_RADIUS.playerBeamHalfWidth,
       intensity: 0.9,
     });
+
+    // Trail glow: sampled thruster particles (capped) so obstruction stays cheap.
+    for (const light of this.player.collectTrailDarknessLights(LIGHT_RADIUS.trail)) {
+      circles.push(light);
+    }
 
     const pushActive = (
       group: Phaser.Physics.Arcade.Group,
@@ -4703,7 +4784,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Mines — each color has its own spawn rule.
+    // Mines — each color has its own spawn rule / budget so groups don't starve each other.
     const tickMineRule = (
       rule: typeof area.obstacles.blueMines,
       variant: MineVariant,
@@ -4713,9 +4794,27 @@ export class GameScene extends Phaser.Scene {
       const key = variant;
       this.editorMineTimers[key] = (this.editorMineTimers[key] ?? 0) + delta;
       const interval = getEffectiveIntervalMs(rule, this.score, elapsed);
-      if (this.editorMineTimers[key] >= interval) {
+
+      // Cap-blocked: chance already accepted — retry without re-rolling.
+      if (this.editorMinePending[key]) {
+        if (this.spawnMineOfVariant(variant)) {
+          this.editorMinePending[key] = false;
+          this.editorMineTimers[key] = 0;
+        }
+        return;
+      }
+
+      if (this.editorMineTimers[key] < interval) return;
+
+      // Chance miss: wait a full interval. Cap miss: pending until a slot frees up.
+      if (Math.random() >= rule.chance) {
         this.editorMineTimers[key] = 0;
-        if (Math.random() < rule.chance) this.spawnMineOfVariant(variant);
+        return;
+      }
+      if (this.spawnMineOfVariant(variant)) {
+        this.editorMineTimers[key] = 0;
+      } else {
+        this.editorMinePending[key] = true;
       }
     };
     tickMineRule(area.obstacles.blueMines, 'blue', true);

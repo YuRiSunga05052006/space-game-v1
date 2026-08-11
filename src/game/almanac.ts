@@ -52,7 +52,16 @@ export type AlmanacCategory =
   | 'enemy'
   | 'boss'
   | 'mine';
-export type AlmanacPage = 'shared' | 'world1' | 'world2' | 'world3';
+export type AlmanacPage =
+  | 'shared'
+  | 'world1'
+  | 'world2'
+  | 'world3'
+  | 'world4'
+  | 'world5'
+  | 'world6'
+  | 'world7'
+  | 'world8';
 
 export interface AlmanacEntry {
   id: string;
@@ -401,6 +410,26 @@ const PAGE_SECTIONS: Record<AlmanacPage, { label: string; category: AlmanacCateg
     { label: 'STORY ENEMIES', category: 'storyEnemy' },
     { label: 'BOSSES', category: 'boss' },
   ],
+  world4: [
+    { label: 'STORY ENEMIES', category: 'storyEnemy' },
+    { label: 'BOSSES', category: 'boss' },
+  ],
+  world5: [
+    { label: 'STORY ENEMIES', category: 'storyEnemy' },
+    { label: 'BOSSES', category: 'boss' },
+  ],
+  world6: [
+    { label: 'STORY ENEMIES', category: 'storyEnemy' },
+    { label: 'BOSSES', category: 'boss' },
+  ],
+  world7: [
+    { label: 'STORY ENEMIES', category: 'storyEnemy' },
+    { label: 'BOSSES', category: 'boss' },
+  ],
+  world8: [
+    { label: 'STORY ENEMIES', category: 'storyEnemy' },
+    { label: 'BOSSES', category: 'boss' },
+  ],
 };
 
 export const ALMANAC_PAGES: AlmanacPageInfo[] = [
@@ -408,12 +437,18 @@ export const ALMANAC_PAGES: AlmanacPageInfo[] = [
   { id: 'world1', label: 'WORLD 1' },
   { id: 'world2', label: 'WORLD 2' },
   { id: 'world3', label: 'WORLD 3' },
+  { id: 'world4', label: 'WORLD 4' },
+  { id: 'world5', label: 'WORLD 5' },
+  { id: 'world6', label: 'WORLD 6' },
+  { id: 'world7', label: 'WORLD 7' },
+  { id: 'world8', label: 'WORLD 8' },
 ];
 
 export function isAlmanacPageUnlocked(page: AlmanacPage): boolean {
   if (page === 'shared' || page === 'world1') return true;
   if (page === 'world2') return isWorld2Unlocked();
   if (page === 'world3') return isWorld3Unlocked();
+  // Worlds 4–8: visible in the tab bar, locked until those worlds ship.
   return false;
 }
 

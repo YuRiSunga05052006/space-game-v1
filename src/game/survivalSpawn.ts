@@ -30,7 +30,7 @@ const WORLD2_STORY_ENEMY_UNLOCK_SCORES: Record<number, number> = {
 };
 
 const WORLD3_STORY_ENEMY_UNLOCK_SCORES: Record<number, number> = Object.fromEntries(
-  Array.from({ length: 18 }, (_, i) => [21 + i, 1000 + i * 1000]),
+  Array.from({ length: 18 }, (_, i) => [21 + i, 0 + i * 1000]),
 );
 
 const WORLD_SURVIVAL_CONFIG: Record<string, WorldSurvivalConfig> = {

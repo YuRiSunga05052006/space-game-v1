@@ -1,3 +1,5 @@
+import { ICE_BULLET_CHANCE } from './chill';
+
 export interface WeaponLoadout {
   fireCooldownMs: number;
   bulletSpeed: number;
@@ -10,6 +12,7 @@ export interface WeaponLoadout {
   plasmaStream: boolean;
   scatterBurst: boolean;
   heavySlug: boolean;
+  iceBullet: boolean;
 }
 
 export interface BulletSpawn {
@@ -20,6 +23,8 @@ export interface BulletSpawn {
   damage: number;
   pierce: number;
   texture: string;
+  /** Ice Bullet chill on hit. */
+  chill?: boolean;
 }
 
 export interface Weapon {
@@ -43,6 +48,7 @@ export function createDefaultLoadout(): WeaponLoadout {
     plasmaStream: false,
     scatterBurst: false,
     heavySlug: false,
+    iceBullet: false,
   };
 }
 
@@ -130,6 +136,15 @@ export const WEAPONS: Weapon[] = [
       l.bulletSpeed *= 1.3;
     },
   },
+  {
+    id: 'ice-bullet',
+    name: 'Ice Bullet',
+    description: 'Some lasers chill enemies and bosses, slowing them briefly',
+    color: 0x66ddff,
+    apply: (l) => {
+      l.iceBullet = true;
+    },
+  },
 ];
 
 export function getWeaponById(id: string): Weapon | undefined {
@@ -157,9 +172,10 @@ export function buildFirePattern(loadout: WeaponLoadout): BulletSpawn[] {
   const speed = loadout.bulletSpeed;
   const damage = loadout.bulletDamage;
   const pierce = loadout.pierce;
-  const texture = loadout.heavySlug ? 'bullet-heavy' : 'bullet';
+  const baseTexture = loadout.heavySlug ? 'bullet-heavy' : 'bullet';
 
-  const addShot = (offsetX: number, offsetY: number, angleOffset: number, tex = texture) => {
+  const addShot = (offsetX: number, offsetY: number, angleOffset: number) => {
+    const chilled = loadout.iceBullet && Math.random() < ICE_BULLET_CHANCE;
     shots.push({
       offsetX,
       offsetY,
@@ -167,7 +183,8 @@ export function buildFirePattern(loadout: WeaponLoadout): BulletSpawn[] {
       speed,
       damage,
       pierce,
-      texture: tex,
+      texture: chilled ? 'bullet-ice' : baseTexture,
+      chill: chilled,
     });
   };
 

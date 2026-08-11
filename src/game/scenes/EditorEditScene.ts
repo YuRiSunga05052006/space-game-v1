@@ -30,7 +30,16 @@ import { createMenuButton } from '../ui/MenuButtons';
 import { isWorld2Unlocked, isWorld3Unlocked } from '../worldProgress';
 
 type EditPanel = 'menu' | 'objects' | 'obstacles' | 'enemies' | 'background' | 'misc' | 'save';
-type EnemyTab = 'survival' | 'world1' | 'world2' | 'world3';
+type EnemyTab =
+  | 'survival'
+  | 'world1'
+  | 'world2'
+  | 'world3'
+  | 'world4'
+  | 'world5'
+  | 'world6'
+  | 'world7'
+  | 'world8';
 
 interface EditorEditData {
   slotIndex: number;
@@ -366,10 +375,16 @@ export class EditorEditScene extends Phaser.Scene {
     this.addBackToMenu();
   }
 
+  private isEnemyTabUnlocked(tab: EnemyTab): boolean {
+    if (tab === 'survival' || tab === 'world1') return true;
+    if (tab === 'world2') return isWorld2Unlocked();
+    if (tab === 'world3') return isWorld3Unlocked();
+    return false;
+  }
+
   private renderEnemies(): void {
-    // If current tab was locked (shouldn't happen), fall back to survival.
-    if (this.enemyTab === 'world2' && !isWorld2Unlocked()) this.enemyTab = 'survival';
-    if (this.enemyTab === 'world3' && !isWorld3Unlocked()) this.enemyTab = 'survival';
+    // If current tab was locked, fall back to survival.
+    if (!this.isEnemyTabUnlocked(this.enemyTab)) this.enemyTab = 'survival';
 
     const area = this.getEditingArea();
 
@@ -392,37 +407,55 @@ export class EditorEditScene extends Phaser.Scene {
     bossCount.setY(0);
     header.add(bossCount);
 
-    const tabs: Array<{ id: EnemyTab; label: string; show: boolean }> = [
-      { id: 'survival', label: 'SURVIVAL', show: true },
-      { id: 'world1', label: 'WORLD 1', show: true },
-      { id: 'world2', label: 'WORLD 2', show: isWorld2Unlocked() },
-      { id: 'world3', label: 'WORLD 3', show: isWorld3Unlocked() },
+    const tabs: Array<{ id: EnemyTab; label: string }> = [
+      { id: 'survival', label: 'SURVIVAL' },
+      { id: 'world1', label: 'WORLD 1' },
+      { id: 'world2', label: 'WORLD 2' },
+      { id: 'world3', label: 'WORLD 3' },
+      { id: 'world4', label: 'WORLD 4' },
+      { id: 'world5', label: 'WORLD 5' },
+      { id: 'world6', label: 'WORLD 6' },
+      { id: 'world7', label: 'WORLD 7' },
+      { id: 'world8', label: 'WORLD 8' },
     ];
-    const visibleTabs = tabs.filter((t) => t.show);
-    const tabWidth = Math.min(88, Math.floor(320 / Math.max(1, visibleTabs.length)));
-    const totalWidth = visibleTabs.length * tabWidth;
-    visibleTabs.forEach((tab, i) => {
+    const tabsPerRow = 5;
+    const tabGap = 4;
+    const available = 360;
+    const cols = Math.min(tabsPerRow, tabs.length);
+    const tabWidth = Math.floor((available - (cols - 1) * tabGap) / cols);
+
+    tabs.forEach((tab, i) => {
+      const unlocked = this.isEnemyTabUnlocked(tab.id);
       const selected = this.enemyTab === tab.id;
-      const x = -totalWidth / 2 + tabWidth / 2 + i * tabWidth;
-      const btn = this.add.text(x, 36, tab.label, {
+      const row = Math.floor(i / tabsPerRow);
+      const col = i % tabsPerRow;
+      const rowTabs = Math.min(tabsPerRow, tabs.length - row * tabsPerRow);
+      const rowWidth = rowTabs * tabWidth + (rowTabs - 1) * tabGap;
+      const x = -rowWidth / 2 + tabWidth / 2 + col * (tabWidth + tabGap);
+      const y = 34 + row * 28;
+      const btn = this.add.text(x, y, tab.label, {
         fontFamily: 'Orbitron, sans-serif',
-        fontSize: '10px',
+        fontSize: '8px',
         fontStyle: '700',
-        color: selected ? '#0a0e27' : '#00d4ff',
-        backgroundColor: selected ? '#44ff88' : '#1a1f3a',
-        padding: { x: 6, y: 6 },
-      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-      btn.on('pointerup', () => {
-        if (this.scrollMoved) return;
-        void initAudio().then(() => playSfx('ui'));
-        this.enemyTab = tab.id;
-        this.scrollY = 0;
-        this.render();
-      });
+        color: !unlocked ? '#445566' : selected ? '#0a0e27' : '#00d4ff',
+        backgroundColor: !unlocked ? '#151828' : selected ? '#44ff88' : '#1a1f3a',
+        padding: { x: 4, y: 5 },
+      }).setOrigin(0.5);
+
+      if (unlocked) {
+        btn.setInteractive({ useHandCursor: true });
+        btn.on('pointerup', () => {
+          if (this.scrollMoved) return;
+          void initAudio().then(() => playSfx('ui'));
+          this.enemyTab = tab.id;
+          this.scrollY = 0;
+          this.render();
+        });
+      }
       header.add(btn);
     });
 
-    const scrollTop = 130;
+    const scrollTop = 148;
     const panel = this.beginScrollPanel(scrollTop);
     let y = 0;
 

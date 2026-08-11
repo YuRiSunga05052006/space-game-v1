@@ -26,6 +26,14 @@ export const PLAYER_SKINS: PlayerSkinDefinition[] = [
     description: 'The original starfighter paint scheme.',
   },
   {
+    id: 'grayBlaster',
+    name: 'Gray Blaster',
+    textureKey: 'rocket-gray-blaster',
+    appearanceId: 'grayBlaster',
+    price: 0,
+    description: 'The gray paint scheme that matches the Booster.',
+  },
+  {
     id: 'crimson',
     name: 'Crimson Striker',
     textureKey: 'rocket-crimson',

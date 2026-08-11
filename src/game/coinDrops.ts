@@ -41,7 +41,10 @@ export const MAX_COMETS_ON_SCREEN = 2;
 export const GOLD_COMET_COIN_REWARD = 15;
 
 export const MINE_SPAWN_CHANCE = 0.04;
+/** Cap for gray / red / purple mines. Blue mines are uncapped. */
 export const MAX_MINES_ON_SCREEN = 4;
+/** Per-color soft cap in Level Editor play for limited (non-blue) mine colors. */
+export const MAX_MINES_PER_VARIANT_EDITOR = 3;
 
 export function getGoldCometCoinReward(): number {
   return GOLD_COMET_COIN_REWARD;

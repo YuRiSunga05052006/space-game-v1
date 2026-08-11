@@ -7,6 +7,11 @@ export interface CircleLight {
   radius: number;
   /** 0–1 erase strength (default 1). */
   intensity?: number;
+  /**
+   * `soft` (default): 4-ring falloff for ships/pickups.
+   * `simple`: 2-ring brush for high-count trail particles.
+   */
+  quality?: 'soft' | 'simple';
 }
 
 export interface BeamLight {
@@ -40,6 +45,8 @@ export const LIGHT_RADIUS = {
   mine: 42,
   laser: 16,
   firePlume: 40,
+  /** Player thruster flame particles (sampled; see Player.collectTrailDarknessLights). */
+  trail: 16,
   explosion: 70,
   bigExplosion: 130,
 } as const;
@@ -116,7 +123,12 @@ export class DarknessOverlay {
 
     this.brush.clear();
     for (const light of circles) {
-      this.drawSoftCircle(light.x, light.y, light.radius, light.intensity ?? 1);
+      const intensity = light.intensity ?? 1;
+      if (light.quality === 'simple') {
+        this.drawSimpleCircle(light.x, light.y, light.radius, intensity);
+      } else {
+        this.drawSoftCircle(light.x, light.y, light.radius, intensity);
+      }
     }
     for (const light of this.explosionLights) {
       const remaining = Math.max(0, light.expiresAt - now);
@@ -147,6 +159,14 @@ export class DarknessOverlay {
       this.brush.fillStyle(0xffffff, ring.alpha);
       this.brush.fillCircle(x, y, radius * ring.scale);
     }
+  }
+
+  /** Cheaper 2-ring punch-out for dense trail sampling. */
+  private drawSimpleCircle(x: number, y: number, radius: number, intensity: number): void {
+    this.brush.fillStyle(0xffffff, 0.28 * intensity);
+    this.brush.fillCircle(x, y, radius);
+    this.brush.fillStyle(0xffffff, 0.7 * intensity);
+    this.brush.fillCircle(x, y, radius * 0.45);
   }
 
   private drawBeam(beam: BeamLight): void {

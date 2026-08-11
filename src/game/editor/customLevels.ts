@@ -451,14 +451,31 @@ function normalizeObstacles(
   } else {
     blueMines = normalizeSpawnRule(raw.blueMines, def.blueMines);
     grayMines = normalizeSpawnRule(raw.grayMines, def.grayMines);
-    redMines = normalizeSpawnRule(
-      looksLikeSpawnRule(raw.redMines) ? raw.redMines : undefined,
-      def.redMines,
-    );
-    purpleMines = normalizeSpawnRule(
-      looksLikeSpawnRule(raw.purpleMines) ? raw.purpleMines : undefined,
-      def.purpleMines,
-    );
+
+    // Prefer per-variant rules; also accept leftover legacy boolean flags mixed in.
+    const timingBase =
+      looksLikeSpawnRule(raw.grayMines)
+        ? grayMines
+        : looksLikeSpawnRule(raw.blueMines)
+          ? blueMines
+          : def.redMines;
+
+    if (looksLikeSpawnRule(raw.redMines)) {
+      redMines = normalizeSpawnRule(raw.redMines, def.redMines);
+    } else if (raw.redMines === true) {
+      redMines = { ...timingBase, enabled: canUseRedMines() };
+    } else {
+      redMines = normalizeSpawnRule(undefined, def.redMines);
+    }
+
+    if (looksLikeSpawnRule(raw.purpleMines)) {
+      purpleMines = normalizeSpawnRule(raw.purpleMines, def.purpleMines);
+    } else if (raw.purpleMines === true) {
+      purpleMines = { ...timingBase, enabled: canUsePurpleMines() };
+    } else {
+      purpleMines = normalizeSpawnRule(undefined, def.purpleMines);
+    }
+
     if (!canUseRedMines()) redMines.enabled = false;
     if (!canUsePurpleMines()) purpleMines.enabled = false;
   }

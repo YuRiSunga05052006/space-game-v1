@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 
 export type RocketSkinAppearanceId =
   | 'classic'
+  | 'grayBlaster'
   | 'crimson'
   | 'emerald'
   | 'solar'
@@ -90,6 +91,14 @@ const PALETTES: Record<RocketSkinAppearanceId, RocketSkinPalette> = {
     accent: 0x00d4ff,
     exhaustPrimary: 0xff6b35,
     exhaustSecondary: 0xffcc00,
+  },
+  /** Matches launch-booster grays (tank / interstage metals). */
+  grayBlaster: {
+    hull: 0xb8bcc4,
+    accent: 0x4a4a52,
+    exhaustPrimary: 0xff6b35,
+    exhaustSecondary: 0xffcc00,
+    outline: 0x2a2a30,
   },
   crimson: {
     hull: 0x3a1018,
