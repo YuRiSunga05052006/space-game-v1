@@ -216,6 +216,76 @@ export function createRgbColorRow(
   };
 }
 
+/** Typeable numeric field (for Interval ms and similar). */
+export function createDomNumberInput(
+  scene: Phaser.Scene,
+  options: {
+    label: string;
+    value: number;
+    min: number;
+    max: number;
+    step?: number;
+    width?: number;
+    disabled?: boolean;
+    onChange: (value: number) => void;
+  },
+): DomTextInputResult {
+  const root = scene.add.container(0, 0);
+  root.add(scene.add.text(-150, 0, options.label, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '13px',
+    color: options.disabled ? '#556677' : '#ccddee',
+  }).setOrigin(0, 0.5));
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = String(options.min);
+  input.max = String(options.max);
+  input.step = String(options.step ?? 1);
+  input.value = String(options.value);
+  input.inputMode = 'numeric';
+  input.disabled = options.disabled === true;
+  styleEditorInput(input, options.width ?? 88);
+  if (options.disabled) {
+    input.style.color = '#556677';
+    input.style.borderColor = '#2a3348';
+  }
+
+  const dom = scene.add.dom(40, 0, input).setOrigin(0.5);
+  root.add(dom);
+
+  const commit = () => {
+    const parsed = parseInt(input.value, 10);
+    const next = Number.isFinite(parsed)
+      ? Phaser.Math.Clamp(parsed, options.min, options.max)
+      : options.min;
+    input.value = String(next);
+    options.onChange(next);
+  };
+
+  input.addEventListener('change', commit);
+  input.addEventListener('blur', commit);
+  input.addEventListener('input', () => {
+    const parsed = parseInt(input.value, 10);
+    if (!Number.isFinite(parsed)) return;
+    options.onChange(Phaser.Math.Clamp(parsed, options.min, options.max));
+  });
+  input.addEventListener('pointerdown', (e) => e.stopPropagation());
+  input.addEventListener('mousedown', (e) => e.stopPropagation());
+  input.addEventListener('touchstart', (e) => e.stopPropagation());
+
+  return {
+    container: root,
+    input,
+    dom,
+    getValue: () => input.value,
+    setValue: (value: string) => {
+      input.value = value;
+    },
+    destroy: () => root.destroy(true),
+  };
+}
+
 export function createStepperRow(
   scene: Phaser.Scene,
   label: string,
@@ -384,21 +454,38 @@ export function createSpawnRuleBlock(
   root.add(toggle);
   y += 34;
 
-  const interval = createStepperRow(
-    scene,
-    'Interval ms',
-    current.intervalMs,
-    options?.intervalStep ?? 500,
-    0,
-    300000,
-    (v) => {
-      current.intervalMs = v;
-      notify();
-    },
-    disabled,
-  );
-  interval.setY(y);
-  root.add(interval);
+  if (disabled) {
+    const interval = createStepperRow(
+      scene,
+      'Interval ms',
+      current.intervalMs,
+      options?.intervalStep ?? 500,
+      0,
+      300000,
+      (v) => {
+        current.intervalMs = v;
+        notify();
+      },
+      true,
+    );
+    interval.setY(y);
+    root.add(interval);
+  } else {
+    const intervalField = createDomNumberInput(scene, {
+      label: 'Interval ms',
+      value: current.intervalMs,
+      min: 0,
+      max: 300000,
+      step: 1,
+      width: 88,
+      onChange: (v) => {
+        current.intervalMs = v;
+        notify();
+      },
+    });
+    intervalField.container.setY(y);
+    root.add(intervalField.container);
+  }
   y += 34;
 
   if (options?.showChance) {

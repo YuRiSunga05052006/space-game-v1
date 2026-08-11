@@ -51,20 +51,23 @@ import {
 
 const POWERUPS_SCROLL_TOP = 150;
 const POWERUPS_SCROLL_HEIGHT = 500;
-const SKINS_SCROLL_TOP = 292;
+const SKINS_SUBTAB_Y = 294;
+const SKINS_SCROLL_TOP = 318;
 const SKINS_SCROLL_HEIGHT = GAME_HEIGHT - SKINS_SCROLL_TOP - 100;
 const HERO_CENTER_Y = 200;
 const HERO_SCALE = 0.72;
 const STACK_ITER_MS = 1400;
 const CARD_HEIGHT = 108;
 const CARD_GAP = 10;
-const SECTION_HEADER_HEIGHT = 36;
 const DEATH_BOMB_CARD_EXTRA = 14;
 const TAB_Y = 108;
 const TAB_WIDTH = 120;
 const TAB_GAP = 12;
+const SUBTAB_WIDTH = 148;
+const SUBTAB_GAP = 10;
 
 type ShopTab = 'skins' | 'powerUps';
+type SkinsSubTab = 'shipSkins' | 'shipShapes';
 
 export interface ShopPanelOptions {
   onBack: () => void;
@@ -110,25 +113,6 @@ function getSkinActionLabel(skin: PlayerSkinDefinition, action: SkinCardAction):
 
 function getShapeActionLabel(shape: PlayerShapeDefinition, action: SkinCardAction): string {
   return getCatalogActionLabel(shape.price, action);
-}
-
-function createSectionHeader(
-  scene: Phaser.Scene,
-  title: string,
-  y: number,
-): Phaser.GameObjects.Container {
-  const header = scene.add.container(0, y);
-  header.add(scene.add.text(24, 8, title, {
-    fontFamily: 'Orbitron, sans-serif',
-    fontSize: '12px',
-    fontStyle: '700',
-    color: '#8899aa',
-  }));
-  const line = scene.add.graphics();
-  line.lineStyle(1, 0x334455, 0.8);
-  line.lineBetween(24, 28, GAME_WIDTH - 24, 28);
-  header.add(line);
-  return header;
 }
 
 function getPowerUpActionLabel(def: PowerUpDefinition, action: PowerUpCardAction): string {
@@ -661,7 +645,9 @@ export function createShopPanel(
   root.add(coinsText);
 
   const tabContainers: Phaser.GameObjects.Container[] = [];
+  const subTabContainers: Phaser.GameObjects.Container[] = [];
   let currentTab: ShopTab = 'skins';
+  let currentSkinsSubTab: SkinsSubTab = 'shipSkins';
 
   let previewSkinId = getEquippedSkinId();
   let previewShapeId: RocketShapeId = getEquippedShapeId();
@@ -778,74 +764,70 @@ export function createShopPanel(
       redrawHero();
 
       let y = 0;
-      content.add(createSectionHeader(scene, 'SHIP SKINS', y));
-      y += SECTION_HEADER_HEIGHT;
-
-      for (const skin of PLAYER_SKINS) {
-        const handleAction = () => {
-          const action = getSkinAction(skin);
-          if (action === 'buy') {
-            if (!purchaseSkin(skin.id)) return;
-            equipSkin(skin.id);
-          } else if (action === 'equip') {
-            if (!equipSkin(skin.id)) return;
-          } else {
-            return;
-          }
-          previewSkinId = skin.id;
-          rebuildContent();
-        };
-        content.add(createSkinCard(
-          scene,
-          skin,
-          y,
-          previewShapeId,
-          previewSkinId === skin.id,
-          () => {
+      if (currentSkinsSubTab === 'shipSkins') {
+        for (const skin of PLAYER_SKINS) {
+          const handleAction = () => {
+            const action = getSkinAction(skin);
+            if (action === 'buy') {
+              if (!purchaseSkin(skin.id)) return;
+              equipSkin(skin.id);
+            } else if (action === 'equip') {
+              if (!equipSkin(skin.id)) return;
+            } else {
+              return;
+            }
             previewSkinId = skin.id;
-            stackIteration = 1;
-            stackIterTimer = 0;
             rebuildContent();
-          },
-          handleAction,
-          rainbowCardPreviews,
-        ));
-        y += CARD_HEIGHT;
-      }
-
-      content.add(createSectionHeader(scene, 'SHIP SHAPES', y));
-      y += SECTION_HEADER_HEIGHT;
-
-      for (const shape of PLAYER_SHAPES) {
-        const handleAction = () => {
-          const action = getShapeAction(shape);
-          if (action === 'buy') {
-            if (!purchaseShape(shape.id)) return;
-            equipShape(shape.id);
-          } else if (action === 'equip') {
-            if (!equipShape(shape.id)) return;
-          } else {
-            return;
-          }
-          previewShapeId = shape.id;
-          rebuildContent();
-        };
-        content.add(createShapeCard(
-          scene,
-          shape,
-          y,
-          previewSkinId,
-          previewShapeId === shape.id,
-          () => {
+          };
+          content.add(createSkinCard(
+            scene,
+            skin,
+            y,
+            previewShapeId,
+            previewSkinId === skin.id,
+            () => {
+              previewSkinId = skin.id;
+              stackIteration = 1;
+              stackIterTimer = 0;
+              rebuildContent();
+            },
+            handleAction,
+            rainbowCardPreviews,
+          ));
+          y += CARD_HEIGHT;
+        }
+      } else {
+        for (const shape of PLAYER_SHAPES) {
+          const handleAction = () => {
+            const action = getShapeAction(shape);
+            if (action === 'buy') {
+              if (!purchaseShape(shape.id)) return;
+              equipShape(shape.id);
+            } else if (action === 'equip') {
+              if (!equipShape(shape.id)) return;
+            } else {
+              return;
+            }
             previewShapeId = shape.id;
-            stackIteration = 1;
-            stackIterTimer = 0;
             rebuildContent();
-          },
-          handleAction,
-          rainbowCardPreviews,
-        ));
-        y += CARD_HEIGHT;
+          };
+          content.add(createShapeCard(
+            scene,
+            shape,
+            y,
+            previewSkinId,
+            previewShapeId === shape.id,
+            () => {
+              previewShapeId = shape.id;
+              stackIteration = 1;
+              stackIterTimer = 0;
+              rebuildContent();
+            },
+            handleAction,
+            rainbowCardPreviews,
+          ));
+          y += CARD_HEIGHT;
+        }
       }
 
       maxScroll = Math.max(0, y - scrollHeight);
@@ -882,6 +864,57 @@ export function createShopPanel(
     scrollY = options?.resetScroll ? 0 : Phaser.Math.Clamp(previousScrollY, 0, maxScroll);
     applyScroll();
     updateRainbowCardPreviews();
+  };
+
+  const drawSkinsSubTabs = () => {
+    subTabContainers.forEach((tab) => tab.destroy());
+    subTabContainers.length = 0;
+
+    if (currentTab !== 'skins') return;
+
+    const subTabs: { id: SkinsSubTab; label: string }[] = [
+      { id: 'shipSkins', label: 'SHIP SKINS' },
+      { id: 'shipShapes', label: 'SHIP SHAPES' },
+    ];
+
+    const totalWidth = subTabs.length * SUBTAB_WIDTH + (subTabs.length - 1) * SUBTAB_GAP;
+    let tabX = GAME_WIDTH / 2 - totalWidth / 2 + SUBTAB_WIDTH / 2;
+
+    for (const tabDef of subTabs) {
+      const active = tabDef.id === currentSkinsSubTab;
+      const tab = scene.add.container(tabX, SKINS_SUBTAB_Y);
+      const bg = scene.add.graphics();
+      bg.fillStyle(0x12182a, active ? 0.95 : 0.7);
+      bg.fillRoundedRect(-SUBTAB_WIDTH / 2, -16, SUBTAB_WIDTH, 32, 8);
+      bg.lineStyle(1.5, active ? 0x00d4ff : 0x334455, active ? 1 : 0.7);
+      bg.strokeRoundedRect(-SUBTAB_WIDTH / 2, -16, SUBTAB_WIDTH, 32, 8);
+      tab.add(bg);
+
+      tab.add(scene.add.text(0, 0, tabDef.label, {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '10px',
+        fontStyle: '700',
+        color: active ? '#00d4ff' : '#8899aa',
+      }).setOrigin(0.5));
+
+      tab.setInteractive(
+        new Phaser.Geom.Rectangle(-SUBTAB_WIDTH / 2, -16, SUBTAB_WIDTH, 32),
+        Phaser.Geom.Rectangle.Contains,
+      );
+      tab.input!.cursor = 'pointer';
+      tab.on('pointerup', () => {
+        if (currentSkinsSubTab !== tabDef.id) {
+          playSfx('ui');
+          currentSkinsSubTab = tabDef.id;
+          drawSkinsSubTabs();
+          rebuildContent({ resetScroll: true });
+        }
+      });
+
+      root.add(tab);
+      subTabContainers.push(tab);
+      tabX += SUBTAB_WIDTH + SUBTAB_GAP;
+    }
   };
 
   const drawTabs = () => {
@@ -928,6 +961,7 @@ export function createShopPanel(
           playSfx('ui');
           currentTab = tabDef.id;
           drawTabs();
+          drawSkinsSubTabs();
           rebuildContent({ resetScroll: true });
         }
       });
@@ -936,6 +970,8 @@ export function createShopPanel(
       tabContainers.push(tab);
       tabX += TAB_WIDTH + TAB_GAP;
     }
+
+    drawSkinsSubTabs();
   };
 
   drawTabs();
@@ -965,10 +1001,22 @@ export function createShopPanel(
     dragging = false;
   };
 
+  const onWheel = (
+    pointer: Phaser.Input.Pointer,
+    _gameObjects: Phaser.GameObjects.GameObject[],
+    _deltaX: number,
+    deltaY: number,
+  ): void => {
+    if (maxScroll <= 0 || !isInScrollArea(pointer)) return;
+    scrollY = Phaser.Math.Clamp(scrollY + deltaY * 0.45, 0, maxScroll);
+    applyScroll();
+  };
+
   scene.input.on('pointerdown', onPointerDown);
   scene.input.on('pointermove', onPointerMove);
   scene.input.on('pointerup', stopDragging);
   scene.input.on('pointerupoutside', stopDragging);
+  scene.input.on('wheel', onWheel);
 
   const { container: backBtn } = createMenuButton(scene, {
     label: 'BACK',
@@ -984,6 +1032,7 @@ export function createShopPanel(
     scene.input.off('pointermove', onPointerMove);
     scene.input.off('pointerup', stopDragging);
     scene.input.off('pointerupoutside', stopDragging);
+    scene.input.off('wheel', onWheel);
     maskShape.destroy();
     root.destroy();
   };

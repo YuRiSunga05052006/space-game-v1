@@ -368,6 +368,7 @@ export class GameScene extends Phaser.Scene {
     this.isPlayerDying = false;
     this.gameOverScreenShown = false;
     this.isPaused = false;
+    this.time.paused = false;
     this.pauseBtnHit = undefined;
     this.pauseBtnDrawIcon = undefined;
     this.pauseMenu?.destroy();
@@ -2393,8 +2394,6 @@ export class GameScene extends Phaser.Scene {
       onSelect: (weaponId) => {
         this.player.addWeapon(weaponId);
         this.updateWeaponHud();
-        panel.destroy();
-        this.weaponSelectPanel = undefined;
         this.closeWeaponSelect();
         this.cameras.main.flash(150, 0, 212, 255, false);
       },
@@ -2403,18 +2402,34 @@ export class GameScene extends Phaser.Scene {
   }
 
   private closeWeaponSelect(): void {
-    if (!this.isChoosingWeapon) return;
-
     this.isChoosingWeapon = false;
-    if (!this.isPaused && !this.isGameOver) {
-      this.time.paused = false;
+    this.weaponSelectPanel?.destroy();
+    this.weaponSelectPanel = undefined;
+
+    // Pause menu owns the frozen clock; otherwise always unstick scene time.
+    // (Previously death/victory cleared isChoosingWeapon without unpausing time,
+    // which softlocked the ship and left asteroids stuck on their red hit tint.)
+    if (this.isPaused) {
+      this.syncPauseButtonInteractive();
+      return;
+    }
+
+    this.time.paused = false;
+    if (!this.isGameOver && !this.isPlayerDying) {
       this.tweens.resumeAll();
       this.physics.resume();
       resumeMusic();
+      this.trySpawnLootBox();
     }
     this.syncPauseButtonInteractive();
+  }
 
-    this.trySpawnLootBox();
+  /** Tear down weapon UI and ensure scene timers can run (death / victory / softlock recovery). */
+  private abortWeaponSelectForGameEnd(): void {
+    this.isChoosingWeapon = false;
+    this.weaponSelectPanel?.destroy();
+    this.weaponSelectPanel = undefined;
+    this.time.paused = false;
   }
 
   private updateWeaponHud(): void {
@@ -2455,6 +2470,7 @@ export class GameScene extends Phaser.Scene {
     playHitSfx();
     this.isHitStunned = true;
     this.time.delayedCall(500, () => {
+      if (this.isGameOver || this.isPlayerDying) return;
       this.isHitStunned = false;
       this.player.setVelocity(0, 0);
     });
@@ -2483,10 +2499,12 @@ export class GameScene extends Phaser.Scene {
     this.physics.pause();
 
     this.time.delayedCall(1000, () => {
-      if (this.isGameOver) return;
-      this.physics.resume();
+      if (this.isGameOver || this.isPlayerDying) return;
       this.tweens.killTweensOf(this.player);
       this.player.setAlpha(1);
+      // If weapon-select / pause froze the clock mid-hit, leave physics to those flows.
+      if (this.isChoosingWeapon || this.isPaused) return;
+      this.physics.resume();
     });
   }
 
@@ -2495,11 +2513,10 @@ export class GameScene extends Phaser.Scene {
     this.isPlayerDying = true;
     this.isGameOver = true;
     this.isPaused = false;
-    this.isChoosingWeapon = false;
+    this.isHitStunned = false;
+    this.abortWeaponSelectForGameEnd();
     this.pauseMenu?.destroy();
     this.pauseMenu = undefined;
-    this.weaponSelectPanel?.destroy();
-    this.weaponSelectPanel = undefined;
     this.syncPauseButtonInteractive();
 
     const deathX = this.player.x;
@@ -2527,11 +2544,9 @@ export class GameScene extends Phaser.Scene {
     this.gameOverScreenShown = true;
     this.isGameOver = true;
     this.isPaused = false;
-    this.isChoosingWeapon = false;
+    this.abortWeaponSelectForGameEnd();
     this.pauseMenu?.destroy();
     this.pauseMenu = undefined;
-    this.weaponSelectPanel?.destroy();
-    this.weaponSelectPanel = undefined;
     this.syncPauseButtonInteractive();
     pauseMusic();
 
@@ -2687,11 +2702,10 @@ export class GameScene extends Phaser.Scene {
   private triggerVictory(isSecretClear = false): void {
     this.isGameOver = true;
     this.isPaused = false;
-    this.isChoosingWeapon = false;
+    this.isHitStunned = false;
+    this.abortWeaponSelectForGameEnd();
     this.pauseMenu?.destroy();
     this.pauseMenu = undefined;
-    this.weaponSelectPanel?.destroy();
-    this.weaponSelectPanel = undefined;
     this.syncPauseButtonInteractive();
     pauseMusic();
     this.physics.pause();

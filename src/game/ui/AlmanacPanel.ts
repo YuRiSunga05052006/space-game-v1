@@ -109,7 +109,7 @@ export function createAlmanacPanel(
     color: '#00d4ff',
   }).setOrigin(0.5));
 
-  root.add(scene.add.text(GAME_WIDTH / 2, 92, 'Drag to scroll', {
+  root.add(scene.add.text(GAME_WIDTH / 2, 92, 'Drag or scroll', {
     fontFamily: 'Orbitron, sans-serif',
     fontSize: '10px',
     color: '#556677',
@@ -239,10 +239,22 @@ export function createAlmanacPanel(
     dragging = false;
   };
 
+  const onWheel = (
+    pointer: Phaser.Input.Pointer,
+    _gameObjects: Phaser.GameObjects.GameObject[],
+    _deltaX: number,
+    deltaY: number,
+  ): void => {
+    if (maxScroll <= 0 || !isInScrollArea(pointer)) return;
+    scrollY = Phaser.Math.Clamp(scrollY + deltaY * 0.45, 0, maxScroll);
+    applyScroll();
+  };
+
   scene.input.on('pointerdown', onPointerDown);
   scene.input.on('pointermove', onPointerMove);
   scene.input.on('pointerup', stopDragging);
   scene.input.on('pointerupoutside', stopDragging);
+  scene.input.on('wheel', onWheel);
 
   const { container: backBtn } = createMenuButton(scene, {
     label: 'BACK',
@@ -257,6 +269,7 @@ export function createAlmanacPanel(
     scene.input.off('pointermove', onPointerMove);
     scene.input.off('pointerup', stopDragging);
     scene.input.off('pointerupoutside', stopDragging);
+    scene.input.off('wheel', onWheel);
     maskShape.destroy();
     root.destroy();
   };

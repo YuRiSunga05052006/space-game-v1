@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { stopMusic } from '../audioManager';
+import { playSfx, initAudio, stopMusic } from '../audioManager';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import {
   createDefaultSubArea,
@@ -25,9 +25,12 @@ import {
   promptText,
   showToast,
 } from '../editor/ui/editorWidgets';
+import { isPowerUpOwned } from '../playerPowerUps';
 import { createMenuButton } from '../ui/MenuButtons';
+import { isWorld2Unlocked, isWorld3Unlocked } from '../worldProgress';
 
 type EditPanel = 'menu' | 'objects' | 'obstacles' | 'enemies' | 'background' | 'misc' | 'save';
+type EnemyTab = 'survival' | 'world1' | 'world2' | 'world3';
 
 interface EditorEditData {
   slotIndex: number;
@@ -35,14 +38,24 @@ interface EditorEditData {
   subAreaId?: string;
 }
 
+const SCROLL_TOP = 70;
+const SCROLL_BOTTOM_RESERVE = 78;
+
 export class EditorEditScene extends Phaser.Scene {
   private slotIndex = 0;
   private subAreaId?: string;
   private draft!: CustomLevelDefinition;
   private dirty = false;
   private panel: EditPanel = 'menu';
+  private enemyTab: EnemyTab = 'survival';
   private contentRoot?: Phaser.GameObjects.Container;
+  private scrollPanel?: Phaser.GameObjects.Container;
   private scrollY = 0;
+  private scrollMinY = 0;
+  private scrollDragging = false;
+  private scrollDragStartPointerY = 0;
+  private scrollDragStartScrollY = 0;
+  private scrollMoved = false;
 
   constructor() {
     super({ key: 'EditorEditScene' });
@@ -52,6 +65,7 @@ export class EditorEditScene extends Phaser.Scene {
     this.slotIndex = data.slotIndex;
     this.subAreaId = data.subAreaId;
     this.panel = 'menu';
+    this.enemyTab = 'survival';
     this.scrollY = 0;
     this.dirty = false;
   }
@@ -68,6 +82,7 @@ export class EditorEditScene extends Phaser.Scene {
     }
     this.draft = JSON.parse(JSON.stringify(loaded)) as CustomLevelDefinition;
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.clearScrollHandlers();
       this.contentRoot?.destroy(true);
       this.contentRoot = undefined;
     });
@@ -85,9 +100,11 @@ export class EditorEditScene extends Phaser.Scene {
   }
 
   private render(): void {
+    this.clearScrollHandlers();
     // Destroy DOM inputs with the panel so focus/state doesn't leak across views.
     this.contentRoot?.destroy(true);
     this.contentRoot = this.add.container(0, 0);
+    this.scrollPanel = undefined;
 
     const title = this.subAreaId
       ? `SUB-AREA: ${this.getEditingArea().name}`
@@ -135,6 +152,7 @@ export class EditorEditScene extends Phaser.Scene {
         color: btn.color,
         onClick: () => {
           this.panel = btn.panel;
+          this.enemyTab = 'survival';
           this.scrollY = 0;
           this.render();
         },
@@ -160,6 +178,7 @@ export class EditorEditScene extends Phaser.Scene {
       color: 0x8899bb,
       onClick: () => {
         this.panel = 'menu';
+        this.enemyTab = 'survival';
         this.scrollY = 0;
         this.render();
       },
@@ -168,17 +187,113 @@ export class EditorEditScene extends Phaser.Scene {
     this.contentRoot!.add(container);
   }
 
-  private beginScrollPanel(): Phaser.GameObjects.Container {
-    const panel = this.add.container(GAME_WIDTH / 2, 70 + this.scrollY);
+  private clearScrollHandlers(): void {
+    this.input.off('wheel', this.onScrollWheel, this);
+    this.input.off('pointerdown', this.onScrollPointerDown, this);
+    this.input.off('pointermove', this.onScrollPointerMove, this);
+    this.input.off('pointerup', this.onScrollPointerUp, this);
+    this.input.off('pointerupoutside', this.onScrollPointerUp, this);
+    this.scrollDragging = false;
+    this.scrollMoved = false;
+  }
+
+  /** Fixed panel — no wheel / drag scrolling (Background, Misc, Save). */
+  private beginStaticPanel(top = SCROLL_TOP): Phaser.GameObjects.Container {
+    this.clearScrollHandlers();
+    this.scrollY = 0;
+    const panel = this.add.container(GAME_WIDTH / 2, top);
     this.contentRoot!.add(panel);
-
-    this.input.off('wheel');
-    this.input.on('wheel', (_p: unknown, _go: unknown, _dx: number, dy: number) => {
-      this.scrollY = Phaser.Math.Clamp(this.scrollY - dy * 0.4, -800, 0);
-      this.render();
-    });
-
+    this.scrollPanel = panel;
     return panel;
+  }
+
+  /** Scrollable panel for Objects / Obstacles / Enemies. Call finalizeScroll(height) after building. */
+  private beginScrollPanel(top = SCROLL_TOP): Phaser.GameObjects.Container {
+    this.clearScrollHandlers();
+    const panel = this.add.container(GAME_WIDTH / 2, top + this.scrollY);
+    this.contentRoot!.add(panel);
+    this.scrollPanel = panel;
+    return panel;
+  }
+
+  private finalizeScroll(contentHeight: number, top = SCROLL_TOP): void {
+    if (!this.scrollPanel) return;
+    const viewHeight = GAME_HEIGHT - top - SCROLL_BOTTOM_RESERVE;
+    this.scrollMinY = Math.min(0, viewHeight - contentHeight - 16);
+    this.scrollY = Phaser.Math.Clamp(this.scrollY, this.scrollMinY, 0);
+    this.scrollPanel.setY(top + this.scrollY);
+
+    this.input.on('wheel', this.onScrollWheel, this);
+    this.input.on('pointerdown', this.onScrollPointerDown, this);
+    this.input.on('pointermove', this.onScrollPointerMove, this);
+    this.input.on('pointerup', this.onScrollPointerUp, this);
+    this.input.on('pointerupoutside', this.onScrollPointerUp, this);
+
+    this.addScrollButtons(top);
+  }
+
+  private addScrollButtons(top: number): void {
+    if (this.scrollMinY >= 0) return;
+
+    const makeBtn = (y: number, label: string, delta: number) => {
+      const btn = this.add.text(GAME_WIDTH - 28, y, label, {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '16px',
+        fontStyle: '700',
+        color: '#00d4ff',
+        backgroundColor: '#1a1f3aaa',
+        padding: { x: 8, y: 6 },
+      }).setOrigin(0.5).setDepth(300).setScrollFactor(0).setInteractive({ useHandCursor: true });
+      btn.on('pointerup', () => {
+        void initAudio().then(() => playSfx('ui'));
+        this.applyScroll(this.scrollY + delta, top);
+      });
+      this.contentRoot!.add(btn);
+    };
+
+    makeBtn(top + 24, '▲', 120);
+    makeBtn(GAME_HEIGHT - SCROLL_BOTTOM_RESERVE - 24, '▼', -120);
+  }
+
+  private applyScroll(nextY: number, top = SCROLL_TOP): void {
+    this.scrollY = Phaser.Math.Clamp(nextY, this.scrollMinY, 0);
+    this.scrollPanel?.setY(top + this.scrollY);
+  }
+
+  private onScrollWheel(
+    _pointer: Phaser.Input.Pointer,
+    _currentlyOver: unknown,
+    _dx: number,
+    dy: number,
+  ): void {
+    if (!this.scrollPanel || this.scrollMinY >= 0) return;
+    this.applyScroll(this.scrollY - dy * 0.45);
+  }
+
+  private onScrollPointerDown(pointer: Phaser.Input.Pointer): void {
+    if (!this.scrollPanel || this.scrollMinY >= 0) return;
+    // Ignore drags that start on DOM form controls.
+    const target = pointer.event?.target as HTMLElement | null | undefined;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON')) {
+      return;
+    }
+    this.scrollDragging = true;
+    this.scrollMoved = false;
+    this.scrollDragStartPointerY = pointer.y;
+    this.scrollDragStartScrollY = this.scrollY;
+  }
+
+  private onScrollPointerMove(pointer: Phaser.Input.Pointer): void {
+    if (!this.scrollDragging || !this.scrollPanel) return;
+    const dy = pointer.y - this.scrollDragStartPointerY;
+    // Require a small drag threshold so taps on steppers / toggles still count as clicks.
+    if (Math.abs(dy) <= 8) return;
+    this.scrollMoved = true;
+    this.applyScroll(this.scrollDragStartScrollY + dy);
+  }
+
+  private onScrollPointerUp(): void {
+    this.scrollDragging = false;
   }
 
   private renderObjects(): void {
@@ -199,9 +314,15 @@ export class EditorEditScene extends Phaser.Scene {
     addRule('Loot Boxes', 'lootBoxes');
     addRule('Hearts', 'hearts');
     addRule('Power Star', 'powerStar');
-    addRule('Shield', 'shield');
-    addRule('Invisibility', 'invisibility');
+    // Match survival: pickups only appear after buying the power-up in the Shop.
+    if (isPowerUpOwned('shield')) {
+      addRule('Shield', 'shield');
+    }
+    if (isPowerUpOwned('invisibility')) {
+      addRule('Invisibility', 'invisibility');
+    }
 
+    this.finalizeScroll(y);
     this.addBackToMenu();
   }
 
@@ -259,15 +380,23 @@ export class EditorEditScene extends Phaser.Scene {
       );
       purple.setY(y);
       panel.add(purple);
+      y += 36;
     }
 
+    this.finalizeScroll(y);
     this.addBackToMenu();
   }
 
   private renderEnemies(): void {
+    // If current tab was locked (shouldn't happen), fall back to survival.
+    if (this.enemyTab === 'world2' && !isWorld2Unlocked()) this.enemyTab = 'survival';
+    if (this.enemyTab === 'world3' && !isWorld3Unlocked()) this.enemyTab = 'survival';
+
     const area = this.getEditingArea();
-    const panel = this.beginScrollPanel();
-    let y = 0;
+
+    // Fixed header: boss count + world tabs (does not scroll).
+    const header = this.add.container(GAME_WIDTH / 2, 58);
+    this.contentRoot!.add(header);
 
     const bossCount = createStepperRow(
       this,
@@ -281,9 +410,76 @@ export class EditorEditScene extends Phaser.Scene {
         this.markDirty();
       },
     );
-    bossCount.setY(y);
-    panel.add(bossCount);
-    y += 40;
+    bossCount.setY(0);
+    header.add(bossCount);
+
+    const tabs: Array<{ id: EnemyTab; label: string; show: boolean }> = [
+      { id: 'survival', label: 'SURVIVAL', show: true },
+      { id: 'world1', label: 'WORLD 1', show: true },
+      { id: 'world2', label: 'WORLD 2', show: isWorld2Unlocked() },
+      { id: 'world3', label: 'WORLD 3', show: isWorld3Unlocked() },
+    ];
+    const visibleTabs = tabs.filter((t) => t.show);
+    const tabWidth = Math.min(88, Math.floor(320 / Math.max(1, visibleTabs.length)));
+    const totalWidth = visibleTabs.length * tabWidth;
+    visibleTabs.forEach((tab, i) => {
+      const selected = this.enemyTab === tab.id;
+      const x = -totalWidth / 2 + tabWidth / 2 + i * tabWidth;
+      const btn = this.add.text(x, 36, tab.label, {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '10px',
+        fontStyle: '700',
+        color: selected ? '#0a0e27' : '#00d4ff',
+        backgroundColor: selected ? '#44ff88' : '#1a1f3a',
+        padding: { x: 6, y: 6 },
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      btn.on('pointerup', () => {
+        if (this.scrollMoved) return;
+        void initAudio().then(() => playSfx('ui'));
+        this.enemyTab = tab.id;
+        this.scrollY = 0;
+        this.render();
+      });
+      header.add(btn);
+    });
+
+    const scrollTop = 130;
+    const panel = this.beginScrollPanel(scrollTop);
+    let y = 0;
+
+    const ensureStoryRule = (id: string): { rule: EnemySpawnRule; listIndex: number } => {
+      let listIndex = area.enemies.story.findIndex((r) => r.id === id);
+      if (listIndex < 0) {
+        area.enemies.story.push({
+          id,
+          enabled: false,
+          intervalMs: 8000,
+          chance: 1,
+          scaleBy: 'none',
+          scaleStrength: 0.2,
+          maxOnScreen: 2,
+        });
+        listIndex = area.enemies.story.length - 1;
+      }
+      return { rule: area.enemies.story[listIndex], listIndex };
+    };
+
+    const ensureBossRule = (id: string): { rule: EnemySpawnRule; listIndex: number } => {
+      let listIndex = area.enemies.bosses.findIndex((r) => r.id === id);
+      if (listIndex < 0) {
+        area.enemies.bosses.push({
+          id,
+          enabled: false,
+          intervalMs: 60000,
+          chance: 1,
+          scaleBy: 'score',
+          scaleStrength: 0.2,
+          maxOnScreen: 1,
+        });
+        listIndex = area.enemies.bosses.length - 1;
+      }
+      return { rule: area.enemies.bosses[listIndex], listIndex };
+    };
 
     const addEnemyRules = (
       title: string,
@@ -319,66 +515,55 @@ export class EditorEditScene extends Phaser.Scene {
       y += 12;
     };
 
-    const survivalIds = new Set(getVisibleSurvivalEnemyIds().map(String));
-    addEnemyRules(
-      'Survival enemies',
-      area.enemies.survival,
-      area.enemies.survival
-        .map((rule, listIndex) => ({ rule, listIndex, label: rule.id }))
-        .filter((r) => survivalIds.has(r.rule.id)),
-    );
+    if (this.enemyTab === 'survival') {
+      const survivalIds = new Set(getVisibleSurvivalEnemyIds().map(String));
+      addEnemyRules(
+        'Survival enemies',
+        area.enemies.survival,
+        area.enemies.survival
+          .map((rule, listIndex) => ({ rule, listIndex, label: rule.id }))
+          .filter((r) => survivalIds.has(r.rule.id)),
+      );
+    } else {
+      const worldId = this.enemyTab;
+      const storyOpts = getVisibleStoryEnemyOptions().filter((o) => o.worldId === worldId);
+      addEnemyRules(
+        'Story enemies',
+        area.enemies.story,
+        storyOpts.map((opt) => {
+          const { rule, listIndex } = ensureStoryRule(opt.id);
+          return { rule, label: opt.name, listIndex };
+        }),
+      );
 
-    const storyOpts = getVisibleStoryEnemyOptions();
-    addEnemyRules(
-      'Story enemies',
-      area.enemies.story,
-      storyOpts.map((opt) => {
-        let listIndex = area.enemies.story.findIndex((r) => r.id === opt.id);
-        if (listIndex < 0) {
-          area.enemies.story.push({
-            id: opt.id,
-            enabled: false,
-            intervalMs: 8000,
-            chance: 1,
-            scaleBy: 'none',
-            scaleStrength: 0.2,
-            maxOnScreen: 2,
-          });
-          listIndex = area.enemies.story.length - 1;
-        }
-        return { rule: area.enemies.story[listIndex], label: opt.name, listIndex };
-      }),
-    );
+      const bossOpts = getVisibleBossOptions().filter((o) => o.worldId === worldId);
+      addEnemyRules(
+        'Bosses',
+        area.enemies.bosses,
+        bossOpts.map((opt) => {
+          const { rule, listIndex } = ensureBossRule(opt.id);
+          return { rule, label: opt.name, listIndex };
+        }),
+      );
+    }
 
-    const bossOpts = getVisibleBossOptions();
-    addEnemyRules(
-      'Bosses',
-      area.enemies.bosses,
-      bossOpts.map((opt) => {
-        let listIndex = area.enemies.bosses.findIndex((r) => r.id === opt.id);
-        if (listIndex < 0) {
-          area.enemies.bosses.push({
-            id: opt.id,
-            enabled: false,
-            intervalMs: 60000,
-            chance: 1,
-            scaleBy: 'score',
-            scaleStrength: 0.2,
-            maxOnScreen: 1,
-          });
-          listIndex = area.enemies.bosses.length - 1;
-        }
-        return { rule: area.enemies.bosses[listIndex], label: opt.name, listIndex };
-      }),
-    );
+    if (y === 0) {
+      panel.add(this.add.text(0, 20, 'No enemies in this tab yet.', {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '13px',
+        color: '#556677',
+      }).setOrigin(0.5));
+      y = 60;
+    }
 
+    this.finalizeScroll(y, scrollTop);
     this.addBackToMenu();
   }
 
   private renderBackground(): void {
     const area = this.getEditingArea();
     const bg = area.background;
-    const panel = this.beginScrollPanel();
+    const panel = this.beginStaticPanel();
     let y = 0;
 
     const colorRow = (label: string, key: 'skyTop' | 'skyBottom' | 'starColor' | 'obstructionColor') => {
@@ -453,7 +638,7 @@ export class EditorEditScene extends Phaser.Scene {
 
   private renderMisc(): void {
     const area = this.getEditingArea();
-    const panel = this.beginScrollPanel();
+    const panel = this.beginStaticPanel();
     let y = 0;
 
     panel.add(this.add.text(-150, y, 'Finish panels', {
@@ -534,7 +719,8 @@ export class EditorEditScene extends Phaser.Scene {
           padding: { x: 6, y: 4 },
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
         editBtn.on('pointerup', () => {
-          saveCustomLevel(this.slotIndex, this.draft);
+          const saved = saveCustomLevel(this.slotIndex, this.draft);
+          if (saved) this.draft = saved;
           this.dirty = false;
           this.cameras.main.fadeOut(200, 0, 0, 0);
           this.cameras.main.once('camerafadeoutcomplete', () => {
@@ -653,7 +839,7 @@ export class EditorEditScene extends Phaser.Scene {
   }
 
   private renderSave(): void {
-    const panel = this.beginScrollPanel();
+    const panel = this.beginStaticPanel();
 
     panel.add(this.add.text(0, 0, 'Level name', {
       fontFamily: 'Orbitron, sans-serif',
@@ -692,7 +878,9 @@ export class EditorEditScene extends Phaser.Scene {
       onClick: () => {
         const typed = nameField.getValue().trim().slice(0, 32);
         if (typed.length > 0) this.draft.name = typed;
-        if (saveCustomLevel(this.slotIndex, this.draft)) {
+        const saved = saveCustomLevel(this.slotIndex, this.draft);
+        if (saved) {
+          this.draft = saved;
           this.dirty = false;
           showToast(this, 'Saved!', '#44ff88');
           this.cameras.main.fadeOut(250, 0, 0, 0);

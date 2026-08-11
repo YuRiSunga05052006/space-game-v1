@@ -258,14 +258,36 @@ export function getCustomLevel(slotIndex: number): CustomLevelDefinition | null 
   return readSlotsRaw()[slotIndex] ?? null;
 }
 
-export function saveCustomLevel(slotIndex: number, level: CustomLevelDefinition): boolean {
-  if (slotIndex < 0 || slotIndex >= MAX_CUSTOM_LEVEL_SLOTS) return false;
+export function saveCustomLevel(slotIndex: number, level: CustomLevelDefinition): CustomLevelDefinition | null {
+  if (slotIndex < 0 || slotIndex >= MAX_CUSTOM_LEVEL_SLOTS) return null;
   const validated = validateAndNormalizeLevel(level);
-  if (!validated.ok) return false;
-  const slots = readSlotsRaw();
+  if (!validated.ok) return null;
+  // Read raw slots without re-normalizing other entries through a second pass that
+  // could interact with in-memory edits — still validate each existing slot safely.
+  let slots = emptySlots();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        for (let i = 0; i < MAX_CUSTOM_LEVEL_SLOTS; i++) {
+          if (i === slotIndex) continue;
+          const item = parsed[i];
+          if (item == null) {
+            slots[i] = null;
+            continue;
+          }
+          const other = validateAndNormalizeLevel(item);
+          slots[i] = other.ok ? other.level : null;
+        }
+      }
+    }
+  } catch {
+    slots = emptySlots();
+  }
   slots[slotIndex] = validated.level;
   writeSlots(slots);
-  return true;
+  return validated.level;
 }
 
 export function deleteCustomLevel(slotIndex: number): boolean {
@@ -337,6 +359,12 @@ export type ValidateResult =
   | { ok: true; level: CustomLevelDefinition }
   | { ok: false; error: string };
 
+function readNumber(value: unknown, fallback: number): number {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function normalizeSpawnRule(raw: unknown, fallback: SpawnRule): SpawnRule {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<SpawnRule>;
   const scaleBy = r.scaleBy === 'score' || r.scaleBy === 'time' || r.scaleBy === 'none'
@@ -344,10 +372,11 @@ function normalizeSpawnRule(raw: unknown, fallback: SpawnRule): SpawnRule {
     : fallback.scaleBy;
   return {
     enabled: r.enabled === true,
-    intervalMs: clamp(Number(r.intervalMs ?? fallback.intervalMs) || fallback.intervalMs, 0, 300000),
-    chance: clamp(Number(r.chance ?? fallback.chance) || 0, 0, 1),
+    // Use nullish checks — `||` would treat intervalMs 0 as missing and reset it.
+    intervalMs: clamp(readNumber(r.intervalMs, fallback.intervalMs), 0, 300000),
+    chance: clamp(readNumber(r.chance, fallback.chance), 0, 1),
     scaleBy,
-    scaleStrength: clamp(Number(r.scaleStrength ?? fallback.scaleStrength) || 0, 0, 1),
+    scaleStrength: clamp(readNumber(r.scaleStrength, fallback.scaleStrength), 0, 1),
   };
 }
 
@@ -583,14 +612,15 @@ export function getEffectiveIntervalMs(
   elapsedMs: number,
 ): number {
   if (!rule.enabled) return Number.POSITIVE_INFINITY;
-  if (rule.intervalMs <= 0) return 0;
-  let interval = rule.intervalMs;
+  // Never allow 0ms (every-frame) spawns — that softlocks the ship under asteroid spam.
+  const base = Math.max(400, rule.intervalMs <= 0 ? 400 : rule.intervalMs);
+  let interval = base;
   if (rule.scaleBy === 'score') {
     const steps = Math.floor(score / 1000);
-    interval = rule.intervalMs * (1 - rule.scaleStrength * Math.min(0.85, steps * 0.08));
+    interval = base * (1 - rule.scaleStrength * Math.min(0.85, steps * 0.08));
   } else if (rule.scaleBy === 'time') {
     const steps = Math.floor(elapsedMs / 10000);
-    interval = rule.intervalMs * (1 - rule.scaleStrength * Math.min(0.85, steps * 0.08));
+    interval = base * (1 - rule.scaleStrength * Math.min(0.85, steps * 0.08));
   }
   return Math.max(400, interval);
 }
