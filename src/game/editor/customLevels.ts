@@ -66,11 +66,12 @@ export interface CustomAreaContent {
   obstacles: {
     asteroids: SpawnRule;
     comets: SpawnRule;
-    mines: SpawnRule;
-    /** Red mines require World 3 unlock. */
-    redMines: boolean;
-    /** Purple mines require World 3 unlock. */
-    purpleMines: boolean;
+    blueMines: SpawnRule;
+    grayMines: SpawnRule;
+    /** Requires World 3 unlock. */
+    redMines: SpawnRule;
+    /** Requires World 3 unlock. */
+    purpleMines: SpawnRule;
   };
   enemies: {
     survival: EnemySpawnRule[];
@@ -175,9 +176,10 @@ export function createDefaultAreaContent(): CustomAreaContent {
         scaleStrength: 0.4,
       }),
       comets: defaultSpawnRule({ enabled: false, intervalMs: 8000, chance: 0.35 }),
-      mines: defaultSpawnRule({ enabled: false, intervalMs: 4000, chance: 0.04 }),
-      redMines: false,
-      purpleMines: false,
+      blueMines: defaultSpawnRule({ enabled: false, intervalMs: 4000, chance: 0.5 }),
+      grayMines: defaultSpawnRule({ enabled: false, intervalMs: 4000, chance: 0.5 }),
+      redMines: defaultSpawnRule({ enabled: false, intervalMs: 4000, chance: 0.35 }),
+      purpleMines: defaultSpawnRule({ enabled: false, intervalMs: 4000, chance: 0.35 }),
     },
     enemies: {
       survival: [
@@ -186,6 +188,7 @@ export function createDefaultAreaContent(): CustomAreaContent {
         defaultSurvivalEnemy('wasp'),
         defaultSurvivalEnemy('turret'),
         defaultSurvivalEnemy('mineCarrier'),
+        defaultSurvivalEnemy('flamethrower'),
       ],
       story: getAllStoryEnemyOptions().map((o) => defaultStoryEnemy(o.id)),
       bosses: getAllBossOptions().map((o) => defaultBossEnemy(o.id)),
@@ -328,18 +331,25 @@ export function canUseMineCarriers(): boolean {
   return canUseWorld3EditorContent();
 }
 
+export function canUseFlamethrowers(): boolean {
+  return isWorld2Unlocked() || isWorld3Unlocked();
+}
+
 function applyEditorContentGates(area: CustomAreaContent): void {
   if (area.obstacles.comets.enabled && !canUseComets()) {
     area.obstacles.comets.enabled = false;
   }
-  if (area.obstacles.redMines && !canUseRedMines()) {
-    area.obstacles.redMines = false;
+  if (area.obstacles.redMines.enabled && !canUseRedMines()) {
+    area.obstacles.redMines.enabled = false;
   }
-  if (area.obstacles.purpleMines && !canUsePurpleMines()) {
-    area.obstacles.purpleMines = false;
+  if (area.obstacles.purpleMines.enabled && !canUsePurpleMines()) {
+    area.obstacles.purpleMines.enabled = false;
   }
   for (const rule of area.enemies.survival) {
     if (rule.id === 'mineCarrier' && !canUseMineCarriers()) {
+      rule.enabled = false;
+    }
+    if (rule.id === 'flamethrower' && !canUseFlamethrowers()) {
       rule.enabled = false;
     }
   }
@@ -403,6 +413,66 @@ function normalizeBackground(raw: unknown): EditorBackgroundConfig {
   };
 }
 
+function looksLikeSpawnRule(raw: unknown): boolean {
+  return !!raw && typeof raw === 'object' && !Array.isArray(raw) && 'enabled' in (raw as object);
+}
+
+/** Supports legacy `{ mines, redMines: bool, purpleMines: bool }` and the per-variant rules. */
+function normalizeObstacles(
+  raw: Partial<CustomAreaContent['obstacles']> & Record<string, unknown>,
+  def: CustomAreaContent['obstacles'],
+): CustomAreaContent['obstacles'] {
+  const legacyMines = raw.mines;
+  const hasPerVariant =
+    looksLikeSpawnRule(raw.blueMines)
+    || looksLikeSpawnRule(raw.grayMines)
+    || looksLikeSpawnRule(raw.redMines)
+    || looksLikeSpawnRule(raw.purpleMines);
+
+  let blueMines: SpawnRule;
+  let grayMines: SpawnRule;
+  let redMines: SpawnRule;
+  let purpleMines: SpawnRule;
+
+  if (!hasPerVariant && looksLikeSpawnRule(legacyMines)) {
+    const base = normalizeSpawnRule(legacyMines, def.blueMines);
+    // Legacy levels stored red/purple as booleans on the shared mines rule.
+    const legacyFlags = raw as Record<string, unknown>;
+    blueMines = { ...base };
+    grayMines = { ...base };
+    redMines = {
+      ...base,
+      enabled: legacyFlags.redMines === true && base.enabled && canUseRedMines(),
+    };
+    purpleMines = {
+      ...base,
+      enabled: legacyFlags.purpleMines === true && base.enabled && canUsePurpleMines(),
+    };
+  } else {
+    blueMines = normalizeSpawnRule(raw.blueMines, def.blueMines);
+    grayMines = normalizeSpawnRule(raw.grayMines, def.grayMines);
+    redMines = normalizeSpawnRule(
+      looksLikeSpawnRule(raw.redMines) ? raw.redMines : undefined,
+      def.redMines,
+    );
+    purpleMines = normalizeSpawnRule(
+      looksLikeSpawnRule(raw.purpleMines) ? raw.purpleMines : undefined,
+      def.purpleMines,
+    );
+    if (!canUseRedMines()) redMines.enabled = false;
+    if (!canUsePurpleMines()) purpleMines.enabled = false;
+  }
+
+  return {
+    asteroids: normalizeSpawnRule(raw.asteroids, def.asteroids),
+    comets: normalizeSpawnRule(raw.comets, def.comets),
+    blueMines,
+    grayMines,
+    redMines,
+    purpleMines,
+  };
+}
+
 function normalizeAreaContent(raw: unknown): CustomAreaContent {
   const def = createDefaultAreaContent();
   const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<CustomAreaContent>;
@@ -444,17 +514,14 @@ function normalizeAreaContent(raw: unknown): CustomAreaContent {
       shield: normalizeSpawnRule(objects.shield, def.objects.shield),
       invisibility: normalizeSpawnRule(objects.invisibility, def.objects.invisibility),
     },
-    obstacles: {
-      asteroids: normalizeSpawnRule(obstacles.asteroids, def.obstacles.asteroids),
-      comets: normalizeSpawnRule(obstacles.comets, def.obstacles.comets),
-      mines: normalizeSpawnRule(obstacles.mines, def.obstacles.mines),
-      redMines: obstacles.redMines === true && canUseRedMines(),
-      purpleMines: obstacles.purpleMines === true && canUsePurpleMines(),
-    },
+    obstacles: normalizeObstacles(obstacles, def.obstacles),
     enemies: {
       survival: survivalDefaults.map((d) => {
         const rule = normalizeEnemyRule(survivalRaw.find((x) => x.id === d.id), d);
         if (rule.id === 'mineCarrier' && !canUseMineCarriers()) {
+          rule.enabled = false;
+        }
+        if (rule.id === 'flamethrower' && !canUseFlamethrowers()) {
           rule.enabled = false;
         }
         return rule;

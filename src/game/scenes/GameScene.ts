@@ -8,6 +8,11 @@ import { SpiderShip, SPIDER_BODY_DAMAGE } from '../entities/SpiderShip';
 import { SeekerDrone, SEEKER_BODY_DAMAGE } from '../entities/SeekerDrone';
 import { KamikazeWasp, WASP_BODY_DAMAGE } from '../entities/KamikazeWasp';
 import { PlasmaTurret, TURRET_BODY_DAMAGE } from '../entities/PlasmaTurret';
+import {
+  FlamethrowerShip,
+  FLAMETHROWER_BODY_DAMAGE,
+} from '../entities/FlamethrowerShip';
+import { FirePlume, FIRE_DAMAGE, FIRE_TICK_MS } from '../entities/FirePlume';
 import { StoryEnemy, storyEnemyNeedsFire } from '../entities/StoryEnemy';
 import { BossShip } from '../entities/BossShip';
 import { Wormhole } from '../entities/Wormhole';
@@ -74,6 +79,7 @@ import {
 } from '../gameFlow';
 import {
   canUseComets,
+  canUseFlamethrowers,
   canUseMineCarriers,
   canUsePurpleMines,
   canUseRedMines,
@@ -207,6 +213,8 @@ export class GameScene extends Phaser.Scene {
   private seekerDrones!: Phaser.Physics.Arcade.Group;
   private kamikazeWasps!: Phaser.Physics.Arcade.Group;
   private plasmaTurrets!: Phaser.Physics.Arcade.Group;
+  private flamethrowerShips!: Phaser.Physics.Arcade.Group;
+  private firePlumes!: Phaser.Physics.Arcade.Group;
   private storyEnemies!: Phaser.Physics.Arcade.Group;
   private enemyLasers!: Phaser.Physics.Arcade.Group;
   private lootBoxes!: Phaser.Physics.Arcade.Group;
@@ -252,6 +260,8 @@ export class GameScene extends Phaser.Scene {
   private enemySpawnTimer = 0;
   private storyEnemySpawnTimer = 0;
   private isHitStunned = false;
+  /** Global fire DoT gate — 1 damage every FIRE_TICK_MS while overlapping any plume. */
+  private lastFireDamageAt = Number.NEGATIVE_INFINITY;
   /** Prevents hit-SFX spam while overlapping a boss under invincibility/boost/shield. */
   private bossRamHitSfxAt = 0;
   private isChoosingWeapon = false;
@@ -324,6 +334,7 @@ export class GameScene extends Phaser.Scene {
   private editorSpawnedMiscIds = new Set<string>();
   private editorSurvivalTimers: Record<string, number> = {};
   private editorStoryTimers: Record<string, number> = {};
+  private editorMineTimers: Record<string, number> = {};
   private editorBossTimer = 0;
 
   constructor() {
@@ -441,6 +452,7 @@ export class GameScene extends Phaser.Scene {
     this.editorSpawnedMiscIds = new Set();
     this.editorSurvivalTimers = {};
     this.editorStoryTimers = {};
+    this.editorMineTimers = {};
     this.editorBossTimer = 0;
 
     if (this.gameMode === 'editor' && !this.editorArea) {
@@ -580,6 +592,8 @@ export class GameScene extends Phaser.Scene {
     this.seekerDrones = this.physics.add.group();
     this.kamikazeWasps = this.physics.add.group();
     this.plasmaTurrets = this.physics.add.group();
+    this.flamethrowerShips = this.physics.add.group();
+    this.firePlumes = this.physics.add.group();
     this.storyEnemies = this.physics.add.group();
     this.enemyLasers = this.physics.add.group();
     this.lootBoxes = this.physics.add.group();
@@ -940,6 +954,14 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.add.overlap(
       this.bullets,
+      this.flamethrowerShips,
+      this.onBulletHitFlamethrower as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.bullets,
       this.storyEnemies,
       this.onBulletHitStoryEnemy as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
       undefined,
@@ -990,6 +1012,14 @@ export class GameScene extends Phaser.Scene {
       this.player,
       this.plasmaTurrets,
       this.onPlayerHitTurret as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.flamethrowerShips,
+      this.onPlayerHitFlamethrower as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
       undefined,
       this,
     );
@@ -1066,6 +1096,7 @@ export class GameScene extends Phaser.Scene {
       this.seekerDrones,
       this.kamikazeWasps,
       this.plasmaTurrets,
+      this.flamethrowerShips,
       this.storyEnemies,
       this.mineCarriers,
       this.bossShips,
@@ -1166,6 +1197,17 @@ export class GameScene extends Phaser.Scene {
     this.applyBulletToScoredEnemy(
       bulletObj as Phaser.Physics.Arcade.Sprite,
       turretObj as PlasmaTurret,
+      10,
+    );
+  }
+
+  private onBulletHitFlamethrower(
+    bulletObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    shipObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    this.applyBulletToScoredEnemy(
+      bulletObj as Phaser.Physics.Arcade.Sprite,
+      shipObj as FlamethrowerShip,
       10,
     );
   }
@@ -1271,6 +1313,13 @@ export class GameScene extends Phaser.Scene {
     turretObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     this.handleEnemyRam(turretObj as PlasmaTurret, TURRET_BODY_DAMAGE, 10);
+  }
+
+  private onPlayerHitFlamethrower(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    shipObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    this.handleEnemyRam(shipObj as FlamethrowerShip, FLAMETHROWER_BODY_DAMAGE, 10);
   }
 
   private onPlayerHitStoryEnemy(
@@ -2249,6 +2298,7 @@ export class GameScene extends Phaser.Scene {
       seekerDrones: this.seekerDrones,
       kamikazeWasps: this.kamikazeWasps,
       plasmaTurrets: this.plasmaTurrets,
+      flamethrowerShips: this.flamethrowerShips,
       storyEnemies: this.storyEnemies,
       bossShips: this.bossShips,
     };
@@ -2302,8 +2352,8 @@ export class GameScene extends Phaser.Scene {
           this.spawnExplosion(ex, ey, explosionCount);
           this.tryAwardEnemyCoins(ex, ey);
         },
-        onBossDamaged: (bx, by) => {
-          this.spawnExplosion(bx, by, 4);
+        onBossDamaged: (bx, by, _damage, result) => {
+          this.applyBossBlastDamage(bx, by, result);
         },
         onMineDestroyed: (_mx, _my, points) => {
           this.addScore(points);
@@ -2320,6 +2370,29 @@ export class GameScene extends Phaser.Scene {
         playerY: this.player.y,
       },
     );
+  }
+
+  /** Sync boss HUD / defeat when a mine, carrier, or death-bomb blast hits. */
+  private applyBossBlastDamage(
+    x: number,
+    y: number,
+    result: { killed: boolean; points: number; healthRemaining: number },
+  ): void {
+    if (result.killed) {
+      this.bossHealthBar.hide();
+      this.layoutTopCenterHud();
+      this.addScore(result.points);
+      this.spawnBigExplosion(x, y);
+      this.lastDefeatedBossX = x;
+      this.lastDefeatedBossY = y;
+      this.onBossDefeated();
+      return;
+    }
+
+    playHitSfx();
+    this.spawnExplosion(x, y, 4);
+    this.bossHealthRemaining = result.healthRemaining;
+    this.bossHealthBar.setHp(result.healthRemaining);
   }
 
   private checkLootMilestones(): void {
@@ -2474,6 +2547,48 @@ export class GameScene extends Phaser.Scene {
       this.isHitStunned = false;
       this.player.setVelocity(0, 0);
     });
+  }
+
+  /** Continuous fire DoT — laser-style feedback, no teleport. Cadence gated by lastFireDamageAt. */
+  private takeFireDamage(amount: number): void {
+    if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
+    if (this.player.isGhostMode()) return;
+    if (this.player.absorbHit()) return;
+
+    this.hp = Math.max(0, this.hp - amount);
+    this.healthBar.setHp(this.hp);
+    this.cameras.main.shake(160, 0.004);
+    this.cameras.main.flash(80, 255, 120, 40);
+
+    if (this.hp <= 0) {
+      this.triggerPlayerDeath();
+      return;
+    }
+
+    playHitSfx();
+  }
+
+  private playerOverlapsFire(): boolean {
+    let inFire = false;
+    this.firePlumes.children.each((child) => {
+      const plume = child as FirePlume;
+      if (plume.active && this.physics.overlap(this.player, plume)) {
+        inFire = true;
+      }
+      return true;
+    });
+    return inFire;
+  }
+
+  private tickFireDamage(time: number): void {
+    if (!this.playerOverlapsFire()) return;
+    if (time < this.lastFireDamageAt + FIRE_TICK_MS) return;
+    this.lastFireDamageAt = time;
+    this.takeFireDamage(FIRE_DAMAGE);
+  }
+
+  private summonFirePlume(x: number, y: number, angle: number): void {
+    FirePlume.spawnFrom(this, this.firePlumes, x, y, angle);
   }
 
   private takeDamage(amount: number): void {
@@ -3490,6 +3605,7 @@ export class GameScene extends Phaser.Scene {
         seekerDrones: this.seekerDrones,
         kamikazeWasps: this.kamikazeWasps,
         plasmaTurrets: this.plasmaTurrets,
+        flamethrowerShips: this.flamethrowerShips,
         storyEnemies: this.storyEnemies,
         bossShips: this.bossShips,
       },
@@ -3502,8 +3618,8 @@ export class GameScene extends Phaser.Scene {
           this.spawnExplosion(ex, ey, explosionCount);
           this.tryAwardEnemyCoins(ex, ey);
         },
-        onBossDamaged: (bx, by) => {
-          this.spawnExplosion(bx, by, 4);
+        onBossDamaged: (bx, by, _damage, result) => {
+          this.applyBossBlastDamage(bx, by, result);
         },
         spawnBlastRing: (bx, by, radius) => {
           this.spawnBlastRing(bx, by, radius);
@@ -3659,6 +3775,7 @@ export class GameScene extends Phaser.Scene {
       wasp: this.kamikazeWasps.countActive(true),
       turret: this.plasmaTurrets.countActive(true),
       mineCarrier: this.mineCarriers.countActive(true),
+      flamethrower: this.flamethrowerShips.countActive(true),
     };
   }
 
@@ -3705,6 +3822,15 @@ export class GameScene extends Phaser.Scene {
         carrier.setVelocity(config.velocityX, config.velocityY);
         break;
       }
+      case 'flamethrower': {
+        const config = FlamethrowerShip.randomConfig();
+        const ship = new FlamethrowerShip(this, config, (px, py, angle) => {
+          this.summonFirePlume(px, py, angle);
+        });
+        this.flamethrowerShips.add(ship);
+        ship.setVelocity(config.velocityX, config.velocityY);
+        break;
+      }
     }
   }
 
@@ -3734,6 +3860,16 @@ export class GameScene extends Phaser.Scene {
 
     this.plasmaTurrets.children.each((child) => {
       (child as PlasmaTurret).tryFire(time, px, py);
+      return true;
+    });
+
+    this.flamethrowerShips.children.each((child) => {
+      (child as FlamethrowerShip).tryFire(time, px, py);
+      return true;
+    });
+
+    this.firePlumes.children.each((child) => {
+      (child as FirePlume).updatePlume(time, delta);
       return true;
     });
 
@@ -3953,6 +4089,12 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
+    this.flamethrowerShips.children.each((child) => {
+      const ship = child as FlamethrowerShip;
+      if (ship.isOffScreen()) ship.destroy();
+      return true;
+    });
+
     this.storyEnemies.children.each((child) => {
       const enemy = child as StoryEnemy;
       if (enemy.isOffScreen()) enemy.destroy();
@@ -4062,7 +4204,12 @@ export class GameScene extends Phaser.Scene {
 
   private shouldSpawnMines(): boolean {
     if (this.gameMode === 'editor') {
-      return this.editorArea?.obstacles.mines.enabled === true;
+      const o = this.editorArea?.obstacles;
+      if (!o) return false;
+      return o.blueMines.enabled
+        || o.grayMines.enabled
+        || (o.redMines.enabled && canUseRedMines())
+        || (o.purpleMines.enabled && canUsePurpleMines());
     }
     // Gray/Blue also appear in ISS / Dawn / Galilean / WISE secrets and W1–W2 Survival.
     if (
@@ -4087,17 +4234,6 @@ export class GameScene extends Phaser.Scene {
 
   private pickMineVariant(): MineVariant | null {
     if (!this.shouldSpawnMines()) return null;
-
-    if (this.gameMode === 'editor') {
-      const variants: MineVariant[] = ['gray', 'blue'];
-      if (this.editorArea?.obstacles.redMines && canUseRedMines()) {
-        variants.push('red');
-      }
-      if (this.editorArea?.obstacles.purpleMines && canUsePurpleMines()) {
-        variants.push('purple');
-      }
-      return variants[Phaser.Math.Between(0, variants.length - 1)];
-    }
 
     // WISE: blue / gray / red from the start (no purple).
     if (this.secretId === 'wise0855') {
@@ -4132,11 +4268,18 @@ export class GameScene extends Phaser.Scene {
   private spawnMine(): void {
     if (this.isGameOver || this.isPaused || !this.shouldSpawnMines()) return;
     if (this.countMinesOnScreen() >= MAX_MINES_ON_SCREEN) return;
-    // Editor already applies its own chance before calling spawnMine.
-    if (this.gameMode !== 'editor' && Math.random() >= MINE_SPAWN_CHANCE) return;
+    if (Math.random() >= MINE_SPAWN_CHANCE) return;
 
     const variant = this.pickMineVariant();
     if (!variant) return;
+    this.spawnMineOfVariant(variant);
+  }
+
+  private spawnMineOfVariant(variant: MineVariant): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.countMinesOnScreen() >= MAX_MINES_ON_SCREEN) return;
+    if (variant === 'red' && !canUseRedMines()) return;
+    if (variant === 'purple' && !canUsePurpleMines()) return;
 
     const config = Mine.randomConfig(variant);
     const mine = new Mine(this, config);
@@ -4286,12 +4429,20 @@ export class GameScene extends Phaser.Scene {
       0.5,
     );
     pushEnemyShipLights(
+      this.flamethrowerShips,
+      LIGHT_RADIUS.enemySpotlight,
+      0.65,
+      LIGHT_RADIUS.enemyBeamHalfWidth,
+      0.5,
+    );
+    pushEnemyShipLights(
       this.storyEnemies,
       LIGHT_RADIUS.enemySpotlight,
       0.65,
       LIGHT_RADIUS.enemyBeamHalfWidth,
       0.5,
     );
+    pushActive(this.firePlumes, LIGHT_RADIUS.firePlume, 0.9);
     pushActive(this.mines, LIGHT_RADIUS.mine, 0.65);
     pushActive(this.comets, LIGHT_RADIUS.faint, 0.7);
     pushActive(this.hearts, LIGHT_RADIUS.faint, 0.7);
@@ -4363,6 +4514,7 @@ export class GameScene extends Phaser.Scene {
           seekerDrones: this.seekerDrones,
           kamikazeWasps: this.kamikazeWasps,
           plasmaTurrets: this.plasmaTurrets,
+          flamethrowerShips: this.flamethrowerShips,
           storyEnemies: this.storyEnemies,
         },
         delta,
@@ -4389,6 +4541,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.updateDarknessOverlay();
     this.updateEnemies(time, delta);
+    this.tickFireDamage(time);
     if (this.bossActive) {
       this.updateBoss(time);
     }
@@ -4550,16 +4703,25 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Mines
-    const mineRule = area.obstacles.mines;
-    if (mineRule.enabled) {
-      this.mineSpawnTimer += delta;
-      const interval = getEffectiveIntervalMs(mineRule, this.score, elapsed);
-      if (this.mineSpawnTimer >= interval) {
-        this.mineSpawnTimer = 0;
-        if (Math.random() < mineRule.chance) this.spawnMine();
+    // Mines — each color has its own spawn rule.
+    const tickMineRule = (
+      rule: typeof area.obstacles.blueMines,
+      variant: MineVariant,
+      allowed: boolean,
+    ) => {
+      if (!rule.enabled || !allowed) return;
+      const key = variant;
+      this.editorMineTimers[key] = (this.editorMineTimers[key] ?? 0) + delta;
+      const interval = getEffectiveIntervalMs(rule, this.score, elapsed);
+      if (this.editorMineTimers[key] >= interval) {
+        this.editorMineTimers[key] = 0;
+        if (Math.random() < rule.chance) this.spawnMineOfVariant(variant);
       }
-    }
+    };
+    tickMineRule(area.obstacles.blueMines, 'blue', true);
+    tickMineRule(area.obstacles.grayMines, 'gray', true);
+    tickMineRule(area.obstacles.redMines, 'red', canUseRedMines());
+    tickMineRule(area.obstacles.purpleMines, 'purple', canUsePurpleMines());
 
     // Hearts / power-ups
     const tickPickup = (
@@ -4590,6 +4752,7 @@ export class GameScene extends Phaser.Scene {
       for (const rule of area.enemies.survival) {
         if (!rule.enabled) continue;
         if (rule.id === 'mineCarrier' && !canUseMineCarriers()) continue;
+        if (rule.id === 'flamethrower' && !canUseFlamethrowers()) continue;
         const id = String(rule.id);
         this.editorSurvivalTimers[id] = (this.editorSurvivalTimers[id] ?? 0) + delta;
         const interval = getEffectiveIntervalMs(rule, this.score, elapsed);

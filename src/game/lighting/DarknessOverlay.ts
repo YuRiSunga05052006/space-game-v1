@@ -39,6 +39,7 @@ export const LIGHT_RADIUS = {
   faint: 48,
   mine: 42,
   laser: 16,
+  firePlume: 40,
   explosion: 70,
   bigExplosion: 130,
 } as const;

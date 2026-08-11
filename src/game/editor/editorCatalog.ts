@@ -37,6 +37,7 @@ const SURVIVAL_ID_BY_ALMANAC: Record<string, EnemyKind> = {
   'enemy-wasp': 'wasp',
   'enemy-turret': 'turret',
   'enemy-mine-carrier': 'mineCarrier',
+  'enemy-flamethrower': 'flamethrower',
 };
 
 const LEGACY_STORY_IDS: Record<string, string> = {
@@ -55,11 +56,12 @@ export function migrateLegacyEnemyId(id: string): string {
 }
 
 export function isEditorObstacleVisible(
-  kind: 'asteroids' | 'comets' | 'mines' | 'redMines' | 'purpleMines',
+  kind: 'asteroids' | 'comets' | 'blueMines' | 'grayMines' | 'redMines' | 'purpleMines',
 ): boolean {
   switch (kind) {
     case 'asteroids':
-    case 'mines':
+    case 'blueMines':
+    case 'grayMines':
       return true;
     case 'comets':
       return canUseComets();
@@ -78,7 +80,14 @@ export function getVisibleSurvivalEnemyIds(): EnemyKind[] {
       .map((e) => SURVIVAL_ID_BY_ALMANAC[e.id])
       .filter((id): id is EnemyKind => !!id),
   );
-  const all: EnemyKind[] = ['spider', 'seeker', 'wasp', 'turret', 'mineCarrier'];
+  const all: EnemyKind[] = [
+    'spider',
+    'seeker',
+    'wasp',
+    'turret',
+    'mineCarrier',
+    'flamethrower',
+  ];
   return all.filter((id) => visible.has(id));
 }
 

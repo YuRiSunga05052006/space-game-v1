@@ -23,6 +23,7 @@ export interface MineBlastGroups {
   seekerDrones: Phaser.Physics.Arcade.Group;
   kamikazeWasps: Phaser.Physics.Arcade.Group;
   plasmaTurrets: Phaser.Physics.Arcade.Group;
+  flamethrowerShips: Phaser.Physics.Arcade.Group;
   storyEnemies: Phaser.Physics.Arcade.Group;
   bossShips: Phaser.Physics.Arcade.Group;
 }
@@ -45,7 +46,12 @@ export interface MineBlastCallbacks {
     explosionCount: number,
   ) => void;
   onEnemyDestroyed: (x: number, y: number, points: number, explosionCount: number) => void;
-  onBossDamaged: (x: number, y: number, damage: number) => void;
+  onBossDamaged: (
+    x: number,
+    y: number,
+    damage: number,
+    result: { killed: boolean; points: number; healthRemaining: number },
+  ) => void;
   onMineDestroyed: (x: number, y: number, points: number) => void;
   onCarrierChained: (x: number, y: number, points: number) => void;
 }
@@ -226,6 +232,7 @@ export function detonateMineBlast(
       { group: groups.seekerDrones, explosionCount: 6 },
       { group: groups.kamikazeWasps, explosionCount: 6 },
       { group: groups.plasmaTurrets, explosionCount: 8 },
+      { group: groups.flamethrowerShips, explosionCount: 8 },
       { group: groups.storyEnemies, explosionCount: 8 },
     ];
 
@@ -236,14 +243,26 @@ export function detonateMineBlast(
     }
 
     forEachActive(groups.bossShips, (sprite) => {
-      if (!withinRadius(sprite.x, sprite.y, cx, cy, radius)) return;
       const boss = sprite as Phaser.Physics.Arcade.Sprite & {
         takeDamage?: (n: number) => boolean;
+        points?: number;
+        health?: number;
       };
-      if (typeof boss.takeDamage === 'function') {
-        callbacks.onBossDamaged(sprite.x, sprite.y, damage);
-        boss.takeDamage(damage);
-      }
+      const body = sprite.body as Phaser.Physics.Arcade.Body | undefined;
+      const hitPad = body ? Math.max(body.halfWidth, body.halfHeight) : 28;
+      // Include boss body size so edge blasts still connect.
+      if (!withinRadius(sprite.x, sprite.y, cx, cy, radius + hitPad)) return;
+      if (typeof boss.takeDamage !== 'function') return;
+
+      const points = boss.points ?? 0;
+      const x = sprite.x;
+      const y = sprite.y;
+      const killed = boss.takeDamage(damage);
+      callbacks.onBossDamaged(x, y, damage, {
+        killed,
+        points,
+        healthRemaining: killed ? 0 : (boss.health ?? 0),
+      });
     });
 
     const chainedMines: Mine[] = [];

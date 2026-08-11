@@ -1,7 +1,14 @@
 import Phaser from 'phaser';
 import { getEscalationLevel, getSurvivalEnemyCountBonus } from './difficulty';
+import { getWorldNumber } from './worlds';
 
-export type EnemyKind = 'spider' | 'seeker' | 'wasp' | 'turret' | 'mineCarrier';
+export type EnemyKind =
+  | 'spider'
+  | 'seeker'
+  | 'wasp'
+  | 'turret'
+  | 'mineCarrier'
+  | 'flamethrower';
 
 const ENEMY_BASE_INTERVAL: Record<EnemyKind, number> = {
   spider: 9000,
@@ -9,6 +16,7 @@ const ENEMY_BASE_INTERVAL: Record<EnemyKind, number> = {
   wasp: 13000,
   turret: 15000,
   mineCarrier: 14000,
+  flamethrower: 12000,
 };
 
 const ENEMY_INTERVAL_REDUCTION: Record<EnemyKind, number> = {
@@ -17,6 +25,7 @@ const ENEMY_INTERVAL_REDUCTION: Record<EnemyKind, number> = {
   wasp: 1000,
   turret: 900,
   mineCarrier: 900,
+  flamethrower: 1000,
 };
 
 const ENEMY_MIN_INTERVAL: Record<EnemyKind, number> = {
@@ -25,6 +34,7 @@ const ENEMY_MIN_INTERVAL: Record<EnemyKind, number> = {
   wasp: 5500,
   turret: 6000,
   mineCarrier: 6000,
+  flamethrower: 5000,
 };
 
 const ENEMY_BASE_MAX: Record<EnemyKind, number> = {
@@ -33,6 +43,7 @@ const ENEMY_BASE_MAX: Record<EnemyKind, number> = {
   wasp: 2,
   turret: 1,
   mineCarrier: 2,
+  flamethrower: 2,
 };
 
 const ENEMY_SURVIVAL_MAX: Record<EnemyKind, number> = {
@@ -41,17 +52,21 @@ const ENEMY_SURVIVAL_MAX: Record<EnemyKind, number> = {
   wasp: 5,
   turret: 3,
   mineCarrier: 3,
+  flamethrower: 4,
 };
 
 /** Minimum ms between any enemy spawn attempt. */
 export const ENEMY_SPAWN_TICK_MS = 2500;
 
 export const MINE_CARRIER_UNLOCK_SCORE = 3000;
+export const FLAMETHROWER_UNLOCK_SCORE = 2500;
 
 /**
- * Score bands: 0-999 none, 1000+ spider, 2000+ seeker, 3000+ mineCarrier (W3), 4000+ wasp, 5000+ turret.
+ * Score bands: 0-999 none, 1000+ spider, 2000+ seeker, 2500+ flamethrower (W2+),
+ * 3000+ mineCarrier (W3), 4000+ wasp, 5000+ turret.
  * Story Mode passes storyLevel so Mine Carriers only unlock at L27+.
  * Pass storyLevel as undefined (e.g. WISE secret) to allow Mine Carriers in World 3 at the score gate.
+ * Flamethrower only needs world 2+ and score — no story-level floor.
  */
 export function getUnlockedEnemyKinds(
   score: number,
@@ -61,6 +76,9 @@ export function getUnlockedEnemyKinds(
   const kinds: EnemyKind[] = [];
   if (score >= 1000) kinds.push('spider');
   if (score >= 2000) kinds.push('seeker');
+  if (score >= FLAMETHROWER_UNLOCK_SCORE && getWorldNumber(worldId) >= 2) {
+    kinds.push('flamethrower');
+  }
   if (
     score >= MINE_CARRIER_UNLOCK_SCORE
     && worldId === 'world3'
@@ -96,6 +114,7 @@ export function getMaxOnScreen(
     switch (kind) {
       case 'spider':
       case 'wasp':
+      case 'flamethrower':
         max += bonus;
         break;
       case 'seeker':
@@ -114,6 +133,7 @@ export function getMaxOnScreen(
 
   switch (kind) {
     case 'spider':
+    case 'flamethrower':
       max += level;
       break;
     case 'seeker':
@@ -139,6 +159,10 @@ function getEnemyWeight(kind: EnemyKind, score: number, worldId: string, storyLe
       return score >= 1000 ? 3 + level : 0;
     case 'seeker':
       return score >= 2000 ? 3 + Math.floor(level / 2) : 0;
+    case 'flamethrower':
+      return getUnlockedEnemyKinds(score, worldId, storyLevel).includes('flamethrower')
+        ? 3 + level
+        : 0;
     case 'mineCarrier':
       return getUnlockedEnemyKinds(score, worldId, storyLevel).includes('mineCarrier')
         ? 3 + level

@@ -29,6 +29,7 @@ export interface BoostVacuumGroups {
   seekerDrones: Phaser.Physics.Arcade.Group;
   kamikazeWasps: Phaser.Physics.Arcade.Group;
   plasmaTurrets: Phaser.Physics.Arcade.Group;
+  flamethrowerShips: Phaser.Physics.Arcade.Group;
   storyEnemies: Phaser.Physics.Arcade.Group;
 }
 
@@ -163,5 +164,6 @@ export function updateBoostVacuum(
   forEachActive(groups.seekerDrones, (s) => absorbEnemy(s, enemyPoints(s), 6));
   forEachActive(groups.kamikazeWasps, (s) => absorbEnemy(s, enemyPoints(s), 6));
   forEachActive(groups.plasmaTurrets, (s) => absorbEnemy(s, enemyPoints(s), 8));
+  forEachActive(groups.flamethrowerShips, (s) => absorbEnemy(s, enemyPoints(s), 8));
   forEachActive(groups.storyEnemies, (s) => absorbEnemy(s, enemyPoints(s), 8));
 }

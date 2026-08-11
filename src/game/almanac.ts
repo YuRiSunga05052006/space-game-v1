@@ -24,6 +24,12 @@ import {
   MINE_CARRIER_HEALTH,
   MINE_CARRIER_POINTS,
 } from './entities/MineCarrier';
+import {
+  FLAMETHROWER_BODY_DAMAGE,
+  FLAMETHROWER_HEALTH,
+  FLAMETHROWER_POINTS,
+} from './entities/FlamethrowerShip';
+import { FIRE_DAMAGE, FIRE_TICK_MS } from './entities/FirePlume';
 import { MINE_DATA, type MineVariant } from './entities/Mine';
 import { ASTEROID_DAMAGE, ASTEROID_DATA, GOLD_ASTEROID_HEALTH, GOLD_ASTEROID_TEXTURES, type AsteroidSize } from './entities/Asteroid';
 import { COMET_DAMAGE, COMET_POINTS, GOLD_COMET_POINTS } from './entities/Comet';
@@ -36,7 +42,7 @@ import { STORY_ENEMY_DEFINITIONS as WORLD2_STORY_ENEMIES } from './world2/storyE
 import { GALILEAN_MOON_ENEMIES } from './world2/galileanEnemies';
 import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from './world3/storyEnemyDefinitions';
 import { getStoryEnemyUnlockScore, getSurvivalBossUnlockScore } from './survivalSpawn';
-import { MINE_CARRIER_UNLOCK_SCORE } from './enemies';
+import { FLAMETHROWER_UNLOCK_SCORE, MINE_CARRIER_UNLOCK_SCORE } from './enemies';
 import { isWorld2Unlocked, isWorld3Unlocked } from './worldProgress';
 
 export type AlmanacCategory =
@@ -185,6 +191,19 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     stats: `HP ${MINE_CARRIER_HEALTH} · Blast DMG up to ${MINE_CARRIER_BODY_DAMAGE} · R ${MINE_CARRIER_BLAST_RADIUS} · ${MINE_CARRIER_POINTS} pts`,
     almanacPage: 'shared',
     requiresWorld3: true,
+  },
+  {
+    id: 'enemy-flamethrower',
+    category: 'enemy',
+    name: 'Flamethrower',
+    textureKey: 'flamethrower-ship',
+    textureScale: 1.1,
+    subtitle: `Story W2+ · W2+ secrets · Survival W2+ ${FLAMETHROWER_UNLOCK_SCORE}+ score`,
+    description:
+      'Summons aimed fire bursts instead of lasers. Standing in the flame deals continuous damage. No lingering residue after the burst ends. Appears in regular and secret levels in World 2 or later, and World 2 Survival or higher.',
+    stats: `HP ${FLAMETHROWER_HEALTH} · Body DMG ${FLAMETHROWER_BODY_DAMAGE} · Fire ${FIRE_DAMAGE} / ${FIRE_TICK_MS / 1000}s · ${FLAMETHROWER_POINTS} pts`,
+    almanacPage: 'shared',
+    requiresWorld2: true,
   },
 ];
 

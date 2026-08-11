@@ -333,7 +333,7 @@ export class EditorEditScene extends Phaser.Scene {
 
     const addRule = (
       title: string,
-      key: 'asteroids' | 'comets' | 'mines',
+      key: keyof typeof area.obstacles,
       opts?: { showChance?: boolean; disabled?: boolean; disabledHint?: string },
     ) => {
       const block = createSpawnRuleBlock(this, title, area.obstacles[key], (next) => {
@@ -349,38 +349,17 @@ export class EditorEditScene extends Phaser.Scene {
     if (isEditorObstacleVisible('comets')) {
       addRule('Comets', 'comets', { showChance: true });
     }
-    if (isEditorObstacleVisible('mines')) {
-      addRule('Mines', 'mines', { showChance: true });
+    if (isEditorObstacleVisible('blueMines')) {
+      addRule('Blue Mines', 'blueMines', { showChance: true });
     }
-
+    if (isEditorObstacleVisible('grayMines')) {
+      addRule('Gray Mines', 'grayMines', { showChance: true });
+    }
     if (isEditorObstacleVisible('redMines')) {
-      const red = createToggleRow(
-        this,
-        'Red mines',
-        area.obstacles.redMines,
-        (v) => {
-          area.obstacles.redMines = v;
-          this.markDirty();
-        },
-      );
-      red.setY(y);
-      panel.add(red);
-      y += 36;
+      addRule('Red Mines', 'redMines', { showChance: true });
     }
-
     if (isEditorObstacleVisible('purpleMines')) {
-      const purple = createToggleRow(
-        this,
-        'Purple mines',
-        area.obstacles.purpleMines,
-        (v) => {
-          area.obstacles.purpleMines = v;
-          this.markDirty();
-        },
-      );
-      purple.setY(y);
-      panel.add(purple);
-      y += 36;
+      addRule('Purple Mines', 'purpleMines', { showChance: true });
     }
 
     this.finalizeScroll(y);

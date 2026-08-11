@@ -86,6 +86,8 @@ export class BootScene extends Phaser.Scene {
     this.createCometTextures();
     this.createMineTextures();
     this.createMineCarrierTexture();
+    this.createFlamethrowerShipTexture();
+    this.createFirePlumeTexture();
     this.createPowerUpPickupTextures();
   }
 
@@ -600,6 +602,57 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(0xff6644, 1);
     g.fillCircle(cx, cy - 2, 2);
     g.generateTexture('mine-carrier', 36, 36);
+    g.destroy();
+  }
+
+  private createFlamethrowerShipTexture(): void {
+    const g = this.make.graphics({ x: 0, y: 0 }, false);
+    const cx = 18;
+    const cy = 18;
+    // Hull
+    g.fillStyle(0x4a2a1a, 1);
+    g.fillRoundedRect(6, 8, 24, 20, 5);
+    g.fillStyle(0x6a3a22, 1);
+    g.fillTriangle(cx, 4, cx - 10, 14, cx + 10, 14);
+    // Fuel tanks
+    g.fillStyle(0x883311, 1);
+    g.fillCircle(cx - 9, cy + 4, 5);
+    g.fillCircle(cx + 9, cy + 4, 5);
+    // Nozzle / flamethrower barrel
+    g.fillStyle(0x888888, 1);
+    g.fillRect(cx - 3, 0, 6, 12);
+    g.fillStyle(0x555555, 1);
+    g.fillRect(cx - 4, 0, 8, 4);
+    // Ember glow
+    g.fillStyle(0xff6622, 1);
+    g.fillCircle(cx, 2, 3);
+    g.fillStyle(0xffcc44, 0.9);
+    g.fillCircle(cx, 1, 1.5);
+    // Viewport
+    g.fillStyle(0xffaa66, 1);
+    g.fillCircle(cx, cy + 2, 4);
+    g.fillStyle(0xffffff, 0.85);
+    g.fillCircle(cx - 1, cy + 1, 1.5);
+    g.generateTexture('flamethrower-ship', 36, 36);
+    g.destroy();
+  }
+
+  private createFirePlumeTexture(): void {
+    const g = this.make.graphics({ x: 0, y: 0 }, false);
+    const w = 28;
+    const h = 72;
+    // Outer glow
+    g.fillStyle(0xff4400, 0.35);
+    g.fillEllipse(w / 2, h / 2, w, h);
+    // Mid flame
+    g.fillStyle(0xff7722, 0.85);
+    g.fillEllipse(w / 2, h / 2 + 4, w * 0.7, h * 0.85);
+    // Hot core
+    g.fillStyle(0xffcc44, 0.95);
+    g.fillEllipse(w / 2, h / 2 + 8, w * 0.4, h * 0.65);
+    g.fillStyle(0xffeebb, 0.9);
+    g.fillEllipse(w / 2, h / 2 + 12, w * 0.22, h * 0.4);
+    g.generateTexture('fire-plume', w, h);
     g.destroy();
   }
 
