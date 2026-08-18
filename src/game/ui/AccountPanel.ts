@@ -63,7 +63,7 @@ function createInput(scene: Phaser.Scene, type: string, placeholder: string): HT
   const input = document.createElement('input');
   input.type = type;
   input.placeholder = placeholder;
-  input.autocomplete = type === 'password' ? 'current-password' : type === 'email' ? 'email' : 'nickname';
+  input.autocomplete = type === 'password' ? 'current-password' : type === 'email' ? 'email' : 'name';
   input.spellcheck = false;
   styleAccountInput(input);
   input.addEventListener('pointerdown', (event) => event.stopPropagation());
