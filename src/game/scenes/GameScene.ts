@@ -1263,11 +1263,9 @@ export class GameScene extends Phaser.Scene {
 
   private applyBulletToScoredEnemy(
     bullet: Phaser.Physics.Arcade.Sprite,
-    enemy: {
+    enemy: Phaser.Physics.Arcade.Sprite & {
       takeDamage(amount: number): boolean;
       points: number;
-      x: number;
-      y: number;
     },
     explosionCount: number,
   ): void {
@@ -1279,7 +1277,7 @@ export class GameScene extends Phaser.Scene {
       this.spawnExplosion(enemy.x, enemy.y, explosionCount);
       this.tryAwardEnemyCoins(enemy.x, enemy.y);
     } else if (chill) {
-      applyChill(enemy as Phaser.Physics.Arcade.Sprite);
+      applyChill(enemy);
     }
     this.consumeBulletHit(bullet);
   }

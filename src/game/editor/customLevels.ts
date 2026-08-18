@@ -453,6 +453,8 @@ function normalizeObstacles(
     grayMines = normalizeSpawnRule(raw.grayMines, def.grayMines);
 
     // Prefer per-variant rules; also accept leftover legacy boolean flags mixed in.
+    // Known keys are typed as SpawnRule, so read extras through unknown.
+    const legacyFlags = raw as Record<string, unknown>;
     const timingBase =
       looksLikeSpawnRule(raw.grayMines)
         ? grayMines
@@ -462,7 +464,7 @@ function normalizeObstacles(
 
     if (looksLikeSpawnRule(raw.redMines)) {
       redMines = normalizeSpawnRule(raw.redMines, def.redMines);
-    } else if (raw.redMines === true) {
+    } else if (legacyFlags.redMines === true) {
       redMines = { ...timingBase, enabled: canUseRedMines() };
     } else {
       redMines = normalizeSpawnRule(undefined, def.redMines);
@@ -470,7 +472,7 @@ function normalizeObstacles(
 
     if (looksLikeSpawnRule(raw.purpleMines)) {
       purpleMines = normalizeSpawnRule(raw.purpleMines, def.purpleMines);
-    } else if (raw.purpleMines === true) {
+    } else if (legacyFlags.purpleMines === true) {
       purpleMines = { ...timingBase, enabled: canUsePurpleMines() };
     } else {
       purpleMines = normalizeSpawnRule(undefined, def.purpleMines);
