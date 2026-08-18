@@ -10,15 +10,24 @@ import {
   getCustomLevel,
   getCustomLevelSlots,
   MAX_CUSTOM_LEVEL_SLOTS,
+  pasteTextFromClipboard,
   saveCustomLevel,
 } from '../editor/customLevels';
-import { confirmYesNo, promptText, showToast } from '../editor/ui/editorWidgets';
+import {
+  confirmYesNo,
+  promptText,
+  releaseEditorTypingKeys,
+  showLevelCodePanel,
+  showLevelLoadPanel,
+  showToast,
+} from '../editor/ui/editorWidgets';
 import { createMenuButton } from '../ui/MenuButtons';
 
 export class EditorHubScene extends Phaser.Scene {
   private selectedSlot = 0;
   private slotLabels: Phaser.GameObjects.Text[] = [];
   private actionRoot?: Phaser.GameObjects.Container;
+  private overlay?: Phaser.GameObjects.Container;
 
   constructor() {
     super({ key: 'EditorHubScene' });
@@ -33,6 +42,7 @@ export class EditorHubScene extends Phaser.Scene {
   create(): void {
     stopMusic();
     this.cameras.main.fadeIn(300, 0, 0, 0);
+    releaseEditorTypingKeys(this);
 
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0a0e27);
 
@@ -121,7 +131,7 @@ export class EditorHubScene extends Phaser.Scene {
         {
           label: 'CODE',
           color: 0xaa88ff,
-          onClick: () => void this.onCode(),
+          onClick: () => this.onCode(),
         },
         {
           label: 'PLAY',
@@ -135,7 +145,7 @@ export class EditorHubScene extends Phaser.Scene {
       {
         label: 'LOAD',
         color: 0x00d4ff,
-        onClick: () => void this.onLoad(),
+        onClick: () => this.onLoad(),
       },
       {
         label: 'BACK',
@@ -177,29 +187,51 @@ export class EditorHubScene extends Phaser.Scene {
     });
   }
 
-  private async onCode(): Promise<void> {
+  private closeOverlay(): void {
+    this.overlay?.destroy(true);
+    this.overlay = undefined;
+  }
+
+  private onCode(): void {
     const level = getCustomLevel(this.selectedSlot);
     if (!level) return;
     const code = encodeLevelCode(level);
-    const ok = await copyTextToClipboard(code);
-    showToast(this, ok ? 'Level code copied!' : 'Copy failed — see console', ok ? '#44ff88' : '#ff4466');
-    if (!ok) {
-      console.log('[Editor] Level code:', code);
-    }
+    this.closeOverlay();
+    this.overlay = showLevelCodePanel(
+      this,
+      code,
+      (text) => {
+        void copyTextToClipboard(text).then((ok) => {
+          showToast(this, ok ? 'Level code copied!' : 'Copy failed — see console', ok ? '#44ff88' : '#ff4466');
+          if (!ok) {
+            console.log('[Editor] Level code:', text);
+          }
+        });
+      },
+      () => this.closeOverlay(),
+    );
   }
 
-  private async onLoad(): Promise<void> {
-    let pasted = '';
-    try {
-      if (navigator.clipboard?.readText) {
-        pasted = await navigator.clipboard.readText();
-      }
-    } catch {
-      // ignore
-    }
-    const code = promptText('Paste level code:', pasted);
-    if (code === null || !code.trim()) return;
+  private onLoad(): void {
+    this.closeOverlay();
+    this.overlay = showLevelLoadPanel(
+      this,
+      (apply) => {
+        void pasteTextFromClipboard().then((pasted) => {
+          if (pasted == null || pasted === '') {
+            showToast(this, 'Nothing to paste', '#ff4466');
+            return;
+          }
+          apply(pasted);
+          showToast(this, 'Pasted', '#44ff88');
+        });
+      },
+      (code) => this.loadLevelFromCode(code),
+      () => this.closeOverlay(),
+    );
+  }
 
+  private loadLevelFromCode(code: string): void {
     const result = decodeLevelCode(code);
     if (!result.ok) {
       showToast(this, result.error, '#ff4466');
@@ -207,18 +239,11 @@ export class EditorHubScene extends Phaser.Scene {
     }
 
     const existing = getCustomLevel(this.selectedSlot);
-    const write = () => {
-      saveCustomLevel(this.selectedSlot, result.level);
-      showToast(this, 'Level loaded!', '#44ff88');
-      this.buildSlotList();
-      this.refreshActions();
-    };
-
-    if (existing) {
-      confirmYesNo(this, 'Overwrite this slot?', write);
-    } else {
-      write();
-    }
+    saveCustomLevel(this.selectedSlot, result.level);
+    this.closeOverlay();
+    showToast(this, existing ? 'Level overwritten!' : 'Level loaded!', '#44ff88');
+    this.buildSlotList();
+    this.refreshActions();
   }
 
   private onPlay(): void {

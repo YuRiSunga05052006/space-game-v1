@@ -1,3 +1,4 @@
+import { writeProgressItem } from './cloud/progressStorage';
 import { getWorld1LevelCount } from './world1/levels';
 import { getWorld2LevelCount } from './world2/levels';
 import { getWorld3LevelCount } from './world3/levels';
@@ -24,11 +25,7 @@ function readUnlocked(): number[] {
 }
 
 function writeUnlocked(levels: number[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...new Set(levels)].sort((a, b) => a - b)));
-  } catch {
-    // ignore storage errors
-  }
+  writeProgressItem(STORAGE_KEY, JSON.stringify([...new Set(levels)].sort((a, b) => a - b)));
 }
 
 export function getUnlockedLevels(): number[] {
@@ -59,6 +56,10 @@ export function unlockLevel(level: number): void {
 
 export function getMaxLevelSlots(): number {
   return MAX_LEVEL;
+}
+
+export function unlockAllStoryLevels(): void {
+  writeUnlocked(Array.from({ length: MAX_LEVEL }, (_, index) => index + 1));
 }
 
 export function getHighestUnlockedLevelForWorld(worldId: string): number {

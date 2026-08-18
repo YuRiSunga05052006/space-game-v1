@@ -1,4 +1,5 @@
 import { canAfford, spendCoins } from './coins';
+import { writeProgressItem } from './cloud/progressStorage';
 
 const OWNED_SHAPES_KEY = 'star-blaster-owned-shapes';
 const EQUIPPED_SHAPE_KEY = 'star-blaster-equipped-shape';
@@ -90,12 +91,8 @@ function readOwnedShapeIds(): string[] {
 }
 
 function writeOwnedShapeIds(ids: string[]): void {
-  try {
-    const unique = Array.from(new Set([DEFAULT_SHAPE_ID, ...ids]));
-    localStorage.setItem(OWNED_SHAPES_KEY, JSON.stringify(unique));
-  } catch {
-    // ignore storage errors
-  }
+  const unique = Array.from(new Set([DEFAULT_SHAPE_ID, ...ids]));
+  writeProgressItem(OWNED_SHAPES_KEY, JSON.stringify(unique));
 }
 
 export function getOwnedShapeIds(): string[] {
@@ -121,12 +118,8 @@ export function getEquippedShapeId(): RocketShapeId {
 
 export function equipShape(id: string): boolean {
   if (!isShapeOwned(id)) return false;
-  try {
-    localStorage.setItem(EQUIPPED_SHAPE_KEY, id);
-    return true;
-  } catch {
-    return false;
-  }
+  writeProgressItem(EQUIPPED_SHAPE_KEY, id);
+  return true;
 }
 
 export function purchaseShape(id: string): boolean {
@@ -145,4 +138,8 @@ export function purchaseShape(id: string): boolean {
 
 export function shipTextureKey(shapeId: string, skinId: string): string {
   return `rocket-${shapeId}-${skinId}`;
+}
+
+export function unlockAllShapes(): void {
+  writeOwnedShapeIds(PLAYER_SHAPES.map((shape) => shape.id));
 }

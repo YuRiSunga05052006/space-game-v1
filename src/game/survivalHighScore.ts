@@ -1,4 +1,5 @@
-﻿import { WORLDS, getWorldNumber } from './worlds';
+﻿import { removeProgressItem, writeProgressItem } from './cloud/progressStorage';
+import { WORLDS, getWorldNumber } from './worlds';
 
 const STORAGE_PREFIX = 'star-blaster-survival-high-score';
 const LEGACY_KEY = 'star-blaster-high-score';
@@ -12,9 +13,9 @@ function migrateLegacyScore(): void {
     const legacy = localStorage.getItem(LEGACY_KEY);
     if (legacy === null) return;
     if (localStorage.getItem(getStorageKey('world1')) === null) {
-      localStorage.setItem(getStorageKey('world1'), legacy);
+      writeProgressItem(getStorageKey('world1'), legacy);
     }
-    localStorage.removeItem(LEGACY_KEY);
+    removeProgressItem(LEGACY_KEY);
   } catch {
     // ignore storage errors
   }
@@ -42,11 +43,7 @@ export function getBestSurvivalHighScore(): number {
 export function updateSurvivalHighScore(score: number, worldId = 'world1'): number {
   const current = getSurvivalHighScore(worldId);
   if (score <= current) return current;
-  try {
-    localStorage.setItem(getStorageKey(worldId), String(score));
-  } catch {
-    // ignore storage errors
-  }
+  writeProgressItem(getStorageKey(worldId), String(score));
   return score;
 }
 

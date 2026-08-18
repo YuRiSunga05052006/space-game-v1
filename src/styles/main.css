@@ -50,3 +50,8 @@ body {
   touch-action: manipulation;
   pointer-events: auto;
 }
+
+#game-container input::placeholder {
+  color: #667799;
+  opacity: 1;
+}

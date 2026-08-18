@@ -1,3 +1,4 @@
+import { writeProgressItem } from '../cloud/progressStorage';
 import type { EnemyKind } from '../enemies';
 import { isWorld2Unlocked, isWorld3Unlocked } from '../worldProgress';
 import {
@@ -62,6 +63,7 @@ export interface CustomAreaContent {
     powerStar: SpawnRule;
     shield: SpawnRule;
     invisibility: SpawnRule;
+    fuelTank: SpawnRule;
   };
   obstacles: {
     asteroids: SpawnRule;
@@ -166,6 +168,7 @@ export function createDefaultAreaContent(): CustomAreaContent {
       powerStar: defaultSpawnRule({ enabled: true, intervalMs: 30000 }),
       shield: defaultSpawnRule({ enabled: false, intervalMs: 45000 }),
       invisibility: defaultSpawnRule({ enabled: false, intervalMs: 55000 }),
+      fuelTank: defaultSpawnRule({ enabled: false, intervalMs: 50000 }),
     },
     obstacles: {
       asteroids: defaultSpawnRule({
@@ -245,11 +248,7 @@ function readSlotsRaw(): CustomLevelSlot[] {
 }
 
 function writeSlots(slots: CustomLevelSlot[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(slots));
-  } catch {
-    // ignore quota / private mode
-  }
+  writeProgressItem(STORAGE_KEY, JSON.stringify(slots));
 }
 
 export function getCustomLevelSlots(): CustomLevelSlot[] {
@@ -344,6 +343,9 @@ function applyEditorContentGates(area: CustomAreaContent): void {
   }
   if (area.obstacles.purpleMines.enabled && !canUsePurpleMines()) {
     area.obstacles.purpleMines.enabled = false;
+  }
+  if (area.objects.fuelTank.enabled && area.enemies.bossCount > 0) {
+    area.objects.fuelTank.enabled = false;
   }
   for (const rule of area.enemies.survival) {
     if (rule.id === 'mineCarrier' && !canUseMineCarriers()) {
@@ -532,6 +534,7 @@ function normalizeAreaContent(raw: unknown): CustomAreaContent {
       powerStar: normalizeSpawnRule(objects.powerStar, def.objects.powerStar),
       shield: normalizeSpawnRule(objects.shield, def.objects.shield),
       invisibility: normalizeSpawnRule(objects.invisibility, def.objects.invisibility),
+      fuelTank: normalizeSpawnRule(objects.fuelTank, def.objects.fuelTank),
     },
     obstacles: normalizeObstacles(obstacles, def.obstacles),
     enemies: {
@@ -686,6 +689,17 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function pasteTextFromClipboard(): Promise<string | null> {
+  try {
+    if (navigator.clipboard?.readText) {
+      return await navigator.clipboard.readText();
+    }
+  } catch {
+    // fall through
+  }
+  return null;
 }
 
 /**

@@ -23,6 +23,7 @@ import {
   createStepperRow,
   createToggleRow,
   promptText,
+  releaseEditorTypingKeys,
   showToast,
 } from '../editor/ui/editorWidgets';
 import { isPowerUpOwned } from '../playerPowerUps';
@@ -83,6 +84,7 @@ export class EditorEditScene extends Phaser.Scene {
     stopMusic();
     this.cameras.main.fadeIn(250, 0, 0, 0);
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0a0e27);
+    releaseEditorTypingKeys(this);
 
     const loaded = getCustomLevel(this.slotIndex);
     if (!loaded) {
@@ -310,11 +312,15 @@ export class EditorEditScene extends Phaser.Scene {
     const panel = this.beginScrollPanel();
     let y = 0;
 
-    const addRule = (title: string, key: keyof typeof area.objects) => {
+    const addRule = (
+      title: string,
+      key: keyof typeof area.objects,
+      opts?: { disabled?: boolean; disabledHint?: string },
+    ) => {
       const block = createSpawnRuleBlock(this, title, area.objects[key], (next) => {
         area.objects[key] = next;
         this.markDirty();
-      });
+      }, opts);
       block.setY(y);
       panel.add(block);
       y += ((block as Phaser.GameObjects.Container & { blockHeight?: number }).blockHeight ?? 160) + 16;
@@ -329,6 +335,13 @@ export class EditorEditScene extends Phaser.Scene {
     }
     if (isPowerUpOwned('invisibility')) {
       addRule('Invisibility', 'invisibility');
+    }
+    if (isPowerUpOwned('fuelTank')) {
+      const endless = area.enemies.bossCount === 0;
+      addRule('Fuel Tank', 'fuelTank', {
+        disabled: !endless,
+        disabledHint: endless ? undefined : 'endless only',
+      });
     }
 
     this.finalizeScroll(y);
@@ -401,6 +414,9 @@ export class EditorEditScene extends Phaser.Scene {
       99,
       (v) => {
         area.enemies.bossCount = v;
+        if (v > 0) {
+          area.objects.fuelTank.enabled = false;
+        }
         this.markDirty();
       },
     );

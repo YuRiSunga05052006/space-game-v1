@@ -4,8 +4,10 @@ import {
   randomCollectibleSpawnPosition,
 } from '../collectibleSpawn';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
+import { POWER_STAR_DURATION_MS } from '../powerUpEffects';
 
-export const INVINCIBILITY_DURATION = 8000;
+/** Level 1 duration. Shop upgrades go up to 12s — see POWER_STAR_DURATION_MS. */
+export const INVINCIBILITY_DURATION = POWER_STAR_DURATION_MS[1];
 
 export class PowerStar extends Phaser.Physics.Arcade.Sprite {
   constructor(scene: Phaser.Scene, x: number, y: number) {

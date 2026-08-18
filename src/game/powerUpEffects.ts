@@ -1,5 +1,13 @@
 export const MAX_POWER_UP_LEVEL = 5;
 
+export const POWER_STAR_DURATION_MS: Record<number, number> = {
+  1: 8000,
+  2: 9000,
+  3: 10000,
+  4: 11000,
+  5: 12000,
+};
+
 export const SHIELD_DURATION_MS: Record<number, number> = {
   1: 8000,
   2: 10000,
@@ -37,6 +45,11 @@ export const HYPERDRIVE_SCORE_CAP = 7500;
 /** Invisibility + mercy invincibility after Fuel Tank / Engine / Hyperdrive boost ends. */
 export const POST_SCORE_BOOST_INVISIBILITY_MS = 5000;
 export const POST_SCORE_BOOST_MERCY_INVINCIBILITY_MS = 5000;
+
+export function getPowerStarDurationMs(level: number): number {
+  const clamped = Math.max(1, Math.min(MAX_POWER_UP_LEVEL, Math.floor(level)));
+  return POWER_STAR_DURATION_MS[clamped] ?? POWER_STAR_DURATION_MS[1];
+}
 
 export function getShieldDurationMs(level: number): number {
   return SHIELD_DURATION_MS[level] ?? SHIELD_DURATION_MS[1];

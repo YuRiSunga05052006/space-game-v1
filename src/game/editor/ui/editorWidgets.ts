@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { playSfx, initAudio } from '../../audioManager';
+import { GAME_HEIGHT, GAME_WIDTH } from '../../config';
+import { createMenuButton } from '../../ui/MenuButtons';
 import type { SpawnRule, SpawnScaleBy } from '../customLevels';
 
 export function showToast(scene: Phaser.Scene, message: string, color = '#00d4ff'): void {
@@ -71,6 +73,29 @@ export interface DomTextInputResult {
   destroy: () => void;
 }
 
+/**
+ * Phaser captures WASD/Space after gameplay (addKey preventDefault), which blocks
+ * those characters in DOM fields. Disable the keyboard plugin while a field is focused.
+ */
+export function disablePhaserKeyboardWhileTyping(scene: Phaser.Scene, el: HTMLElement): void {
+  const setEnabled = (enabled: boolean): void => {
+    if (scene.input.keyboard) scene.input.keyboard.enabled = enabled;
+  };
+  el.addEventListener('focus', () => setEnabled(false));
+  el.addEventListener('blur', () => setEnabled(true));
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setEnabled(true));
+}
+
+/** Drop leftover WASD captures so editor text fields can receive those keys. */
+export function releaseEditorTypingKeys(scene: Phaser.Scene): void {
+  scene.input.keyboard?.removeCapture([
+    Phaser.Input.Keyboard.KeyCodes.W,
+    Phaser.Input.Keyboard.KeyCodes.A,
+    Phaser.Input.Keyboard.KeyCodes.S,
+    Phaser.Input.Keyboard.KeyCodes.D,
+  ]);
+}
+
 /** Typeable text field via Phaser DOM (requires gameConfig.dom.createContainer). */
 export function createDomTextInput(
   scene: Phaser.Scene,
@@ -114,6 +139,7 @@ export function createDomTextInput(
   input.addEventListener('pointerdown', (e) => e.stopPropagation());
   input.addEventListener('mousedown', (e) => e.stopPropagation());
   input.addEventListener('touchstart', (e) => e.stopPropagation());
+  disablePhaserKeyboardWhileTyping(scene, input);
 
   return {
     container: root,
@@ -206,6 +232,7 @@ export function createRgbColorRow(
     input.addEventListener('pointerdown', (e) => e.stopPropagation());
     input.addEventListener('mousedown', (e) => e.stopPropagation());
     input.addEventListener('touchstart', (e) => e.stopPropagation());
+    disablePhaserKeyboardWhileTyping(scene, input);
   });
 
   return {
@@ -273,6 +300,7 @@ export function createDomNumberInput(
   input.addEventListener('pointerdown', (e) => e.stopPropagation());
   input.addEventListener('mousedown', (e) => e.stopPropagation());
   input.addEventListener('touchstart', (e) => e.stopPropagation());
+  disablePhaserKeyboardWhileTyping(scene, input);
 
   return {
     container: root,
@@ -592,5 +620,149 @@ export function confirmYesNo(
   });
 
   root.add([yes, no]);
+  return root;
+}
+
+function styleEditorTextarea(el: HTMLTextAreaElement, widthPx: number, heightPx: number): void {
+  el.style.cssText = [
+    `width:${widthPx}px`,
+    `height:${heightPx}px`,
+    'box-sizing:border-box',
+    'border:1px solid #334466',
+    'border-radius:8px',
+    'background:#1a1f3a',
+    'color:#00d4ff',
+    'font-family:Orbitron,monospace,sans-serif',
+    'font-size:11px',
+    'font-weight:400',
+    'line-height:1.4',
+    'outline:none',
+    'padding:10px',
+    'resize:none',
+    'overflow:auto',
+    'white-space:pre-wrap',
+    'word-break:break-all',
+  ].join(';');
+}
+
+function createCodeTextarea(
+  scene: Phaser.Scene,
+  options: { value: string; readOnly: boolean; placeholder?: string },
+): { textarea: HTMLTextAreaElement; dom: Phaser.GameObjects.DOMElement } {
+  const widthPx = GAME_WIDTH - 40;
+  const heightPx = 420;
+  const textarea = document.createElement('textarea');
+  textarea.value = options.value;
+  textarea.readOnly = options.readOnly;
+  textarea.placeholder = options.placeholder ?? '';
+  textarea.spellcheck = false;
+  textarea.autocapitalize = 'off';
+  styleEditorTextarea(textarea, widthPx, heightPx);
+
+  const y = 70 + heightPx / 2;
+  const dom = scene.add.dom(GAME_WIDTH / 2, y, textarea).setOrigin(0.5);
+  textarea.addEventListener('pointerdown', (e) => e.stopPropagation());
+  textarea.addEventListener('mousedown', (e) => e.stopPropagation());
+  textarea.addEventListener('touchstart', (e) => e.stopPropagation());
+  disablePhaserKeyboardWhileTyping(scene, textarea);
+
+  return { textarea, dom };
+}
+
+function addOverlayChrome(
+  scene: Phaser.Scene,
+  title: string,
+): Phaser.GameObjects.Container {
+  const root = scene.add.container(0, 0).setDepth(400);
+  root.add(scene.add.rectangle(
+    GAME_WIDTH / 2,
+    GAME_HEIGHT / 2,
+    GAME_WIDTH,
+    GAME_HEIGHT,
+    0x0a0e27,
+    0.97,
+  ).setScrollFactor(0).setInteractive());
+  root.add(scene.add.text(GAME_WIDTH / 2, 36, title, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '18px',
+    fontStyle: '900',
+    color: '#44ff88',
+  }).setOrigin(0.5).setScrollFactor(0));
+  return root;
+}
+
+export function showLevelCodePanel(
+  scene: Phaser.Scene,
+  code: string,
+  onCopy: (text: string) => void,
+  onBack: () => void,
+): Phaser.GameObjects.Container {
+  const root = addOverlayChrome(scene, 'LEVEL CODE');
+  const { textarea, dom } = createCodeTextarea(scene, { value: code, readOnly: true });
+  root.add(dom);
+
+  const { container: copyBtn } = createMenuButton(scene, {
+    label: 'COPY',
+    y: 560,
+    color: 0xaa88ff,
+    onClick: () => onCopy(textarea.value),
+  });
+  copyBtn.setX(GAME_WIDTH / 2);
+
+  const { container: backBtn } = createMenuButton(scene, {
+    label: 'BACK',
+    y: 610,
+    color: 0x8899bb,
+    onClick: onBack,
+  });
+  backBtn.setX(GAME_WIDTH / 2);
+
+  root.add([copyBtn, backBtn]);
+  return root;
+}
+
+export function showLevelLoadPanel(
+  scene: Phaser.Scene,
+  onPaste: (apply: (text: string) => void) => void,
+  onLoad: (code: string) => void,
+  onBack: () => void,
+): Phaser.GameObjects.Container {
+  const root = addOverlayChrome(scene, 'LOAD LEVEL');
+  const { textarea, dom } = createCodeTextarea(scene, {
+    value: '',
+    readOnly: false,
+    placeholder: 'Paste or type level code here',
+  });
+  root.add(dom);
+
+  const { container: pasteBtn } = createMenuButton(scene, {
+    label: 'PASTE',
+    y: 560,
+    color: 0xaa88ff,
+    onClick: () => {
+      onPaste((text) => {
+        textarea.value = text;
+      });
+    },
+  });
+  pasteBtn.setX(GAME_WIDTH / 2);
+
+  const { container: loadBtn } = createMenuButton(scene, {
+    label: 'LOAD',
+    y: 610,
+    color: 0x00d4ff,
+    onClick: () => onLoad(textarea.value),
+  });
+  loadBtn.setX(GAME_WIDTH / 2);
+
+  const { container: backBtn } = createMenuButton(scene, {
+    label: 'BACK',
+    y: 660,
+    color: 0x8899bb,
+    onClick: onBack,
+  });
+  backBtn.setX(GAME_WIDTH / 2);
+
+  root.add([pasteBtn, loadBtn, backBtn]);
   return root;
 }

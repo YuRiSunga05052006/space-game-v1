@@ -1,10 +1,11 @@
 import { canAfford, spendCoins } from './coins';
+import { writeProgressItem } from './cloud/progressStorage';
 import { MAX_POWER_UP_LEVEL } from './powerUpEffects';
 
 const LEVELS_KEY = 'star-blaster-powerup-levels';
 const INVENTORY_KEY = 'star-blaster-powerup-inventory';
 
-export type UpgradablePowerUpId = 'shield' | 'invisibility' | 'fuelTank' | 'deathBomb';
+export type UpgradablePowerUpId = 'powerStar' | 'shield' | 'invisibility' | 'fuelTank' | 'deathBomb';
 export type InventoryPowerUpId = 'engine' | 'hyperdrive' | 'deathBomb';
 export type PowerUpId = UpgradablePowerUpId | InventoryPowerUpId;
 
@@ -20,6 +21,17 @@ export interface PowerUpDefinition {
 }
 
 export const POWER_UPS: PowerUpDefinition[] = [
+  {
+    id: 'powerStar',
+    name: 'Power Star',
+    textureKey: 'power-star',
+    description:
+      'Grants invincibility until the timer runs out. Always unlocked. Scatters in Story and Survival. Upgrade to last longer.',
+    modeTag: 'Story + Survival',
+    kind: 'upgradable',
+    // Index 0 is unused (level 1 is free). Later upgrades follow the usual +25 coin steps.
+    buyPrices: [0, 100, 125, 150, 175],
+  },
   {
     id: 'shield',
     name: 'Shield',
@@ -82,7 +94,7 @@ type LevelState = Record<UpgradablePowerUpId, number>;
 type InventoryState = Record<InventoryPowerUpId, number>;
 
 function defaultLevels(): LevelState {
-  return { shield: 0, invisibility: 0, fuelTank: 0, deathBomb: 0 };
+  return { powerStar: 1, shield: 0, invisibility: 0, fuelTank: 0, deathBomb: 0 };
 }
 
 function defaultInventory(): InventoryState {
@@ -95,6 +107,7 @@ function readLevels(): LevelState {
     if (!raw) return defaultLevels();
     const parsed = JSON.parse(raw) as Partial<LevelState>;
     return {
+      powerStar: Math.max(1, clampLevel(parsed.powerStar ?? 1)),
       shield: clampLevel(parsed.shield),
       invisibility: clampLevel(parsed.invisibility),
       fuelTank: clampLevel(parsed.fuelTank),
@@ -106,11 +119,7 @@ function readLevels(): LevelState {
 }
 
 function writeLevels(levels: LevelState): void {
-  try {
-    localStorage.setItem(LEVELS_KEY, JSON.stringify(levels));
-  } catch {
-    // ignore storage errors
-  }
+  writeProgressItem(LEVELS_KEY, JSON.stringify(levels));
 }
 
 function readInventory(): InventoryState {
@@ -129,11 +138,7 @@ function readInventory(): InventoryState {
 }
 
 function writeInventory(inventory: InventoryState): void {
-  try {
-    localStorage.setItem(INVENTORY_KEY, JSON.stringify(inventory));
-  } catch {
-    // ignore storage errors
-  }
+  writeProgressItem(INVENTORY_KEY, JSON.stringify(inventory));
 }
 
 function clampLevel(value: unknown): number {
@@ -238,4 +243,14 @@ export function getDeathBombChargePrice(): number | null {
   const def = getPowerUpDefinition('deathBomb');
   if (!def?.inventoryPrice || !isDeathBombUnlocked()) return null;
   return def.inventoryPrice;
+}
+
+export function maxAllPowerUpLevels(): void {
+  writeLevels({
+    powerStar: MAX_POWER_UP_LEVEL,
+    shield: MAX_POWER_UP_LEVEL,
+    invisibility: MAX_POWER_UP_LEVEL,
+    fuelTank: MAX_POWER_UP_LEVEL,
+    deathBomb: MAX_POWER_UP_LEVEL,
+  });
 }

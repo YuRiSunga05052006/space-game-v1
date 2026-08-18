@@ -8,6 +8,10 @@ import { createMenuButton, resetMenuButtonHover } from '../ui/MenuButtons';
 import { createSettingsPanel } from '../ui/SettingsPanel';
 import { createAlmanacPanel } from '../ui/AlmanacPanel';
 import { createShopPanel } from '../ui/ShopPanel';
+import { createAccountPanel, getAccountChipLabel } from '../ui/AccountPanel';
+import { getCurrentUser, onAuthChange } from '../cloud/auth';
+import { releaseEditorTypingKeys } from '../editor/ui/editorWidgets';
+import type { User } from '@supabase/supabase-js';
 
 const MENU_BUTTON_HIT_AREA = new Phaser.Geom.Rectangle(-110, -24, 220, 48);
 
@@ -16,6 +20,10 @@ export class MenuScene extends Phaser.Scene {
   private settingsPanel?: Phaser.GameObjects.Container;
   private almanacPanel?: Phaser.GameObjects.Container;
   private shopPanel?: Phaser.GameObjects.Container;
+  private accountPanel?: Phaser.GameObjects.Container;
+  private accountChip?: Phaser.GameObjects.Text;
+  private unsubscribeAuth?: () => void;
+  private destroyAccountPanel?: () => void;
   private menuButtons: Phaser.GameObjects.Container[] = [];
   private menuButtonsEnabled = true;
 
@@ -27,16 +35,20 @@ export class MenuScene extends Phaser.Scene {
     this.almanacPanel = undefined;
     this.settingsPanel = undefined;
     this.shopPanel = undefined;
+    this.accountPanel = undefined;
+    this.destroyAccountPanel = undefined;
     this.quitOverlay = undefined;
     this.menuButtons = [];
     this.menuButtonsEnabled = true;
 
     this.cameras.main.fadeIn(400, 0, 0, 0);
+    releaseEditorTypingKeys(this);
     initAudio();
     // Returning from pause / game over / victory restarts; otherwise keep playing.
     ensureMusic();
     this.createStarfield();
     this.createTitle();
+    this.createAccountChip();
     this.createHighScore();
     this.createInstructions();
     this.createActionButtons();
@@ -59,17 +71,23 @@ export class MenuScene extends Phaser.Scene {
     this.almanacPanel?.destroy();
     this.settingsPanel?.destroy();
     this.shopPanel?.destroy();
+    this.destroyAccountPanel?.();
     this.quitOverlay?.destroy();
+    this.unsubscribeAuth?.();
     this.almanacPanel = undefined;
     this.settingsPanel = undefined;
     this.shopPanel = undefined;
+    this.accountPanel = undefined;
+    this.accountChip = undefined;
+    this.unsubscribeAuth = undefined;
+    this.destroyAccountPanel = undefined;
     this.quitOverlay = undefined;
     this.menuButtons = [];
     this.menuButtonsEnabled = true;
   }
 
   private isMenuOverlayOpen(): boolean {
-    return !!(this.almanacPanel || this.settingsPanel || this.shopPanel || this.quitOverlay);
+    return !!(this.almanacPanel || this.settingsPanel || this.shopPanel || this.accountPanel || this.quitOverlay);
   }
 
   private setMenuButtonsEnabled(enabled: boolean): void {
@@ -137,6 +155,29 @@ export class MenuScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
+    });
+  }
+
+  private createAccountChip(): void {
+    const chip = this.add.text(GAME_WIDTH - 16, 18, 'LOG IN', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '12px',
+      fontStyle: '700',
+      color: '#00d4ff',
+    }).setOrigin(1, 0).setPadding(10, 8).setDepth(20);
+    chip.setInteractive({ useHandCursor: true });
+    chip.on('pointerup', () => {
+      initAudio();
+      this.showAccountPanel();
+    });
+    this.accountChip = chip;
+
+    void getCurrentUser().then((user) => {
+      if (!this.accountChip) return;
+      this.accountChip.setText(getAccountChipLabel(user));
+    });
+    this.unsubscribeAuth = onAuthChange((user: User | null) => {
+      this.accountChip?.setText(getAccountChipLabel(user));
     });
   }
 
@@ -285,6 +326,28 @@ export class MenuScene extends Phaser.Scene {
       },
     });
     this.shopPanel = panel.root;
+  }
+
+  private showAccountPanel(): void {
+    if (this.isMenuOverlayOpen()) return;
+    this.openMenuOverlay();
+
+    const panel = createAccountPanel(this, 300, {
+      onBack: () => {
+        this.destroyAccountPanel?.();
+        this.destroyAccountPanel = undefined;
+        this.accountPanel = undefined;
+        this.closeMenuOverlay();
+      },
+      onAuthChange: () => {
+        this.destroyAccountPanel?.();
+        this.destroyAccountPanel = undefined;
+        this.accountPanel = undefined;
+        this.scene.restart();
+      },
+    });
+    this.accountPanel = panel.root;
+    this.destroyAccountPanel = panel.destroy;
   }
 
   private showQuitConfirm(): void {

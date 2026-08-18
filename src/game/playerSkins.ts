@@ -1,4 +1,5 @@
 import { canAfford, spendCoins } from './coins';
+import { writeProgressItem } from './cloud/progressStorage';
 import { getEquippedShapeId, shipTextureKey } from './playerShapes';
 import type { RocketSkinAppearanceId } from './rocketAppearances';
 
@@ -134,12 +135,8 @@ function readOwnedSkinIds(): string[] {
 }
 
 function writeOwnedSkinIds(ids: string[]): void {
-  try {
-    const unique = Array.from(new Set([DEFAULT_SKIN_ID, ...ids]));
-    localStorage.setItem(OWNED_SKINS_KEY, JSON.stringify(unique));
-  } catch {
-    // ignore storage errors
-  }
+  const unique = Array.from(new Set([DEFAULT_SKIN_ID, ...ids]));
+  writeProgressItem(OWNED_SKINS_KEY, JSON.stringify(unique));
 }
 
 export function getOwnedSkinIds(): string[] {
@@ -165,12 +162,8 @@ export function getEquippedSkinId(): string {
 
 export function equipSkin(id: string): boolean {
   if (!isSkinOwned(id)) return false;
-  try {
-    localStorage.setItem(EQUIPPED_SKIN_KEY, id);
-    return true;
-  } catch {
-    return false;
-  }
+  writeProgressItem(EQUIPPED_SKIN_KEY, id);
+  return true;
 }
 
 export function purchaseSkin(id: string): boolean {
@@ -200,4 +193,8 @@ export function getShipTextureKey(shapeId: string, skinId: string): string {
 
 export function hasSurvivalGoldSpawnBonus(): boolean {
   return getEquippedSkinId() === 'electricRainbow';
+}
+
+export function unlockAllSkins(): void {
+  writeOwnedSkinIds(PLAYER_SKINS.map((skin) => skin.id));
 }

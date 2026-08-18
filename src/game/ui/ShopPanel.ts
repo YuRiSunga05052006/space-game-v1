@@ -33,6 +33,7 @@ import {
   purchasePowerUp,
   type PowerUpDefinition,
   type PowerUpCardAction,
+  type UpgradablePowerUpId,
 } from '../playerPowerUps';
 import { MAX_POWER_UP_LEVEL } from '../powerUpEffects';
 import { createMenuButton } from './MenuButtons';
@@ -123,7 +124,7 @@ function getPowerUpActionLabel(def: PowerUpDefinition, action: PowerUpCardAction
     case 'buy':
       return price === null ? 'LOCKED' : `BUY ${price}`;
     case 'upgrade': {
-      const level = getPowerUpLevel(def.id as 'shield' | 'invisibility' | 'fuelTank' | 'deathBomb');
+      const level = getPowerUpLevel(def.id as UpgradablePowerUpId);
       return price === null ? 'LOCKED' : `UP Lv ${level + 1}`;
     }
     case 'buyInventory':
@@ -420,7 +421,7 @@ function createPowerUpCard(
 
   let statusLabel = '';
   if (def.kind === 'upgradable') {
-    const level = getPowerUpLevel(def.id as 'shield' | 'invisibility' | 'fuelTank');
+    const level = getPowerUpLevel(def.id as UpgradablePowerUpId);
     statusLabel = level === 0
       ? 'Not owned'
       : level >= MAX_POWER_UP_LEVEL
@@ -848,7 +849,7 @@ export function createShopPanel(
           const action = getPowerUpCardAction(def);
           let ok = false;
           if (action === 'buy' || action === 'upgrade') {
-            ok = purchasePowerUp(def.id as 'shield' | 'invisibility' | 'fuelTank');
+            ok = purchasePowerUp(def.id as UpgradablePowerUpId);
           } else if (action === 'buyInventory') {
             ok = purchaseInventoryItem(def.id as 'engine' | 'hyperdrive');
           }

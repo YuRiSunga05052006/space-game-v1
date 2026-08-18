@@ -20,6 +20,20 @@ npm run dev
 
 Open the URL shown in your terminal. On your phone, connect to the same network and visit your machine's local IP (e.g. `http://192.168.x.x:5173`).
 
+## Cloud save (Supabase)
+
+Progress stays on the device by default. Sign in from **LOG IN** on the menu to save coins, story unlocks, shop items, high scores, and custom levels to your account.
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. In the SQL Editor, run [`supabase/schema.sql`](supabase/schema.sql).
+3. Copy the project URL and publishable (or anon) key from **Project Settings > API**.
+4. Create `.env.local` from [`.env.example`](.env.example) and paste those values.
+5. Restart `npm run dev`.
+
+Email/password is on by default. For local testing you can turn off **Confirm email** under Authentication > Providers > Email.
+
+**Unlock All** appears on the account screen only for developer accounts (`app_metadata.developer: true`). It unlocks every story level, secret, skin, and shape, and maxes shop power-ups. Sign out and back in after changing that flag so the session picks it up.
+
 ## Build
 
 ```bash
@@ -71,5 +85,6 @@ npm run tauri:build   # installer / .exe in src-tauri/target/release/bundle/
 - [Vite 6](https://vitejs.dev/) — fast dev server & bundler
 - [TypeScript 5](https://www.typescriptlang.org/) — type safety
 - [Phaser 3](https://phaser.io/) — 2D game engine with arcade physics, touch & keyboard input
+- [Supabase](https://supabase.com/) — email/password auth and cloud save
 - [Capacitor 7](https://capacitorjs.com/) — iOS & Android shells
 - [Tauri 2](https://tauri.app/) — desktop shell

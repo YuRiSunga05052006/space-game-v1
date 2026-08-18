@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { assetUrl } from '../assetUrl';
+import { initCloudProgress } from '../cloud/progressSync';
 import { BOSS_DEFINITIONS as WORLD1_BOSSES } from '../world1/bosses';
 import { drawBossAppearance as drawWorld1Boss, getBossAppearancePalette as getWorld1BossPalette } from '../world1/bossAppearances';
 import { STORY_ENEMY_DEFINITIONS as WORLD1_STORY_ENEMIES } from '../world1/storyEnemyDefinitions';
@@ -57,7 +58,9 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     this.createTextures();
-    this.scene.start('MenuScene');
+    void initCloudProgress().finally(() => {
+      this.scene.start('MenuScene');
+    });
   }
 
   private createTextures(): void {

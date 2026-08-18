@@ -1,3 +1,5 @@
+import { writeProgressItem } from './cloud/progressStorage';
+
 const STORAGE_KEY = 'star-blaster-coins';
 
 export function getCoins(): number {
@@ -11,11 +13,7 @@ export function getCoins(): number {
 
 export function addCoins(amount: number): number {
   const next = getCoins() + Math.max(0, amount);
-  try {
-    localStorage.setItem(STORAGE_KEY, String(next));
-  } catch {
-    // ignore storage errors
-  }
+  writeProgressItem(STORAGE_KEY, String(next));
   return next;
 }
 
@@ -36,10 +34,6 @@ export function spendCoins(amount: number): boolean {
   if (!canAfford(cost)) return false;
 
   const next = getCoins() - cost;
-  try {
-    localStorage.setItem(STORAGE_KEY, String(next));
-  } catch {
-    return false;
-  }
+  writeProgressItem(STORAGE_KEY, String(next));
   return true;
 }

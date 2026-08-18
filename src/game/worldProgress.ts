@@ -1,4 +1,5 @@
-﻿import type { GameMode } from './gameMode';
+﻿import { writeProgressItem } from './cloud/progressStorage';
+import type { GameMode } from './gameMode';
 import { getWorldLevelRange } from './worlds';
 
 const STORAGE_KEY = 'star-blaster-world-progress';
@@ -64,7 +65,7 @@ function unlockStoryLevelInStorage(level: number): void {
   try {
     const raw = localStorage.getItem(STORY_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORY_STORAGE_KEY, JSON.stringify([1, level].sort((a, b) => a - b)));
+      writeProgressItem(STORY_STORAGE_KEY, JSON.stringify([1, level].sort((a, b) => a - b)));
       return;
     }
     const parsed = JSON.parse(raw) as unknown;
@@ -74,7 +75,7 @@ function unlockStoryLevelInStorage(level: number): void {
       .filter((n) => n >= 1 && n <= 38);
     if (!levels.includes(level)) {
       levels.push(level);
-      localStorage.setItem(STORY_STORAGE_KEY, JSON.stringify([...new Set(levels)].sort((a, b) => a - b)));
+      writeProgressItem(STORY_STORAGE_KEY, JSON.stringify([...new Set(levels)].sort((a, b) => a - b)));
     }
   } catch {
     // ignore storage errors
@@ -82,11 +83,7 @@ function unlockStoryLevelInStorage(level: number): void {
 }
 
 function writeState(state: WorldProgressState): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // ignore storage errors
-  }
+  writeProgressItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 export function isWorld2StoryUnlocked(): boolean {
@@ -251,4 +248,21 @@ export function isWorldUnlocked(worldId: string, mode: GameMode): boolean {
     return mode === 'story' ? isWorld3StoryUnlocked() : isWorld3SurvivalUnlocked();
   }
   return false;
+}
+
+export function unlockAllWorldsAndSecrets(): void {
+  writeState({
+    world2Story: true,
+    world2Survival: true,
+    world3Story: true,
+    world3Survival: true,
+    secretIssUnlocked: true,
+    secretIssComplete: true,
+    secretDawnUnlocked: true,
+    secretDawnComplete: true,
+    secretGalileanUnlocked: true,
+    secretGalileanComplete: true,
+    secretWise0855Unlocked: true,
+    secretWise0855Complete: true,
+  });
 }

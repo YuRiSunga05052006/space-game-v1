@@ -3,7 +3,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { Player } from '../entities/Player';
 import { Asteroid, ASTEROID_DAMAGE, type AsteroidSize } from '../entities/Asteroid';
 import { Heart, HEART_HEAL } from '../entities/Heart';
-import { PowerStar, INVINCIBILITY_DURATION } from '../entities/PowerStar';
+import { PowerStar } from '../entities/PowerStar';
 import { SpiderShip, SPIDER_BODY_DAMAGE } from '../entities/SpiderShip';
 import { SeekerDrone, SEEKER_BODY_DAMAGE } from '../entities/SeekerDrone';
 import { KamikazeWasp, WASP_BODY_DAMAGE } from '../entities/KamikazeWasp';
@@ -187,6 +187,7 @@ import {
   FUEL_TANK_SPAWN_INTERVAL_MS,
   getFuelTankScoreCap,
   getInvisibilityDurationMs,
+  getPowerStarDurationMs,
   getShieldDurationMs,
   HYPERDRIVE_SCORE_CAP,
   POST_SCORE_BOOST_INVISIBILITY_MS,
@@ -536,6 +537,12 @@ export class GameScene extends Phaser.Scene {
       stopInvincibilityTheme();
       this.darknessOverlay?.destroy();
       this.darknessOverlay = undefined;
+      this.input.keyboard?.removeCapture([
+        Phaser.Input.Keyboard.KeyCodes.W,
+        Phaser.Input.Keyboard.KeyCodes.A,
+        Phaser.Input.Keyboard.KeyCodes.S,
+        Phaser.Input.Keyboard.KeyCodes.D,
+      ]);
     });
 
     if (this.carryScoreOnStart > 0) {
@@ -821,6 +828,7 @@ export class GameScene extends Phaser.Scene {
 
   private setupInput(): void {
     if (this.input.keyboard) {
+      this.input.keyboard.enabled = true;
       this.cursors = this.input.keyboard.createCursorKeys();
       this.wasd = {
         W: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
@@ -1722,7 +1730,8 @@ export class GameScene extends Phaser.Scene {
     if (this.isGameOver || this.isPaused) return;
     const star = starObj as PowerStar;
     star.destroy();
-    this.player.activateInvincibility(INVINCIBILITY_DURATION);
+    const level = getPowerUpLevel('powerStar');
+    this.player.activateInvincibility(getPowerStarDurationMs(level));
     this.spawnPowerStarCollectEffect(this.player.x, this.player.y);
   }
 
@@ -3481,7 +3490,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnFuelTankPickup(): void {
-    if (this.isGameOver || this.isPaused || this.gameMode !== 'survival') return;
+    if (this.isGameOver || this.isPaused) return;
+    if (this.gameMode !== 'survival' && this.gameMode !== 'editor') return;
     if (!isPowerUpOwned('fuelTank')) return;
     if (this.fuelTankPickups.countActive(true) >= 1) return;
 
@@ -3520,7 +3530,8 @@ export class GameScene extends Phaser.Scene {
     _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
     pickupObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
-    if (this.isGameOver || this.isPaused || this.gameMode !== 'survival') return;
+    if (this.isGameOver || this.isPaused) return;
+    if (this.gameMode !== 'survival' && this.gameMode !== 'editor') return;
     (pickupObj as FuelTankPickup).destroy();
     const level = getPowerUpLevel('fuelTank');
     const bonus = getFuelTankScoreCap(level);
@@ -4823,7 +4834,7 @@ export class GameScene extends Phaser.Scene {
     // Hearts / power-ups
     const tickPickup = (
       rule: typeof area.objects.hearts,
-      timerKey: 'heartSpawnTimer' | 'powerStarSpawnTimer' | 'shieldSpawnTimer' | 'invisibilitySpawnTimer',
+      timerKey: 'heartSpawnTimer' | 'powerStarSpawnTimer' | 'shieldSpawnTimer' | 'invisibilitySpawnTimer' | 'fuelTankSpawnTimer',
       spawn: () => void,
     ) => {
       if (!rule.enabled) return;
@@ -4842,6 +4853,9 @@ export class GameScene extends Phaser.Scene {
     }
     if (isPowerUpOwned('invisibility')) {
       tickPickup(area.objects.invisibility, 'invisibilitySpawnTimer', () => this.spawnInvisibilityPickup());
+    }
+    if (isPowerUpOwned('fuelTank') && area.enemies.bossCount === 0) {
+      tickPickup(area.objects.fuelTank, 'fuelTankSpawnTimer', () => this.spawnFuelTankPickup());
     }
 
     // Survival enemies
