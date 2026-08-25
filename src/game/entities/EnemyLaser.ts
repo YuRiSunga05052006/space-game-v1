@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { playSfx } from '../audioManager';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 
 export const LASER_DAMAGE = 1;
@@ -42,6 +43,7 @@ export function spawnEnemyLaser(
   body.setCircle(isSpecial ? 6 : 3);
 
   laser.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+  playSfx('enemyLaser');
   return laser;
 }
 

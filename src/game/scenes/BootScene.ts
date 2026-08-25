@@ -14,6 +14,7 @@ import { BOSS_DEFINITIONS as WORLD3_BOSSES } from '../world3/bosses';
 import { drawBossAppearance as drawWorld3Boss, getBossAppearancePalette as getWorld3BossPalette } from '../world3/bossAppearances';
 import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from '../world3/storyEnemyDefinitions';
 import { drawStoryEnemyAppearance as drawWorld3StoryEnemy, getStoryEnemyAppearancePalette as getWorld3StoryEnemyPalette } from '../world3/storyEnemyAppearances';
+import { WORLD3_STORY_ENEMY_VARIANTS } from '../world3/storyEnemyVariants';
 import { PLAYER_SHAPES, shipTextureKey } from '../playerShapes';
 import { PLAYER_SKINS } from '../playerSkins';
 import {
@@ -72,6 +73,7 @@ export class BootScene extends Phaser.Scene {
     this.createParticleTexture();
     this.createSmokeParticleTexture();
     this.createHeartTexture();
+    this.createSpaceDebrisTexture();
     this.createPowerStarTexture();
     this.createSpiderShipTexture();
     this.createEnemyLaserTexture();
@@ -249,6 +251,20 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(0xff8899, 0.6);
     g.fillCircle(cx - 3, cy - 4, 2);
     g.generateTexture('heart', 24, 24);
+    g.destroy();
+  }
+
+  private createSpaceDebrisTexture(): void {
+    const g = this.make.graphics({ x: 0, y: 0 }, false);
+    g.fillStyle(0x667788, 1);
+    g.fillTriangle(4, 20, 12, 4, 20, 18);
+    g.fillStyle(0x99aabb, 1);
+    g.fillTriangle(8, 18, 14, 8, 18, 16);
+    g.fillStyle(0xccddee, 0.85);
+    g.fillRect(10, 10, 4, 4);
+    g.lineStyle(1, 0x445566, 0.9);
+    g.strokeTriangle(4, 20, 12, 4, 20, 18);
+    g.generateTexture('space-debris', 24, 24);
     g.destroy();
   }
 
@@ -480,6 +496,14 @@ export class BootScene extends Phaser.Scene {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
       const palette = getWorld3StoryEnemyPalette(definition.themeId);
       drawWorld3StoryEnemy(g, definition.appearanceId, palette);
+      g.generateTexture(definition.textureKey, 32, 36);
+      g.destroy();
+    }
+    for (const definition of Object.values(WORLD3_STORY_ENEMY_VARIANTS)) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      const parent = WORLD3_STORY_ENEMIES[definition.parentLevel];
+      const palette = getWorld3StoryEnemyPalette(parent.themeId, definition.paletteOverride);
+      drawWorld3StoryEnemy(g, parent.appearanceId, palette);
       g.generateTexture(definition.textureKey, 32, 36);
       g.destroy();
     }

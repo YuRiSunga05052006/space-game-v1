@@ -3,6 +3,8 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { Player } from '../entities/Player';
 import { Asteroid, ASTEROID_DAMAGE, type AsteroidSize } from '../entities/Asteroid';
 import { Heart, HEART_HEAL } from '../entities/Heart';
+import { SpaceDebris, computeSpaceDebrisVitality } from '../entities/SpaceDebris';
+import { rollSpaceDebrisInsteadOfHeart } from '../armorDrops';
 import { PowerStar } from '../entities/PowerStar';
 import { SpiderShip, SPIDER_BODY_DAMAGE } from '../entities/SpiderShip';
 import { SeekerDrone, SEEKER_BODY_DAMAGE } from '../entities/SeekerDrone';
@@ -48,6 +50,7 @@ import {
   type EnemyLaserOptions,
 } from '../entities/EnemyLaser';
 import { HealthBar, MAX_HP } from '../ui/HealthBar';
+import { ArmorBar, MAX_ARMOR } from '../ui/ArmorBar';
 import { BossHealthBar } from '../ui/BossHealthBar';
 import {
   getDifficultyTier,
@@ -145,6 +148,12 @@ import {
   pickGalileanSecretEnemy,
 } from '../world2/galileanEnemies';
 import {
+  getWorld3VariantDefinition,
+  hasWorld3Variants,
+  isWorld3VariantLevel,
+  pickWorld3StoryEnemyVariant,
+} from '../world3/storyEnemyVariants';
+import {
   applyAudioSettings,
   initAudio,
   pauseMusic,
@@ -207,12 +216,17 @@ const WEAPON_HUD_Y_DEFAULT = 112;
 /** Boost score label sits ~15px under the bar center; keep weapon text under that. */
 const BOOST_METER_LABEL_OFFSET = 25;
 const WEAPON_HUD_GAP_BELOW_BOOST = 10;
+const HEALTH_BAR_Y = 58;
+const ARMOR_BAR_Y = 76;
+/** Vertical space the armor row adds below the health bar (shift boss/boost down while armor is shown). */
+const ARMOR_BAR_STACK_OFFSET = ARMOR_BAR_Y - HEALTH_BAR_Y;
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
   private asteroids!: Phaser.Physics.Arcade.Group;
   private bullets!: Phaser.Physics.Arcade.Group;
   private hearts!: Phaser.Physics.Arcade.Group;
+  private spaceDebris!: Phaser.Physics.Arcade.Group;
   private powerStars!: Phaser.Physics.Arcade.Group;
   private shieldPickups!: Phaser.Physics.Arcade.Group;
   private invisibilityPickups!: Phaser.Physics.Arcade.Group;
@@ -241,7 +255,9 @@ export class GameScene extends Phaser.Scene {
   private runCoins = 0;
   private coinText!: Phaser.GameObjects.Text;
   private hp = MAX_HP;
+  private armor = 0;
   private healthBar!: HealthBar;
+  private armorBar!: ArmorBar;
   private bossHealthBar!: BossHealthBar;
   private isGameOver = false;
   private isPlayerDying = false;
@@ -261,7 +277,7 @@ export class GameScene extends Phaser.Scene {
   private heartSpawnTimer = 0;
   private difficultyTier: DifficultyTier = 'easy';
   private escalationLevel = 0;
-  private maxHeartsOnScreen = 3;
+  private maxHeartsOnScreen = 5;
   private powerStarSpawnTimer = 15000;
   private powerStarSpawnInterval = 30000;
   private maxPowerStarsOnScreen = 1;
@@ -402,6 +418,7 @@ export class GameScene extends Phaser.Scene {
     this.score = 0;
     this.runCoins = 0;
     this.hp = MAX_HP;
+    this.armor = 0;
     this.spawnInterval = 1200;
     this.spawnTimer = 0;
     this.difficultyTimer = 0;
@@ -601,6 +618,7 @@ export class GameScene extends Phaser.Scene {
       runChildUpdate: false,
     });
     this.hearts = this.physics.add.group();
+    this.spaceDebris = this.physics.add.group();
     this.powerStars = this.physics.add.group();
     this.shieldPickups = this.physics.add.group();
     this.invisibilityPickups = this.physics.add.group();
@@ -693,7 +711,8 @@ export class GameScene extends Phaser.Scene {
       }).setOrigin(1, 0).setScrollFactor(0).setDepth(hudTextDepth);
     }
 
-    this.healthBar = new HealthBar(this, GAME_WIDTH / 2, 58);
+    this.healthBar = new HealthBar(this, GAME_WIDTH / 2, HEALTH_BAR_Y);
+    this.armorBar = new ArmorBar(this, GAME_WIDTH / 2, ARMOR_BAR_Y);
     this.boostPointMeter = new BoostPointMeter(this, GAME_WIDTH / 2, BOOST_METER_Y_DEFAULT);
     this.bossHealthBar = new BossHealthBar(this, BOSS_HEALTH_BAR_Y);
     this.weaponHudText = this.add.text(GAME_WIDTH / 2, WEAPON_HUD_Y_DEFAULT, '', {
@@ -902,6 +921,14 @@ export class GameScene extends Phaser.Scene {
       this.player,
       this.hearts,
       this.onPlayerCollectHeart as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.spaceDebris,
+      this.onPlayerCollectSpaceDebris as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
       undefined,
       this,
     );
@@ -1760,13 +1787,69 @@ export class GameScene extends Phaser.Scene {
     this.heal(HEART_HEAL);
   }
 
+  private onPlayerCollectSpaceDebris(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    debrisObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused) return;
+    const debris = debrisObj as SpaceDebris;
+    debris.destroy();
+
+    const prevHp = this.hp;
+    const prevArmor = this.armor;
+    const result = computeSpaceDebrisVitality(this.hp, this.armor, MAX_HP, MAX_ARMOR);
+    if (result.hp === prevHp && result.armor === prevArmor) return;
+
+    this.hp = result.hp;
+    this.armor = result.armor;
+    this.syncVitalityHud();
+
+    if (this.hp > prevHp) {
+      this.spawnHealEffect(this.player.x, this.player.y);
+    }
+    if (this.armor > prevArmor) {
+      this.spawnArmorEffect(this.player.x, this.player.y);
+    }
+  }
+
+  private syncVitalityHud(): void {
+    const armorWasVisible = this.armorBar.visible;
+    this.healthBar.setHp(this.hp);
+    this.armorBar.setArmor(this.armor);
+    if (this.armorBar.visible !== armorWasVisible) {
+      this.layoutTopCenterHud();
+    }
+  }
+
   private heal(amount: number): void {
     const prevHp = this.hp;
     this.hp = Math.min(MAX_HP, this.hp + amount);
     if (this.hp === prevHp) return;
 
-    this.healthBar.setHp(this.hp);
+    this.syncVitalityHud();
     this.spawnHealEffect(this.player.x, this.player.y);
+  }
+
+  private spawnArmorEffect(x: number, y: number): void {
+    const emitter = this.add.particles(x, y, 'particle', {
+      speed: { min: 30, max: 80 },
+      scale: { start: 0.8, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: 400,
+      tint: [0x4488ff, 0x88bbff, 0xffffff],
+      quantity: 8,
+      emitting: false,
+    });
+    emitter.explode(8);
+    this.time.delayedCall(500, () => emitter.destroy());
+
+    this.tweens.add({
+      targets: this.armorBar,
+      scaleX: 1.08,
+      scaleY: 1.08,
+      duration: 120,
+      yoyo: true,
+    });
   }
 
   private spawnHealEffect(x: number, y: number): void {
@@ -1859,9 +1942,10 @@ export class GameScene extends Phaser.Scene {
   private layoutTopCenterHud(): void {
     const bossVisible = this.bossHealthBar?.visible === true;
     const boostVisible = this.boostPointMeter?.visible === true;
+    const armorOffset = this.armor > 0 ? ARMOR_BAR_STACK_OFFSET : 0;
 
-    this.bossHealthBar.y = BOSS_HEALTH_BAR_Y;
-    const boostY = bossVisible ? BOOST_METER_Y_BELOW_BOSS : BOOST_METER_Y_DEFAULT;
+    this.bossHealthBar.y = BOSS_HEALTH_BAR_Y + armorOffset;
+    const boostY = (bossVisible ? BOOST_METER_Y_BELOW_BOSS : BOOST_METER_Y_DEFAULT) + armorOffset;
     this.boostPointMeter.y = boostY;
 
     if (!this.weaponHudText) return;
@@ -2549,50 +2633,14 @@ export class GameScene extends Phaser.Scene {
 
   private takeLaserDamage(amount: number, fromX: number, fromY: number): void {
     if (this.player.isGhostMode() || this.isHitStunned) return;
-    // Invincibility / shield / boost (and other absorb cases): no damage, no hit SFX.
-    if (this.player.absorbHit()) return;
-
-    this.hp = Math.max(0, this.hp - amount);
-    this.healthBar.setHp(this.hp);
-    this.cameras.main.shake(200, 0.005);
-    this.cameras.main.flash(100, 255, 80, 80);
-
-    const angle = Phaser.Math.Angle.Between(fromX, fromY, this.player.x, this.player.y);
-    this.player.setVelocity(Math.cos(angle) * 120, Math.sin(angle) * 120);
-    this.player.stopMove();
-
-    if (this.hp <= 0) {
-      // Player death: explosion only (no hit SFX).
-      this.triggerPlayerDeath();
-      return;
-    }
-
-    playHitSfx();
-    this.isHitStunned = true;
-    this.time.delayedCall(500, () => {
-      if (this.isGameOver || this.isPlayerDying) return;
-      this.isHitStunned = false;
-      this.player.setVelocity(0, 0);
-    });
+    this.applyPlayerDamage(amount, { mode: 'laser', fromX, fromY });
   }
 
   /** Continuous fire DoT — laser-style feedback, no teleport. Cadence gated by lastFireDamageAt. */
   private takeFireDamage(amount: number): void {
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) return;
     if (this.player.isGhostMode()) return;
-    if (this.player.absorbHit()) return;
-
-    this.hp = Math.max(0, this.hp - amount);
-    this.healthBar.setHp(this.hp);
-    this.cameras.main.shake(160, 0.004);
-    this.cameras.main.flash(80, 255, 120, 40);
-
-    if (this.hp <= 0) {
-      this.triggerPlayerDeath();
-      return;
-    }
-
-    playHitSfx();
+    this.applyPlayerDamage(amount, { mode: 'fire' });
   }
 
   private playerOverlapsFire(): boolean {
@@ -2619,39 +2667,86 @@ export class GameScene extends Phaser.Scene {
   }
 
   private takeDamage(amount: number): void {
+    this.applyPlayerDamage(amount, { mode: 'collision' });
+  }
+
+  private applyPlayerDamage(
+    amount: number,
+    options: { mode: 'laser' | 'fire' | 'collision'; fromX?: number; fromY?: number },
+  ): void {
     if (this.player.absorbHit()) return;
 
-    this.hp = Math.max(0, this.hp - amount);
-    this.healthBar.setHp(this.hp);
-    this.cameras.main.shake(200, 0.01);
-    this.cameras.main.flash(150, 255, 50, 50);
+    const hadArmor = this.armor > 0;
+    let remaining = amount;
+
+    if (this.armor > 0) {
+      const absorbed = Math.min(this.armor, remaining);
+      this.armor -= absorbed;
+      remaining -= absorbed;
+    }
+
+    if (remaining > 0) {
+      this.hp = Math.max(0, this.hp - remaining);
+    }
+
+    this.syncVitalityHud();
+
+    if (options.mode === 'laser') {
+      this.cameras.main.shake(200, 0.005);
+      this.cameras.main.flash(100, 255, 80, 80);
+    } else if (options.mode === 'fire') {
+      this.cameras.main.shake(160, 0.004);
+      this.cameras.main.flash(80, 255, 120, 40);
+    } else {
+      this.cameras.main.shake(200, 0.01);
+      this.cameras.main.flash(150, 255, 50, 50);
+    }
 
     if (this.hp <= 0) {
-      // Player death: explosion only (no hit SFX).
+      this.armor = 0;
+      this.syncVitalityHud();
       this.triggerPlayerDeath();
       return;
     }
 
     playHitSfx();
-    this.spawnExplosion(this.player.x, this.player.y, 20);
 
-    this.player.setPosition(GAME_WIDTH / 2, GAME_HEIGHT - 120);
-    this.player.setVelocity(0, 0);
-    this.player.setAlpha(0.35);
-    this.physics.pause();
+    if (hadArmor) return;
 
-    this.time.delayedCall(1000, () => {
-      if (this.isGameOver || this.isPlayerDying) return;
-      this.tweens.killTweensOf(this.player);
-      this.player.setAlpha(1);
-      // If weapon-select / pause froze the clock mid-hit, leave physics to those flows.
-      if (this.isChoosingWeapon || this.isPaused) return;
-      this.physics.resume();
-    });
+    if (options.mode === 'laser' && options.fromX !== undefined && options.fromY !== undefined) {
+      const angle = Phaser.Math.Angle.Between(options.fromX, options.fromY, this.player.x, this.player.y);
+      this.player.setVelocity(Math.cos(angle) * 120, Math.sin(angle) * 120);
+      this.player.stopMove();
+      this.isHitStunned = true;
+      this.time.delayedCall(500, () => {
+        if (this.isGameOver || this.isPlayerDying) return;
+        this.isHitStunned = false;
+        this.player.setVelocity(0, 0);
+      });
+      return;
+    }
+
+    if (options.mode === 'collision') {
+      this.spawnExplosion(this.player.x, this.player.y, 20);
+      this.player.setPosition(GAME_WIDTH / 2, GAME_HEIGHT - 120);
+      this.player.setVelocity(0, 0);
+      this.player.setAlpha(0.35);
+      this.physics.pause();
+
+      this.time.delayedCall(1000, () => {
+        if (this.isGameOver || this.isPlayerDying) return;
+        this.tweens.killTweensOf(this.player);
+        this.player.setAlpha(1);
+        if (this.isChoosingWeapon || this.isPaused) return;
+        this.physics.resume();
+      });
+    }
   }
 
   private triggerPlayerDeath(): void {
     if (this.isPlayerDying) return;
+    this.armor = 0;
+    this.syncVitalityHud();
     this.isPlayerDying = true;
     this.isGameOver = true;
     this.isPaused = false;
@@ -3436,17 +3531,30 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private countHealthPickupsOnScreen(): number {
+    return this.hearts.countActive(true) + this.spaceDebris.countActive(true);
+  }
+
   private spawnHeart(): void {
     if (this.isGameOver || this.isPaused) return;
-    if (this.hearts.countActive(true) >= this.maxHeartsOnScreen) return;
+    if (this.countHealthPickupsOnScreen() >= this.maxHeartsOnScreen) return;
 
     const { x, y } = Heart.randomSpawnPosition();
+    const velocity = {
+      x: Phaser.Math.Between(-18, 18),
+      y: Phaser.Math.Between(20, 45),
+    };
+
+    if (rollSpaceDebrisInsteadOfHeart(this.difficultyTier)) {
+      const debris = new SpaceDebris(this, x, y);
+      this.spaceDebris.add(debris);
+      debris.setVelocity(velocity.x, velocity.y);
+      return;
+    }
+
     const heart = new Heart(this, x, y);
     this.hearts.add(heart);
-    heart.setVelocity(
-      Phaser.Math.Between(-18, 18),
-      Phaser.Math.Between(20, 45),
-    );
+    heart.setVelocity(velocity.x, velocity.y);
   }
 
   private spawnPowerStar(): void {
@@ -3761,6 +3869,13 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    if (this.worldId === 'world3' && hasWorld3Variants(this.storyLevel)) {
+      const definition = pickWorld3StoryEnemyVariant(this.storyLevel, this.getStoryEnemyCounts());
+      if (!definition) return;
+      this.addStoryEnemy(definition);
+      return;
+    }
+
     const definition = getStoryEnemyDefinition(this.worldId, this.storyLevel);
     const activeCount = this.storyEnemies.countActive(true);
     if (!canSpawnStoryEnemy(this.storyLevel, activeCount)) return;
@@ -3773,7 +3888,9 @@ export class GameScene extends Phaser.Scene {
 
     const base = isGalileanMoonLevel(level)
       ? getGalileanMoonEnemyDefinition(level)
-      : getStoryEnemyDefinition(this.worldId, level);
+      : isWorld3VariantLevel(level)
+        ? getWorld3VariantDefinition(level)
+        : getStoryEnemyDefinition(this.worldId, level);
     const scaled = scaleStoryEnemyDefinition(base, this.score);
     this.addStoryEnemy(scaled);
   }
@@ -4072,6 +4189,12 @@ export class GameScene extends Phaser.Scene {
     this.hearts.children.each((child) => {
       const heart = child as Heart;
       if (heart.isOffScreen()) heart.destroy();
+      return true;
+    });
+
+    this.spaceDebris.children.each((child) => {
+      const debris = child as SpaceDebris;
+      if (debris.isOffScreen()) debris.destroy();
       return true;
     });
 
@@ -4536,6 +4659,7 @@ export class GameScene extends Phaser.Scene {
     pushActive(this.mines, LIGHT_RADIUS.mine, 0.65);
     pushActive(this.comets, LIGHT_RADIUS.faint, 0.7);
     pushActive(this.hearts, LIGHT_RADIUS.faint, 0.7);
+    pushActive(this.spaceDebris, LIGHT_RADIUS.faint, 0.7);
     pushActive(this.powerStars, LIGHT_RADIUS.faint, 0.75);
     pushActive(this.lootBoxes, LIGHT_RADIUS.faint, 0.7);
     pushActive(this.shieldPickups, LIGHT_RADIUS.faint, 0.7);
@@ -4891,6 +5015,9 @@ export class GameScene extends Phaser.Scene {
           if ((counts[parsed.level] ?? 0) >= rule.maxOnScreen) continue;
           if (parsed.galilean || isGalileanMoonLevel(parsed.level)) {
             const definition = getGalileanMoonEnemyDefinition(parsed.level);
+            this.addStoryEnemy(definition);
+          } else if (parsed.world3Variant || isWorld3VariantLevel(parsed.level)) {
+            const definition = getWorld3VariantDefinition(parsed.level);
             this.addStoryEnemy(definition);
           } else {
             // Temporarily use target world for definition lookup.

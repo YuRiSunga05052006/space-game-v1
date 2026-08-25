@@ -572,6 +572,36 @@ function drawGalileanBackground(
   drawCallistoCloseup(g, width * 0.7, height * 0.55, width * 0.12);
 }
 
+function drawMoonBody(
+  g: Phaser.GameObjects.Graphics,
+  px: number,
+  py: number,
+  r: number,
+  glowPad = 12,
+): void {
+  drawCloseupBody(g, px, py, r, 0x888899, glowPad);
+
+  g.fillStyle(0x6a6a7a, 0.42);
+  g.fillEllipse(px - r * 0.18, py - r * 0.08, r * 0.72, r * 0.5);
+  g.fillEllipse(px + r * 0.28, py + r * 0.22, r * 0.46, r * 0.34);
+
+  drawCraters(g, px, py, r, [
+    { ox: -0.38, oy: 0.12, size: 0.16 },
+    { ox: 0.22, oy: -0.28, size: 0.13 },
+    { ox: 0.08, oy: 0.38, size: 0.1 },
+    { ox: -0.12, oy: -0.42, size: 0.08 },
+    { ox: 0.42, oy: 0.08, size: 0.09 },
+    { ox: -0.48, oy: -0.22, size: 0.07 },
+    { ox: 0.32, oy: 0.42, size: 0.06 },
+    { ox: -0.02, oy: 0.08, size: 0.11 },
+    { ox: 0.52, oy: -0.18, size: 0.05 },
+  ], 0x5a5a68, 0.5);
+
+  g.fillStyle(0xaaaaaa, 0.18);
+  g.fillCircle(px - r * 0.38, py + r * 0.12, r * 0.07);
+  g.fillCircle(px + r * 0.22, py - r * 0.28, r * 0.05);
+}
+
 function drawEarthCloseup(
   g: Phaser.GameObjects.Graphics,
   width: number,
@@ -603,6 +633,9 @@ function drawEarthCloseup(
   g.strokeCircle(px, py, r);
   g.lineStyle(2, 0x88ccff, 0.16);
   g.strokeCircle(px, py, r + 7);
+
+  const moonR = r * 0.32;
+  drawMoonBody(g, px - r * 1.28, py - r * 0.62, moonR, 8);
 }
 
 function drawMoonCloseup(
@@ -612,27 +645,7 @@ function drawMoonCloseup(
   theme: BackgroundTheme,
 ): void {
   const { px, py, r } = closeupCenter(theme, width, height);
-  drawCloseupBody(g, px, py, r, 0x888899);
-
-  g.fillStyle(0x6a6a7a, 0.42);
-  g.fillEllipse(px - r * 0.18, py - r * 0.08, r * 0.72, r * 0.5);
-  g.fillEllipse(px + r * 0.28, py + r * 0.22, r * 0.46, r * 0.34);
-
-  drawCraters(g, px, py, r, [
-    { ox: -0.38, oy: 0.12, size: 0.16 },
-    { ox: 0.22, oy: -0.28, size: 0.13 },
-    { ox: 0.08, oy: 0.38, size: 0.1 },
-    { ox: -0.12, oy: -0.42, size: 0.08 },
-    { ox: 0.42, oy: 0.08, size: 0.09 },
-    { ox: -0.48, oy: -0.22, size: 0.07 },
-    { ox: 0.32, oy: 0.42, size: 0.06 },
-    { ox: -0.02, oy: 0.08, size: 0.11 },
-    { ox: 0.52, oy: -0.18, size: 0.05 },
-  ], 0x5a5a68, 0.5);
-
-  g.fillStyle(0xaaaaaa, 0.18);
-  g.fillCircle(px - r * 0.38, py + r * 0.12, r * 0.07);
-  g.fillCircle(px + r * 0.22, py - r * 0.28, r * 0.05);
+  drawMoonBody(g, px, py, r);
 }
 
 function drawVenusCloseup(
@@ -1032,6 +1045,357 @@ function drawOortBackground(
   drawBackgroundCometField(g, width, height, OORT_COMET_COUNT, 138);
 }
 
+function drawRedDwarf(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0xcc2211, 0.16);
+  g.fillCircle(x, y, r + 18);
+  g.fillStyle(0xcc3322, 0.35);
+  g.fillCircle(x, y, r + 8);
+  g.fillStyle(0xdd4422, 0.92);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xff6644, 0.22);
+  g.fillCircle(x - r * 0.2, y - r * 0.22, r * 0.35);
+}
+
+function drawYellowDwarf(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0xffaa22, 0.18);
+  g.fillCircle(x, y, r + 20);
+  g.fillStyle(0xffcc44, 0.42);
+  g.fillCircle(x, y, r + 10);
+  g.fillStyle(0xffee88, 0.95);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xffffff, 0.55);
+  g.fillCircle(x - r * 0.18, y - r * 0.2, r * 0.28);
+}
+
+function drawOrangeDwarf(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0xcc6622, 0.18);
+  g.fillCircle(x, y, r + 16);
+  g.fillStyle(0xdd8844, 0.45);
+  g.fillCircle(x, y, r + 8);
+  g.fillStyle(0xffaa66, 0.94);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xffcc88, 0.35);
+  g.fillCircle(x - r * 0.2, y - r * 0.22, r * 0.3);
+}
+
+function drawWhiteMainSequence(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0x88aacc, 0.2);
+  g.fillCircle(x, y, r + 22);
+  g.fillStyle(0xaaccff, 0.45);
+  g.fillCircle(x, y, r + 12);
+  g.fillStyle(0xccddff, 0.96);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xffffff, 0.7);
+  g.fillCircle(x - r * 0.16, y - r * 0.18, r * 0.3);
+}
+
+function drawWhiteSubgiant(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0x99aabb, 0.2);
+  g.fillCircle(x, y, r + 24);
+  g.fillStyle(0xccddee, 0.48);
+  g.fillCircle(x, y, r + 14);
+  g.fillStyle(0xeeeeff, 0.95);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xffffff, 0.65);
+  g.fillCircle(x - r * 0.18, y - r * 0.2, r * 0.32);
+}
+
+function drawWhiteDwarf(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0xaaaacc, 0.22);
+  g.fillCircle(x, y, r + 10);
+  g.fillStyle(0xddddee, 0.55);
+  g.fillCircle(x, y, r + 4);
+  g.fillStyle(0xffffff, 0.98);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xffffff, 0.85);
+  g.fillCircle(x - r * 0.12, y - r * 0.14, r * 0.35);
+}
+
+function drawOrangeGiant(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0xcc6622, 0.22);
+  g.fillCircle(x, y, r + 28);
+  g.fillStyle(0xdd8844, 0.48);
+  g.fillCircle(x, y, r + 14);
+  g.fillStyle(0xffaa66, 0.94);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xffcc88, 0.28);
+  g.fillEllipse(x, y + r * 0.08, r * 1.1, r * 0.92);
+  g.fillStyle(0xffddaa, 0.2);
+  g.fillCircle(x - r * 0.22, y - r * 0.24, r * 0.34);
+}
+
+function drawRedGiant(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0x881100, 0.2);
+  g.fillCircle(x, y, r + 36);
+  g.fillStyle(0xcc2200, 0.42);
+  g.fillCircle(x, y, r + 18);
+  g.fillStyle(0xdd3311, 0.94);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xff4422, 0.3);
+  g.fillEllipse(x, y + r * 0.06, r * 1.08, r * 0.95);
+  g.fillStyle(0xff6644, 0.18);
+  g.fillCircle(x - r * 0.2, y - r * 0.22, r * 0.32);
+}
+
+function drawBrownDwarfL(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0x663311, 0.18);
+  g.fillCircle(x, y, r + 14);
+  g.fillStyle(0x884422, 0.5);
+  g.fillCircle(x, y, r + 6);
+  g.fillStyle(0xaa6633, 0.92);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xcc8844, 0.25);
+  g.fillCircle(x - r * 0.18, y - r * 0.2, r * 0.28);
+}
+
+function drawBrownDwarfT(g: Phaser.GameObjects.Graphics, x: number, y: number, r: number): void {
+  g.fillStyle(0x442211, 0.16);
+  g.fillCircle(x, y, r + 12);
+  g.fillStyle(0x663322, 0.45);
+  g.fillCircle(x, y, r + 5);
+  g.fillStyle(0x884433, 0.9);
+  g.fillCircle(x, y, r);
+  g.fillStyle(0xaa6644, 0.2);
+  g.fillCircle(x - r * 0.16, y - r * 0.18, r * 0.26);
+}
+
+function drawRockyPlanet(
+  g: Phaser.GameObjects.Graphics,
+  x: number,
+  y: number,
+  r: number,
+  color: number,
+): void {
+  drawCloseupBody(g, x, y, r, color, 6);
+  g.fillStyle(0x554433, 0.35);
+  g.fillCircle(x + r * 0.18, y + r * 0.12, r * 0.22);
+  g.fillStyle(0x667755, 0.28);
+  g.fillEllipse(x - r * 0.22, y - r * 0.08, r * 0.38, r * 0.24);
+}
+
+function drawProximaCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawRedDwarf(g, px, py, r);
+  drawRockyPlanet(g, px + r * 1.35, py + r * 0.15, r * 0.28, 0x886655);
+}
+
+function drawAlphaCentauriCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawYellowDwarf(g, px - r * 0.35, py, r * 0.88);
+  drawOrangeDwarf(g, px + r * 0.55, py + r * 0.08, r * 0.72);
+}
+
+function drawBarnardCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawRedDwarf(g, px, py, r);
+}
+
+function drawLuhmanCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawBrownDwarfL(g, px - r * 0.3, py, r * 0.82);
+  drawBrownDwarfT(g, px + r * 0.55, py + r * 0.1, r * 0.68);
+}
+
+function drawWolf359Closeup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawRedDwarf(g, px, py, r);
+  g.fillStyle(0xff2200, 0.35);
+  g.fillCircle(px + r * 0.42, py - r * 0.55, r * 0.12);
+}
+
+function drawSiriusCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawWhiteMainSequence(g, px - r * 0.2, py, r * 0.92);
+  drawWhiteDwarf(g, px + r * 1.05, py + r * 0.12, r * 0.22);
+}
+
+function drawEpsilonEridaniCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawOrangeDwarf(g, px, py, r);
+  drawRockyPlanet(g, px + r * 1.28, py - r * 0.08, r * 0.3, 0x998866);
+}
+
+function drawProcyonCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawWhiteSubgiant(g, px - r * 0.15, py, r * 0.9);
+  drawWhiteDwarf(g, px + r * 0.95, py + r * 0.15, r * 0.2);
+}
+
+function drawVanMaanenCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawWhiteDwarf(g, px, py, r * 0.85);
+}
+
+function drawAltairCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  g.fillStyle(0x88aacc, 0.2);
+  g.fillEllipse(px, py, (r + 22) * 1.15, r + 22);
+  g.fillStyle(0xaaccff, 0.45);
+  g.fillEllipse(px, py, (r + 12) * 1.12, r + 12);
+  g.fillStyle(0xccddff, 0.96);
+  g.fillEllipse(px, py, r * 1.12, r);
+  g.fillStyle(0xffffff, 0.65);
+  g.fillEllipse(px - r * 0.18, py - r * 0.2, r * 0.34, r * 0.28);
+}
+
+function drawVegaCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawWhiteMainSequence(g, px, py, r);
+  g.lineStyle(2, 0xddeeff, 0.35);
+  g.strokeEllipse(px, py, r * 1.35, r * 0.22);
+}
+
+function drawPolluxCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawOrangeGiant(g, px, py, r);
+  drawRockyPlanet(g, px + r * 1.22, py + r * 0.18, r * 0.26, 0xaa7755);
+}
+
+function drawArcturusCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawOrangeGiant(g, px, py, r);
+}
+
+function drawTrappistCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawRedDwarf(g, px, py, r);
+
+  const orbitR = r * 1.55;
+  g.lineStyle(1, 0xff6644, 0.18);
+  g.strokeCircle(px, py, orbitR);
+
+  const planetColors = [0x886655, 0x776644, 0x998877, 0x665544, 0x887766, 0x776655, 0x998866];
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
+    const pr = r * (0.1 + (i % 3) * 0.02);
+    drawRockyPlanet(
+      g,
+      px + Math.cos(a) * orbitR,
+      py + Math.sin(a) * orbitR,
+      pr,
+      planetColors[i],
+    );
+  }
+}
+
+function drawCapellaCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawYellowDwarf(g, px - r * 0.22, py - r * 0.08, r * 0.78);
+  drawYellowDwarf(g, px + r * 0.28, py + r * 0.06, r * 0.74);
+  drawRedDwarf(g, px - r * 1.35, py + r * 0.42, r * 0.28);
+  drawRedDwarf(g, px + r * 1.42, py - r * 0.35, r * 0.26);
+}
+
+function drawAlderaminCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawWhiteSubgiant(g, px, py, r);
+}
+
+function drawCastorCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawWhiteMainSequence(g, px - r * 0.55, py - r * 0.35, r * 0.52);
+  drawRedDwarf(g, px - r * 0.18, py - r * 0.28, r * 0.22);
+  drawWhiteMainSequence(g, px + r * 0.08, py + r * 0.05, r * 0.42);
+  drawRedDwarf(g, px + r * 0.38, py + r * 0.12, r * 0.18);
+  drawRedDwarf(g, px - r * 0.12, py + r * 0.62, r * 0.24);
+  drawRedDwarf(g, px + r * 0.22, py + r * 0.72, r * 0.22);
+}
+
+function drawAldebaranCloseup(
+  g: Phaser.GameObjects.Graphics,
+  width: number,
+  height: number,
+  theme: BackgroundTheme,
+): void {
+  const { px, py, r } = closeupCenter(theme, width, height);
+  drawRedGiant(g, px, py, r);
+}
+
 function drawGenericPlanet(
   g: Phaser.GameObjects.Graphics,
   width: number,
@@ -1133,6 +1497,60 @@ export function applyStoryBackground(
       break;
     case 'oort':
       drawOortBackground(planet, width, height);
+      break;
+    case 'proxima':
+      drawProximaCloseup(planet, width, height, theme);
+      break;
+    case 'alphaCentauri':
+      drawAlphaCentauriCloseup(planet, width, height, theme);
+      break;
+    case 'barnard':
+      drawBarnardCloseup(planet, width, height, theme);
+      break;
+    case 'luhman':
+      drawLuhmanCloseup(planet, width, height, theme);
+      break;
+    case 'wolf359':
+      drawWolf359Closeup(planet, width, height, theme);
+      break;
+    case 'sirius':
+      drawSiriusCloseup(planet, width, height, theme);
+      break;
+    case 'epsilonEridani':
+      drawEpsilonEridaniCloseup(planet, width, height, theme);
+      break;
+    case 'procyon':
+      drawProcyonCloseup(planet, width, height, theme);
+      break;
+    case 'vanMaanen':
+      drawVanMaanenCloseup(planet, width, height, theme);
+      break;
+    case 'altair':
+      drawAltairCloseup(planet, width, height, theme);
+      break;
+    case 'vega':
+      drawVegaCloseup(planet, width, height, theme);
+      break;
+    case 'pollux':
+      drawPolluxCloseup(planet, width, height, theme);
+      break;
+    case 'arcturus':
+      drawArcturusCloseup(planet, width, height, theme);
+      break;
+    case 'trappist':
+      drawTrappistCloseup(planet, width, height, theme);
+      break;
+    case 'capella':
+      drawCapellaCloseup(planet, width, height, theme);
+      break;
+    case 'alderamin':
+      drawAlderaminCloseup(planet, width, height, theme);
+      break;
+    case 'castor':
+      drawCastorCloseup(planet, width, height, theme);
+      break;
+    case 'aldebaran':
+      drawAldebaranCloseup(planet, width, height, theme);
       break;
     default:
       if (theme.planetSize > 0) {

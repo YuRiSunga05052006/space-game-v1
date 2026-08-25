@@ -5,6 +5,10 @@ import {
 } from '../almanac';
 import type { EnemyKind } from '../enemies';
 import { isWorld2Unlocked, isWorld3Unlocked } from '../worldProgress';
+import {
+  hasWorld3Variants,
+  WORLD3_STORY_ENEMY_GROUPS,
+} from '../world3/storyEnemyVariants';
 
 function canUseComets(): boolean {
   return isWorld2Unlocked() || isWorld3Unlocked();
@@ -15,12 +19,19 @@ function canUseWorld3(): boolean {
 }
 
 export interface EditorStoryEnemyOption {
-  /** e.g. story-world1-3 or story-world2-galilean-1101 */
+  /** e.g. story-world1-3, story-world2-galilean-1101, story-world3-variant-2201 */
   id: string;
   name: string;
   worldId: 'world1' | 'world2' | 'world3';
   level: number;
   galilean: boolean;
+  world3Variant: boolean;
+}
+
+export interface EditorStoryEnemyGroupOption {
+  groupName: string;
+  parentLevel: number;
+  variants: EditorStoryEnemyOption[];
 }
 
 export interface EditorBossOption {
@@ -92,6 +103,18 @@ export function getVisibleSurvivalEnemyIds(): EnemyKind[] {
 }
 
 function parseStoryAlmanacEntry(entry: AlmanacEntry): EditorStoryEnemyOption | null {
+  // story-enemy-world3-variant-2201
+  const w3Variant = /^story-enemy-(world3)-variant-(\d+)$/.exec(entry.id);
+  if (w3Variant) {
+    return {
+      id: `story-${w3Variant[1]}-variant-${w3Variant[2]}`,
+      name: entry.name,
+      worldId: 'world3',
+      level: parseInt(w3Variant[2], 10),
+      galilean: false,
+      world3Variant: true,
+    };
+  }
   // story-enemy-world1-3
   const normal = /^story-enemy-(world[123])-(\d+)$/.exec(entry.id);
   if (normal) {
@@ -101,6 +124,7 @@ function parseStoryAlmanacEntry(entry: AlmanacEntry): EditorStoryEnemyOption | n
       worldId: normal[1] as EditorStoryEnemyOption['worldId'],
       level: parseInt(normal[2], 10),
       galilean: false,
+      world3Variant: false,
     };
   }
   // story-enemy-world2-galilean-1101
@@ -112,6 +136,7 @@ function parseStoryAlmanacEntry(entry: AlmanacEntry): EditorStoryEnemyOption | n
       worldId: 'world2',
       level: parseInt(gal[2], 10),
       galilean: true,
+      world3Variant: false,
     };
   }
   return null;
@@ -152,6 +177,38 @@ export function getVisibleStoryEnemyOptions(): EditorStoryEnemyOption[] {
     .filter((o): o is EditorStoryEnemyOption => o != null);
 }
 
+/** World 3 story enemies grouped by multi-star variant families. */
+export function getVisibleStoryEnemyGroupsForWorld(
+  worldId: 'world1' | 'world2' | 'world3',
+): EditorStoryEnemyGroupOption[] {
+  if (worldId !== 'world3') return [];
+
+  const options = getVisibleStoryEnemyOptions().filter((o) => o.worldId === 'world3');
+  const byLevel = new Map(options.map((o) => [o.level, o]));
+
+  return WORLD3_STORY_ENEMY_GROUPS
+    .map((group) => ({
+      groupName: group.groupName,
+      parentLevel: group.parentLevel,
+      variants: group.variantLevels
+        .map((level) => byLevel.get(level))
+        .filter((o): o is EditorStoryEnemyOption => o != null),
+    }))
+    .filter((g) => g.variants.length > 0);
+}
+
+/** Flat story enemy options for a world tab, excluding grouped W3 parents. */
+export function getVisibleStoryEnemyOptionsForWorld(
+  worldId: 'world1' | 'world2' | 'world3' | 'world4' | 'world5' | 'world6' | 'world7' | 'world8',
+): EditorStoryEnemyOption[] {
+  if (worldId !== 'world1' && worldId !== 'world2' && worldId !== 'world3') return [];
+  return getVisibleStoryEnemyOptions().filter((o) => {
+    if (o.worldId !== worldId) return false;
+    if (worldId === 'world3' && hasWorld3Variants(o.level) && !o.world3Variant) return false;
+    return true;
+  });
+}
+
 /** Bosses currently visible in the almanac (unlocked). */
 export function getVisibleBossOptions(): EditorBossOption[] {
   return getVisibleAlmanacEntries()
@@ -170,6 +227,17 @@ export function isBossIdUnlocked(id: string): boolean {
 
 export function parseEditorStoryId(id: string): EditorStoryEnemyOption | null {
   const migrated = migrateLegacyEnemyId(id);
+  const w3Var = /^story-world3-variant-(\d+)$/.exec(migrated);
+  if (w3Var) {
+    return {
+      id: migrated,
+      name: migrated,
+      worldId: 'world3',
+      level: parseInt(w3Var[1], 10),
+      galilean: false,
+      world3Variant: true,
+    };
+  }
   const gal = /^story-world2-galilean-(\d+)$/.exec(migrated);
   if (gal) {
     return {
@@ -178,6 +246,7 @@ export function parseEditorStoryId(id: string): EditorStoryEnemyOption | null {
       worldId: 'world2',
       level: parseInt(gal[1], 10),
       galilean: true,
+      world3Variant: false,
     };
   }
   const m = /^story-(world[123])-(\d+)$/.exec(migrated);
@@ -188,6 +257,7 @@ export function parseEditorStoryId(id: string): EditorStoryEnemyOption | null {
     worldId: m[1] as EditorStoryEnemyOption['worldId'],
     level: parseInt(m[2], 10),
     galilean: false,
+    world3Variant: false,
   };
 }
 

@@ -19,6 +19,10 @@ import {
   isGalileanMoonLevel,
 } from './world2/galileanEnemies';
 import {
+  getWorld3VariantDefinition,
+  isWorld3VariantLevel,
+} from './world3/storyEnemyVariants';
+import {
   getWorld1MapNode,
   getWorld1MapRouteLevels,
   SUN_POSITION as WORLD1_SUN,
@@ -158,7 +162,10 @@ export function getStoryEnemyDefinition(worldId: string, level: number): StoryEn
   if (contentWorld === 'world2' || worldId === 'world2') {
     if (isGalileanMoonLevel(level)) return getGalileanMoonEnemyDefinition(level);
   }
-  if (contentWorld === 'world3') return getWorld3StoryEnemy(level);
+  if (contentWorld === 'world3') {
+    if (isWorld3VariantLevel(level)) return getWorld3VariantDefinition(level);
+    return getWorld3StoryEnemy(level);
+  }
   if (contentWorld === 'world2') return getWorld2StoryEnemy(level);
   return getWorld1StoryEnemy(level);
 }

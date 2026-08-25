@@ -7,12 +7,11 @@ import {
   POINTS_PER_BAR,
 } from './SegmentBar';
 
-export const MAX_HP = BAR_COUNT * POINTS_PER_BAR;
-export { BAR_COUNT, POINTS_PER_BAR as HP_PER_BAR };
+export const MAX_ARMOR = BAR_COUNT * POINTS_PER_BAR;
 
-const COLOR_RED = 0xff4466;
+const COLOR_BLUE = 0x4488ff;
 
-export class HealthBar extends Phaser.GameObjects.Container {
+export class ArmorBar extends Phaser.GameObjects.Container {
   private segmentGraphics: Phaser.GameObjects.Graphics[] = [];
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -26,18 +25,23 @@ export class HealthBar extends Phaser.GameObjects.Container {
     scene.add.existing(this);
     this.setScrollFactor(0);
     this.setDepth(100);
-    this.setHp(MAX_HP);
+    this.setArmor(0);
   }
 
-  setHp(hp: number): void {
-    const clamped = Phaser.Math.Clamp(hp, 0, MAX_HP);
+  setArmor(armor: number): void {
+    const clamped = Phaser.Math.Clamp(armor, 0, MAX_ARMOR);
+    this.setVisible(clamped > 0);
 
     for (let i = 0; i < BAR_COUNT; i++) {
-      drawSegmentFill(
-        this.segmentGraphics[i],
-        fillLevelForPoints(clamped, i),
-        COLOR_RED,
-      );
+      const g = this.segmentGraphics[i];
+      const fillLevel = fillLevelForPoints(clamped, i);
+      if (fillLevel > 0) {
+        g.setVisible(true);
+        drawSegmentFill(g, fillLevel, COLOR_BLUE);
+      } else {
+        g.setVisible(false);
+        g.clear();
+      }
     }
   }
 }

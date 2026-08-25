@@ -39,15 +39,19 @@ function darkenColor(color: number, factor: number): number {
   return (r << 16) | (g << 8) | b;
 }
 
-export function getStoryEnemyAppearancePalette(themeId: string): StoryEnemyAppearancePalette {
+export function getStoryEnemyAppearancePalette(
+  themeId: string,
+  overrides?: Partial<StoryEnemyAppearancePalette>,
+): StoryEnemyAppearancePalette {
   const theme = getBackgroundTheme(themeId);
-  return {
+  const base: StoryEnemyAppearancePalette = {
     hull: theme.planetColor,
     hullDark: darkenColor(theme.planetColor, 0.5),
     trim: theme.accentColor,
     core: 0xffffff,
     glow: theme.accentColor,
   };
+  return overrides ? { ...base, ...overrides } : base;
 }
 
 function drawDisc(g: Phaser.GameObjects.Graphics, p: StoryEnemyAppearancePalette): void {

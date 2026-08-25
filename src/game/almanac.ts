@@ -34,6 +34,16 @@ import { MINE_DATA, type MineVariant } from './entities/Mine';
 import { ASTEROID_DAMAGE, ASTEROID_DATA, GOLD_ASTEROID_HEALTH, GOLD_ASTEROID_TEXTURES, type AsteroidSize } from './entities/Asteroid';
 import { COMET_DAMAGE, COMET_POINTS, GOLD_COMET_POINTS } from './entities/Comet';
 import { getGoldAsteroidCoinReward, getGoldCometCoinReward } from './coinDrops';
+import { HEART_HEAL } from './entities/Heart';
+import { LOOT_MILESTONE_STEP } from './loot';
+import {
+  FUEL_TANK_SPAWN_INTERVAL_MS,
+  getFuelTankScoreCap,
+  getInvisibilityDurationMs,
+  getPowerStarDurationMs,
+  getShieldDurationMs,
+} from './powerUpEffects';
+import { isPowerUpOwned, type UpgradablePowerUpId } from './playerPowerUps';
 import { BOSS_DEFINITIONS as WORLD1_BOSSES } from './world1/bosses';
 import { BOSS_DEFINITIONS as WORLD2_BOSSES } from './world2/bosses';
 import { BOSS_DEFINITIONS as WORLD3_BOSSES } from './world3/bosses';
@@ -41,6 +51,10 @@ import { STORY_ENEMY_DEFINITIONS as WORLD1_STORY_ENEMIES, type StoryEnemyBehavio
 import { STORY_ENEMY_DEFINITIONS as WORLD2_STORY_ENEMIES } from './world2/storyEnemyDefinitions';
 import { GALILEAN_MOON_ENEMIES } from './world2/galileanEnemies';
 import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from './world3/storyEnemyDefinitions';
+import {
+  hasWorld3Variants,
+  WORLD3_STORY_ENEMY_VARIANTS,
+} from './world3/storyEnemyVariants';
 import { getStoryEnemyUnlockScore, getSurvivalBossUnlockScore } from './survivalSpawn';
 import { FLAMETHROWER_UNLOCK_SCORE, MINE_CARRIER_UNLOCK_SCORE } from './enemies';
 import { isWorld2Unlocked, isWorld3Unlocked } from './worldProgress';
@@ -48,6 +62,7 @@ import { isWorld2Unlocked, isWorld3Unlocked } from './worldProgress';
 export type AlmanacCategory =
   | 'asteroid'
   | 'goldAsteroid'
+  | 'pickup'
   | 'storyEnemy'
   | 'enemy'
   | 'boss'
@@ -77,6 +92,8 @@ export interface AlmanacEntry {
   requiresWorld2?: boolean;
   /** When true, only shown on Shared after World 3 unlock. */
   requiresWorld3?: boolean;
+  /** When set, only shown after buying this power-up in the Shop (level ≥ 1). */
+  requiresShopPowerUp?: Extract<UpgradablePowerUpId, 'shield' | 'invisibility' | 'fuelTank'>;
 }
 
 export interface AlmanacPageInfo {
@@ -141,6 +158,104 @@ function buildGoldAsteroidEntries(): AlmanacEntry[] {
       almanacPage: 'shared',
     };
   });
+}
+
+function buildPickupEntries(): AlmanacEntry[] {
+  const powerStarSeconds = getPowerStarDurationMs(1) / 1000;
+  const shieldSeconds = getShieldDurationMs(1) / 1000;
+  const invisibilitySeconds = getInvisibilityDurationMs(1) / 1000;
+  const fuelTankCap = getFuelTankScoreCap(1);
+  const fuelTankSpawnSeconds = FUEL_TANK_SPAWN_INTERVAL_MS / 1000;
+
+  return [
+    {
+      id: 'pickup-heart',
+      category: 'pickup',
+      name: 'Heart',
+      textureKey: 'heart',
+      textureScale: 1,
+      subtitle: 'Story + Survival',
+      description:
+        'Restores HP when collected. Spawns on a timer — every 10s on easy, 15s on medium, and 20s on hard difficulty.',
+      stats: `+${HEART_HEAL} HP`,
+      almanacPage: 'shared',
+    },
+    {
+      id: 'pickup-space-debris',
+      category: 'pickup',
+      name: 'Space Debris',
+      textureKey: 'space-debris',
+      textureScale: 1,
+      subtitle: 'Heart replacement · harder = more common',
+      description:
+        'Can appear instead of a Heart pickup. Chance rises with difficulty: 5% on easy, 10% on medium, 20% on hard. Restores 4 HP when below max health (double a Heart). At full health, grants 2 armor points for the blue Armor Bar (max 20).',
+      stats: '+4 HP or +2 armor · 5% / 10% / 20%',
+      almanacPage: 'shared',
+    },
+    {
+      id: 'pickup-loot-box',
+      category: 'pickup',
+      name: 'Loot Box',
+      textureKey: 'loot-box',
+      textureScale: 1,
+      subtitle: `Every ${LOOT_MILESTONE_STEP} score`,
+      description:
+        'Appears when you reach score milestones. Collect to open a weapon choice panel and add a new weapon to your ship.',
+      stats: 'Choose 1 weapon',
+      almanacPage: 'shared',
+    },
+    {
+      id: 'pickup-power-star',
+      category: 'pickup',
+      name: 'Power Star',
+      textureKey: 'power-star',
+      textureScale: 1,
+      subtitle: 'Story + Survival',
+      description:
+        'Grants full invincibility until the timer runs out. Always available in levels. Upgrade in the Shop to last longer.',
+      stats: `Invincible ${powerStarSeconds}s (Lv 1)`,
+      almanacPage: 'shared',
+    },
+    {
+      id: 'pickup-shield',
+      category: 'pickup',
+      name: 'Shield',
+      textureKey: 'shield-pickup',
+      textureScale: 1,
+      subtitle: 'Story + Survival · Shop unlock',
+      description:
+        'Absorbs one hit or lasts until the timer runs out. Scatters in levels after you buy it in the Shop. Upgrade for longer duration.',
+      stats: `Shield ${shieldSeconds}s (Lv 1) · spawns ~45s`,
+      almanacPage: 'shared',
+      requiresShopPowerUp: 'shield',
+    },
+    {
+      id: 'pickup-invisibility',
+      category: 'pickup',
+      name: 'Invisibility',
+      textureKey: 'invisibility-pickup',
+      textureScale: 1,
+      subtitle: 'Story + Survival · Shop unlock',
+      description:
+        'Full immunity and ghost movement through obstacles and enemies. Scatters in levels after you buy it in the Shop. Upgrade for longer duration.',
+      stats: `Invisible ${invisibilitySeconds}s (Lv 1) · spawns ~55s`,
+      almanacPage: 'shared',
+      requiresShopPowerUp: 'invisibility',
+    },
+    {
+      id: 'pickup-fuel-tank',
+      category: 'pickup',
+      name: 'Fuel Tank',
+      textureKey: 'fuel-tank-pickup',
+      textureScale: 1,
+      subtitle: 'Survival only · Shop unlock',
+      description:
+        'Invincible ram boost that destroys hazards for bonus score. Scatters in Survival after purchase. Collecting another while boosting adds its cap to the meter without resetting progress.',
+      stats: `Boost cap ${fuelTankCap} pts (Lv 1) · spawns ~${fuelTankSpawnSeconds}s`,
+      almanacPage: 'shared',
+      requiresShopPowerUp: 'fuelTank',
+    },
+  ];
 }
 
 const SURVIVAL_ENEMY_DESCRIPTION_SUFFIX = ' Generic survival enemy — unlocks as your score rises.';
@@ -375,10 +490,50 @@ function buildGalileanMoonEntries(): AlmanacEntry[] {
     });
 }
 
+function buildWorld3StoryEnemyEntries(): AlmanacEntry[] {
+  return Object.values(WORLD3_STORY_ENEMIES)
+    .filter((enemy) => !hasWorld3Variants(enemy.level))
+    .sort((a, b) => a.level - b.level)
+    .map((enemy) => {
+      const unlockScore = getStoryEnemyUnlockScore(enemy.level, 'world3');
+      return {
+        id: `story-enemy-world3-${enemy.level}`,
+        category: 'storyEnemy' as const,
+        name: enemy.enemyName,
+        textureKey: enemy.textureKey,
+        textureScale: 1,
+        subtitle: `Story W3 L${enemy.level} · Survival ${unlockScore}+ score`,
+        description: `${STORY_BEHAVIOR_DESCRIPTIONS[enemy.behavior]} Story levels use this enemy exclusively.${STORY_SURVIVAL_SUFFIX}`,
+        stats: `HP ${enemy.health} · DMG ${enemy.bodyDamage} · ${enemy.points} pts`,
+        almanacPage: 'world3' as const,
+      };
+    });
+}
+
+function buildWorld3VariantEntries(): AlmanacEntry[] {
+  return Object.values(WORLD3_STORY_ENEMY_VARIANTS)
+    .sort((a, b) => a.level - b.level)
+    .map((enemy) => {
+      const unlockScore = getStoryEnemyUnlockScore(enemy.level, 'world3');
+      return {
+        id: `story-enemy-world3-variant-${enemy.level}`,
+        category: 'storyEnemy' as const,
+        name: enemy.enemyName,
+        textureKey: enemy.textureKey,
+        textureScale: 1,
+        subtitle: `${enemy.groupName} · Story W3 L${enemy.parentLevel} · Survival ${unlockScore}+ score`,
+        description: `${STORY_BEHAVIOR_DESCRIPTIONS[enemy.behavior]} Variant of ${enemy.groupName}. Spawns in Story L${enemy.parentLevel} and World 3 Survival.${STORY_SURVIVAL_SUFFIX}`,
+        stats: `HP ${enemy.health} · DMG ${enemy.bodyDamage} · ${enemy.points} pts`,
+        almanacPage: 'world3' as const,
+      };
+    });
+}
+
 export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   ...buildAsteroidEntries(),
-  buildCometEntry(),
   ...buildGoldAsteroidEntries(),
+  ...buildPickupEntries(),
+  buildCometEntry(),
   buildGoldCometEntry(),
   ...ENEMY_ENTRIES,
   ...buildMineEntries(),
@@ -387,7 +542,8 @@ export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   ...buildStoryEnemyEntries(WORLD2_STORY_ENEMIES, 'world2', 'Story W2'),
   ...buildGalileanMoonEntries(),
   ...buildBossEntries(WORLD2_BOSSES, 'world2', 'Story W2'),
-  ...buildStoryEnemyEntries(WORLD3_STORY_ENEMIES, 'world3', 'Story W3'),
+  ...buildWorld3StoryEnemyEntries(),
+  ...buildWorld3VariantEntries(),
   ...buildBossEntries(WORLD3_BOSSES, 'world3', 'Story W3'),
 ];
 
@@ -395,6 +551,7 @@ const PAGE_SECTIONS: Record<AlmanacPage, { label: string; category: AlmanacCateg
   shared: [
     { label: 'ROCKS', category: 'asteroid' },
     { label: 'GOLD ROCKS', category: 'goldAsteroid' },
+    { label: 'PICKUPS', category: 'pickup' },
     { label: 'SURVIVAL ENEMIES', category: 'enemy' },
     { label: 'MINES', category: 'mine' },
   ],
@@ -460,6 +617,7 @@ export function getVisibleEntriesForPage(page: AlmanacPage): AlmanacEntry[] {
     if (entry.almanacPage !== page) return false;
     if (entry.requiresWorld2 && !world2Unlocked && !world3Unlocked) return false;
     if (entry.requiresWorld3 && !world3Unlocked) return false;
+    if (entry.requiresShopPowerUp && !isPowerUpOwned(entry.requiresShopPowerUp)) return false;
     return true;
   });
 }

@@ -1,7 +1,7 @@
 import { assetUrl } from './assetUrl';
 import { getMusicVolume, getSoundVolume } from './settings';
 
-export type SfxType = 'shoot' | 'explosion' | 'hit' | 'ui';
+export type SfxType = 'shoot' | 'enemyLaser' | 'explosion' | 'hit' | 'ui';
 export type UiClickChannel = 'sound' | 'music';
 
 let ctx: AudioContext | null = null;
@@ -30,6 +30,8 @@ let buttonClickBuffer: AudioBuffer | null = null;
 let buttonClickLoadPromise: Promise<AudioBuffer | null> | null = null;
 let laserBuffer: AudioBuffer | null = null;
 let laserLoadPromise: Promise<AudioBuffer | null> | null = null;
+let enemyLaserBuffer: AudioBuffer | null = null;
+let enemyLaserLoadPromise: Promise<AudioBuffer | null> | null = null;
 let rocketEngineBuffer: AudioBuffer | null = null;
 let rocketEngineLoadPromise: Promise<AudioBuffer | null> | null = null;
 let rocketEngineSource: AudioBufferSourceNode | null = null;
@@ -66,6 +68,7 @@ const ROCK_BREAK_URLS = [
 ];
 const BUTTON_CLICK_URL = assetUrl('assets/button-click.mp3');
 const LASER_URL = assetUrl('assets/laser.mp3');
+const ENEMY_LASER_URL = assetUrl('assets/laser-enemy.mp3');
 const ROCKET_ENGINE_URL = assetUrl('assets/rocket-engine.mp3');
 const INVINCIBILITY_THEME_URL = assetUrl('assets/invincibility-theme.mp3');
 const MAIN_THEME_URL = assetUrl('assets/main-theme.mp3');
@@ -74,6 +77,7 @@ const INVINCIBILITY_THEME_VOLUME = 0.35;
 const MAIN_THEME_VOLUME = 0.20;
 const BUTTON_CLICK_VOLUME = 0.85;
 const LASER_VOLUME = 0.45;
+const ENEMY_LASER_VOLUME = 0.5;
 const HIT_VOLUME = 0.85;
 const ROCK_VOLUME = 0.8;
 const ROCK_BREAK_VOLUME = 0.9;
@@ -150,6 +154,7 @@ export async function initAudio(): Promise<void> {
   preloadRockBreakSfx();
   preloadButtonClickSfx();
   preloadLaserSfx();
+  preloadEnemyLaserSfx();
   preloadRocketEngineSfx();
   preloadInvincibilityTheme();
   preloadMainTheme();
@@ -459,6 +464,50 @@ function loadLaserBuffer(): Promise<AudioBuffer | null> {
 
 export function preloadLaserSfx(): void {
   void loadLaserBuffer();
+}
+
+function loadEnemyLaserBuffer(): Promise<AudioBuffer | null> {
+  if (enemyLaserBuffer) {
+    return Promise.resolve(enemyLaserBuffer);
+  }
+
+  if (!enemyLaserLoadPromise) {
+    enemyLaserLoadPromise = (async () => {
+      const audioCtx = await getRunningAudioContext();
+      if (!audioCtx) return null;
+
+      try {
+        const response = await fetch(ENEMY_LASER_URL);
+        if (!response.ok) return null;
+
+        const arrayBuffer = await response.arrayBuffer();
+        enemyLaserBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        return enemyLaserBuffer;
+      } catch {
+        return null;
+      }
+    })();
+  }
+
+  return enemyLaserLoadPromise;
+}
+
+export function preloadEnemyLaserSfx(): void {
+  void loadEnemyLaserBuffer();
+}
+
+function playEnemyLaserOscillatorFallback(audioCtx: AudioContext, output: GainNode, now: number): void {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(520, now);
+  osc.frequency.exponentialRampToValueAtTime(280, now + 0.08);
+  gain.gain.setValueAtTime(0.06, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+  osc.connect(gain);
+  gain.connect(output);
+  osc.start(now);
+  osc.stop(now + 0.09);
 }
 
 function loadRocketEngineBuffer(): Promise<AudioBuffer | null> {
@@ -825,6 +874,16 @@ export function playSfx(type: SfxType): void {
       if (!ctx || !sfxGain) return;
       playBufferedSample(buffer, LASER_VOLUME, sfxGain, () => {
         playShootOscillatorFallback(audioCtx, output, now);
+      });
+    });
+    return;
+  }
+
+  if (type === 'enemyLaser') {
+    void loadEnemyLaserBuffer().then((buffer) => {
+      if (!ctx || !sfxGain) return;
+      playBufferedSample(buffer, ENEMY_LASER_VOLUME, sfxGain, () => {
+        playEnemyLaserOscillatorFallback(audioCtx, output, now);
       });
     });
     return;

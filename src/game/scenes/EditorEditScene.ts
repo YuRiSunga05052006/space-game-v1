@@ -11,7 +11,8 @@ import {
 } from '../editor/customLevels';
 import {
   getVisibleBossOptions,
-  getVisibleStoryEnemyOptions,
+  getVisibleStoryEnemyGroupsForWorld,
+  getVisibleStoryEnemyOptionsForWorld,
   getVisibleSurvivalEnemyIds,
   isEditorObstacleVisible,
 } from '../editor/editorCatalog';
@@ -509,10 +510,36 @@ export class EditorEditScene extends Phaser.Scene {
       return { rule: area.enemies.bosses[listIndex], listIndex };
     };
 
+    const addSingleEnemyRule = (
+      list: EnemySpawnRule[],
+      label: string,
+      listIndex: number,
+      indent = 0,
+    ) => {
+      const rule = list[listIndex];
+      const block = createSpawnRuleBlock(this, label, rule, (next) => {
+        list[listIndex] = { ...list[listIndex], ...next };
+        this.markDirty();
+      });
+      block.setX(indent);
+      block.setY(y);
+      panel.add(block);
+      y += ((block as Phaser.GameObjects.Container & { blockHeight?: number }).blockHeight ?? 160) + 8;
+
+      const maxRow = createStepperRow(this, 'Max on screen', rule.maxOnScreen, 1, 1, 12, (v) => {
+        list[listIndex].maxOnScreen = v;
+        this.markDirty();
+      });
+      maxRow.setX(indent);
+      maxRow.setY(y);
+      panel.add(maxRow);
+      y += 40;
+    };
+
     const addEnemyRules = (
       title: string,
       list: EnemySpawnRule[],
-      rules: Array<{ rule: EnemySpawnRule; label: string; listIndex: number }>,
+      rules: Array<{ rule: EnemySpawnRule; label: string; listIndex: number; indent?: number }>,
     ) => {
       if (rules.length === 0) return;
       panel.add(this.add.text(-150, y, title, {
@@ -523,22 +550,50 @@ export class EditorEditScene extends Phaser.Scene {
       }).setOrigin(0, 0.5));
       y += 28;
 
-      for (const { rule, label, listIndex } of rules) {
-        const block = createSpawnRuleBlock(this, label, rule, (next) => {
-          list[listIndex] = { ...list[listIndex], ...next };
-          this.markDirty();
-        });
-        block.setY(y);
-        panel.add(block);
-        y += ((block as Phaser.GameObjects.Container & { blockHeight?: number }).blockHeight ?? 160) + 8;
+      for (const { label, listIndex, indent = 0 } of rules) {
+        addSingleEnemyRule(list, label, listIndex, indent);
+      }
+      y += 12;
+    };
 
-        const maxRow = createStepperRow(this, 'Max on screen', rule.maxOnScreen, 1, 1, 12, (v) => {
-          list[listIndex].maxOnScreen = v;
-          this.markDirty();
-        });
-        maxRow.setY(y);
-        panel.add(maxRow);
-        y += 40;
+    const renderWorld3StoryEnemies = () => {
+      const flatOpts = getVisibleStoryEnemyOptionsForWorld('world3');
+      const groups = getVisibleStoryEnemyGroupsForWorld('world3');
+      const flatByLevel = new Map(flatOpts.map((o) => [o.level, o]));
+      const groupByParent = new Map(groups.map((g) => [g.parentLevel, g]));
+
+      panel.add(this.add.text(-150, y, 'Story enemies', {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '15px',
+        fontStyle: '700',
+        color: '#ffcc00',
+      }).setOrigin(0, 0.5));
+      y += 28;
+
+      for (let level = 21; level <= 38; level++) {
+        const group = groupByParent.get(level);
+        if (group) {
+          panel.add(this.add.text(-150, y, group.groupName, {
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '13px',
+            fontStyle: '700',
+            color: '#88bbdd',
+          }).setOrigin(0, 0.5));
+          y += 24;
+
+          for (const variant of group.variants) {
+            const { listIndex } = ensureStoryRule(variant.id);
+            addSingleEnemyRule(area.enemies.story, variant.name, listIndex, 16);
+          }
+          y += 8;
+          continue;
+        }
+
+        const flat = flatByLevel.get(level);
+        if (flat) {
+          const { listIndex } = ensureStoryRule(flat.id);
+          addSingleEnemyRule(area.enemies.story, flat.name, listIndex);
+        }
       }
       y += 12;
     };
@@ -554,15 +609,19 @@ export class EditorEditScene extends Phaser.Scene {
       );
     } else {
       const worldId = this.enemyTab;
-      const storyOpts = getVisibleStoryEnemyOptions().filter((o) => o.worldId === worldId);
-      addEnemyRules(
-        'Story enemies',
-        area.enemies.story,
-        storyOpts.map((opt) => {
-          const { rule, listIndex } = ensureStoryRule(opt.id);
-          return { rule, label: opt.name, listIndex };
-        }),
-      );
+      if (worldId === 'world3') {
+        renderWorld3StoryEnemies();
+      } else {
+        const storyOpts = getVisibleStoryEnemyOptionsForWorld(worldId);
+        addEnemyRules(
+          'Story enemies',
+          area.enemies.story,
+          storyOpts.map((opt) => {
+            const { rule, listIndex } = ensureStoryRule(opt.id);
+            return { rule, label: opt.name, listIndex };
+          }),
+        );
+      }
 
       const bossOpts = getVisibleBossOptions().filter((o) => o.worldId === worldId);
       addEnemyRules(
