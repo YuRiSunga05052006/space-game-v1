@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
+import { saveGuestProgressSnapshot } from './guestProgress';
 import { pullAndMergeProgress, flushProgressToCloud } from './progressSync';
 import { DEFAULT_PLAYER_NAME } from './playerName';
 
@@ -35,6 +36,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
   if (!supabase) return getAuthUnavailableReason();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return error.message;
+  saveGuestProgressSnapshot();
   await pullAndMergeProgress();
   return null;
 }
@@ -54,6 +56,7 @@ export async function signUpWithEmail(email: string, password: string): Promise<
   if (!data.session) {
     return 'Account created. Check your email to confirm, then sign in.';
   }
+  saveGuestProgressSnapshot();
   await pullAndMergeProgress();
   return null;
 }

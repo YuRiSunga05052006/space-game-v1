@@ -2,6 +2,7 @@ import type { User } from '@supabase/supabase-js';
 import { getSupabase } from './supabaseClient';
 
 export const DEFAULT_PLAYER_NAME = 'Player';
+export const GUEST_ACCOUNT_LABEL = 'Guest';
 export const MAX_PLAYER_NAME_LENGTH = 20;
 
 export function sanitizePlayerName(raw: string): string {

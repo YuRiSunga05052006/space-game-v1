@@ -159,7 +159,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private createAccountChip(): void {
-    const chip = this.add.text(GAME_WIDTH - 16, 18, 'LOG IN', {
+    const chip = this.add.text(GAME_WIDTH - 16, 18, 'GUEST', {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '12px',
       fontStyle: '700',

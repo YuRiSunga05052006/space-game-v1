@@ -12,6 +12,7 @@ import {
 } from '../cloud/auth';
 import {
   DEFAULT_PLAYER_NAME,
+  GUEST_ACCOUNT_LABEL,
   getPlayerName,
   MAX_PLAYER_NAME_LENGTH,
   setPlayerName,
@@ -74,12 +75,12 @@ function createInput(scene: Phaser.Scene, type: string, placeholder: string): HT
 }
 
 function formatUserLabel(user: User | null): string {
-  if (!user) return 'Not signed in';
+  if (!user) return GUEST_ACCOUNT_LABEL;
   return getPlayerName(user);
 }
 
 export function getAccountChipLabel(user: User | null): string {
-  if (!user) return 'LOG IN';
+  if (!user) return GUEST_ACCOUNT_LABEL.toUpperCase();
   const name = getPlayerName(user);
   return name.length > 18 ? `${name.slice(0, 16)}…` : name;
 }
@@ -123,7 +124,7 @@ export function createAccountPanel(
   const hint = scene.add.text(
     GAME_WIDTH / 2,
     160,
-    'Sign in with email to save coins, unlocks, and shop items to the cloud.',
+    'Playing as guest. Sign in to save progress to your account — guest progress stays separate on this device.',
     {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '12px',
@@ -233,7 +234,7 @@ export function createAccountPanel(
     setAccountButtonVisible(renameBtn, false);
     setAccountButtonVisible(signOutBtn, false);
     setAccountButtonVisible(unlockAllBtn, false);
-    hint.setText('Sign in with email to save coins, unlocks, and shop items to the cloud.');
+    hint.setText('Playing as guest. Sign in to save progress to your account — guest progress stays separate on this device.');
   };
 
   const showSignedIn = (user: User) => {
@@ -309,7 +310,7 @@ export function createAccountPanel(
           return;
         }
         passwordInput.value = '';
-        setMessage('Signed out. Progress stays on this device.', '#8899bb');
+        setMessage('Signed out. Guest progress restored.', '#8899bb');
         renderUser(null);
         options.onAuthChange?.(null);
         return;

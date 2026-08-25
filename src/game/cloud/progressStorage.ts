@@ -4,12 +4,16 @@ const LOCAL_ONLY_KEYS = new Set([
   'star-blaster-sound-volume',
   'star-blaster-music-volume',
 ]);
+/** Saved guest profile blob — not part of active or cloud-synced progress. */
+const META_KEYS = new Set([
+  'star-blaster-guest-progress',
+]);
 
 let applyingRemote = false;
 let onChange: (() => void) | null = null;
 
 export function isProgressKey(key: string): boolean {
-  return key.startsWith(PREFIX) && !LOCAL_ONLY_KEYS.has(key);
+  return key.startsWith(PREFIX) && !LOCAL_ONLY_KEYS.has(key) && !META_KEYS.has(key);
 }
 
 export function setProgressChangeHandler(handler: (() => void) | null): void {
@@ -55,6 +59,25 @@ export function applyProgressData(data: Record<string, string>): void {
     for (const [key, value] of Object.entries(data)) {
       if (!isProgressKey(key) || typeof value !== 'string') continue;
       localStorage.setItem(key, value);
+    }
+  } catch {
+    // ignore storage errors
+  } finally {
+    applyingRemote = false;
+  }
+}
+
+/** Remove all active gameplay progress keys (not guest snapshot or device settings). */
+export function clearActiveProgressData(): void {
+  applyingRemote = true;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && isProgressKey(key)) keysToRemove.push(key);
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
     }
   } catch {
     // ignore storage errors

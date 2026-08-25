@@ -1,4 +1,5 @@
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
+import { activateGuestProfile } from './guestProgress';
 import {
   applyProgressData,
   collectProgressData,
@@ -264,9 +265,18 @@ export async function initCloudProgress(): Promise<void> {
     console.warn('Cloud progress sync failed:', message);
   }
 
-  supabase.auth.onAuthStateChange((event) => {
+  let hadSession = false;
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION') {
+      hadSession = !!session;
+      return;
+    }
     if (event === 'SIGNED_IN') {
+      hadSession = true;
       void pullAndMergeProgress();
+    } else if (event === 'SIGNED_OUT' && hadSession) {
+      hadSession = false;
+      activateGuestProfile();
     }
   });
 }
