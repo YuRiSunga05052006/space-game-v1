@@ -4,6 +4,8 @@ import type { Asteroid } from './entities/Asteroid';
 import type { Comet } from './entities/Comet';
 import type { Mine } from './entities/Mine';
 import type { MineCarrier } from './entities/MineCarrier';
+import type { Planet } from './entities/Planet';
+import type { Moon } from './entities/Moon';
 
 const ABSORB_RADIUS = 40;
 const PULL_ACCEL = 480;
@@ -23,6 +25,8 @@ export interface BoostVacuumAbsorbPayload {
 export interface BoostVacuumGroups {
   asteroids: Phaser.Physics.Arcade.Group;
   comets: Phaser.Physics.Arcade.Group;
+  planets: Phaser.Physics.Arcade.Group;
+  moons: Phaser.Physics.Arcade.Group;
   mines: Phaser.Physics.Arcade.Group;
   mineCarriers: Phaser.Physics.Arcade.Group;
   spiderShips: Phaser.Physics.Arcade.Group;
@@ -120,10 +124,40 @@ export function updateBoostVacuum(
     }
   });
 
+  forEachActive(groups.planets, (sprite) => {
+    if (pullToward(sprite, px, py, delta)) {
+      const planet = sprite as Planet;
+      onAbsorb({
+        points: planet.points,
+        x: planet.x,
+        y: planet.y,
+        explosionCount: 14,
+        coinReward: planet.isGold ? planet.coinReward : undefined,
+        rockBreak: true,
+      });
+      planet.destroy();
+    }
+  });
+
+  forEachActive(groups.moons, (sprite) => {
+    if (pullToward(sprite, px, py, delta)) {
+      const moon = sprite as Moon;
+      onAbsorb({
+        points: moon.points,
+        x: moon.x,
+        y: moon.y,
+        explosionCount: 8,
+        coinReward: moon.isGold ? moon.coinReward : undefined,
+        rockBreak: true,
+      });
+      moon.destroy();
+    }
+  });
+
   forEachActive(groups.mines, (sprite) => {
     const mine = sprite as Mine;
-    // Blue mines are kick-only — boost vacuum must not pull or destroy them.
-    if (mine.isBlue) return;
+    // Kick-mines are kick-only — boost vacuum must not pull or destroy them.
+    if (mine.isKickMine) return;
     if (pullToward(sprite, px, py, delta)) {
       onAbsorb({
         points: mine.points,

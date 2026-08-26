@@ -113,7 +113,7 @@ export const PLAYER_SKINS: PlayerSkinDefinition[] = [
     appearanceId: 'electricRainbow',
     price: 500,
     special: true,
-    description: 'Rainbow neon hull and prismatic exhaust. Special: +75% gold asteroid/comet spawns in Survival.',
+    description: 'Rainbow neon hull and prismatic exhaust. Special: +75% gold asteroid, comet, planet, and moon spawns in Survival.',
   },
 ];
 

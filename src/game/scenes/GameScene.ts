@@ -29,8 +29,22 @@ import { WarpPanel } from '../entities/WarpPanel';
 import { Comet } from '../entities/Comet';
 import { Mine, type MineVariant } from '../entities/Mine';
 import { MineCarrier } from '../entities/MineCarrier';
+import { Planet } from '../entities/Planet';
+import { Moon } from '../entities/Moon';
+import { BlackHole } from '../entities/BlackHole';
+import { GravityField, type GravityFieldSize } from '../entities/GravityField';
+import {
+  approximateMineRadius,
+  approximatePlayerRadius,
+  resolveCirclePenetration,
+  shouldBlueMineSolidCollidePlanet,
+  shouldPlayerSolidCollideCelestial,
+} from '../celestialCollision';
+import { PLANET_BODY_RADIUS } from '../entities/Planet';
+import { MOON_BODY_RADIUS } from '../entities/Moon';
+import { detonateMineBlast, blastDamageForRadius, type MineBlastSource } from '../mineBlast';
+import { applyGravitySources, type GravitySource } from '../gravityField';
 import { getBossConfigForLevel, getBossSpawnMsForLevel } from '../levelConfig';
-import { detonateMineBlast, type MineBlastSource } from '../mineBlast';
 import { computeBossHealth, computeSurvivalBossHealth } from '../bossHealth';
 import {
   getBossDefinition,
@@ -109,6 +123,8 @@ import { hasSurvivalGoldSpawnBonus } from '../playerSkins';
 import {
   getGoldAsteroidSpawnChance,
   getGoldCometSpawnChance,
+  getGoldPlanetSpawnChance,
+  getGoldMoonSpawnChance,
   getCometSpawnChance,
   getCometSpawnIntervalMs,
   MAX_GOLD_ASTEROIDS_ON_SCREEN,
@@ -117,6 +133,13 @@ import {
   MINE_SPAWN_CHANCE,
   MAX_MINES_ON_SCREEN,
   MAX_MINES_PER_VARIANT_EDITOR,
+  MAX_PLANETS_ON_SCREEN,
+  MAX_MOONS_ON_SCREEN,
+  MAX_BLACK_HOLES_ON_SCREEN,
+  PLANET_SPAWN_INTERVAL_MS,
+  MOON_SPAWN_INTERVAL_MS,
+  PLANET_SPAWN_CHANCE,
+  MOON_SPAWN_CHANCE,
 } from '../coinDrops';
 import { unlockLevel, isLevelUnlocked, getMaxLevelSlots } from '../storyProgress';
 import {
@@ -159,7 +182,9 @@ import {
   pauseMusic,
   ensureMusic,
   playExplosionSfx,
+  playBossAppearAlarmSfx,
   playHitSfx,
+  playLowHpAlarmSfx,
   playRockBreakSfx,
   playRockSfx,
   playSfx,
@@ -220,6 +245,8 @@ const HEALTH_BAR_Y = 58;
 const ARMOR_BAR_Y = 76;
 /** Vertical space the armor row adds below the health bar (shift boss/boost down while armor is shown). */
 const ARMOR_BAR_STACK_OFFSET = ARMOR_BAR_Y - HEALTH_BAR_Y;
+/** Play the low-HP alarm once when damage brings HP to this value or below. */
+const LOW_HP_ALARM_THRESHOLD = 4;
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -320,12 +347,18 @@ export class GameScene extends Phaser.Scene {
   private comets!: Phaser.Physics.Arcade.Group;
   private mines!: Phaser.Physics.Arcade.Group;
   private mineCarriers!: Phaser.Physics.Arcade.Group;
+  private planets!: Phaser.Physics.Arcade.Group;
+  private moons!: Phaser.Physics.Arcade.Group;
+  private blackHoles!: Phaser.Physics.Arcade.Group;
+  private gravityFields!: Phaser.GameObjects.Group;
   private wormholeSpawned = false;
   private pendingSecretId?: string;
   private warpPanelSpawned = false;
   private darknessOverlay?: DarknessOverlay;
   private cometSpawnTimer = 0;
   private mineSpawnTimer = 0;
+  private planetSpawnTimer = 0;
+  private moonSpawnTimer = 0;
   private shieldSpawnTimer = 0;
   private invisibilitySpawnTimer = 0;
   private fuelTankSpawnTimer = 0;
@@ -361,6 +394,9 @@ export class GameScene extends Phaser.Scene {
   private editorMineTimers: Record<string, number> = {};
   /** Cap-blocked editor mine spawns waiting for a free slot (chance already rolled). */
   private editorMinePending: Record<string, boolean> = {};
+  private editorBlackHoleTimer = 0;
+  private editorSmallGravityTimer = 0;
+  private editorLargeGravityTimer = 0;
   private editorBossTimer = 0;
 
   constructor() {
@@ -460,6 +496,8 @@ export class GameScene extends Phaser.Scene {
     this.warpPanelSpawned = false;
     this.cometSpawnTimer = 0;
     this.mineSpawnTimer = 0;
+    this.planetSpawnTimer = 0;
+    this.moonSpawnTimer = 0;
     this.shieldSpawnTimer = 0;
     this.invisibilitySpawnTimer = 0;
     this.fuelTankSpawnTimer = 0;
@@ -481,6 +519,9 @@ export class GameScene extends Phaser.Scene {
     this.editorStoryTimers = {};
     this.editorMineTimers = {};
     this.editorMinePending = {};
+    this.editorBlackHoleTimer = 0;
+    this.editorSmallGravityTimer = 0;
+    this.editorLargeGravityTimer = 0;
     this.editorBossTimer = 0;
 
     if (this.gameMode === 'editor' && !this.editorArea) {
@@ -568,9 +609,15 @@ export class GameScene extends Phaser.Scene {
       this.carryScoreOnStart = 0;
     }
 
-    this.spawnAsteroid('lg');
-    for (let i = 0; i < 4; i++) {
-      this.time.delayedCall(100 + i * 400, () => this.spawnAsteroid());
+    const shouldBootstrapAsteroids =
+      this.gameMode !== 'editor'
+      || this.editorArea?.obstacles.asteroids.enabled === true;
+
+    if (shouldBootstrapAsteroids) {
+      this.spawnAsteroid('lg');
+      for (let i = 0; i < 4; i++) {
+        this.time.delayedCall(100 + i * 400, () => this.spawnAsteroid());
+      }
     }
   }
 
@@ -638,6 +685,10 @@ export class GameScene extends Phaser.Scene {
     this.comets = this.physics.add.group();
     this.mines = this.physics.add.group();
     this.mineCarriers = this.physics.add.group();
+    this.planets = this.physics.add.group();
+    this.moons = this.physics.add.group();
+    this.blackHoles = this.physics.add.group();
+    this.gravityFields = this.add.group();
   }
 
   private createPlayer(): void {
@@ -1133,10 +1184,7 @@ export class GameScene extends Phaser.Scene {
       this,
     );
 
-    // Armed blue mines detonate on contact with enemies, obstacles, or other mines.
-    // Gray / red / purple never detonate from touching a Mine Carrier — only from
-    // player hit or a nearby blast (which can still chain carriers via canChainCarriers).
-    const blueMineDetonationGroups = [
+    const kickMineDetonationGroups = [
       this.spiderShips,
       this.seekerDrones,
       this.kamikazeWasps,
@@ -1147,16 +1195,73 @@ export class GameScene extends Phaser.Scene {
       this.bossShips,
       this.asteroids,
       this.comets,
+      this.moons,
     ];
-    for (const group of blueMineDetonationGroups) {
+    for (const group of kickMineDetonationGroups) {
       this.physics.add.overlap(
         this.mines,
         group,
-        this.onArmedBlueMineHitHazard as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+        this.onArmedKickMineHitHazard as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
         undefined,
         this,
       );
     }
+
+    this.physics.add.overlap(
+      this.mines,
+      this.planets,
+      this.onArmedKickMineHitPlanet as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.planets,
+      this.onPlayerHitPlanet as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.moons,
+      this.onPlayerHitMoon as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.collider(
+      this.player,
+      this.planets,
+      undefined,
+      () => shouldPlayerSolidCollideCelestial(this.player),
+      this,
+    );
+
+    this.physics.add.collider(
+      this.player,
+      this.moons,
+      undefined,
+      () => shouldPlayerSolidCollideCelestial(this.player),
+      this,
+    );
+
+    this.physics.add.collider(
+      this.mines,
+      this.planets,
+      undefined,
+      (_mineObj) => shouldBlueMineSolidCollidePlanet(_mineObj as Mine),
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.blackHoles,
+      this.onPlayerHitBlackHole as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
 
     this.physics.add.overlap(
       this.mines,
@@ -2234,7 +2339,7 @@ export class GameScene extends Phaser.Scene {
     const mine = mineObj as Mine;
     if (!mine.active) return;
 
-    if (mine.isBlue) {
+    if (mine.isKickMine) {
       // Always kick — including while invincible. Boost vacuum can still absorb separately.
       if (mine.applyPlayerPush(this.player.x, this.player.y)) {
         playHitSfx();
@@ -2257,7 +2362,7 @@ export class GameScene extends Phaser.Scene {
     this.triggerMineDetonation(mine, { contactFullDamage: true });
   }
 
-  private onArmedBlueMineHitHazard(
+  private onArmedKickMineHitHazard(
     mineObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
     _hazardObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
@@ -2265,6 +2370,127 @@ export class GameScene extends Phaser.Scene {
     const mine = mineObj as Mine;
     if (!mine.active || !mine.canDetonateFromContact) return;
     this.triggerMineDetonation(mine);
+  }
+
+  private onArmedKickMineHitPlanet(
+    mineObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    planetObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused) return;
+    const mine = mineObj as Mine;
+    const planet = planetObj as Planet;
+    if (!mine.active || !planet.active || !mine.canDetonateFromContact) return;
+
+    if (mine.isBlue) return;
+
+    const damage = blastDamageForRadius(mine.blastRadius);
+    const { x, y, points, coinReward } = planet;
+    if (planet.takeDamage(damage)) {
+      this.finalizeCelestialRewards(x, y, points, coinReward, 14);
+    }
+    this.triggerMineDetonation(mine);
+  }
+
+  private resolveCelestialPenetration(): void {
+    const playerRadius = approximatePlayerRadius(this.player);
+
+    if (shouldPlayerSolidCollideCelestial(this.player)) {
+      this.planets.children.each((child) => {
+        const planet = child as Planet;
+        if (!planet.active) return true;
+        resolveCirclePenetration(
+          this.player,
+          planet.x,
+          planet.y,
+          PLANET_BODY_RADIUS,
+          playerRadius,
+        );
+        return true;
+      });
+
+      this.moons.children.each((child) => {
+        const moon = child as Moon;
+        if (!moon.active) return true;
+        resolveCirclePenetration(
+          this.player,
+          moon.x,
+          moon.y,
+          MOON_BODY_RADIUS,
+          playerRadius,
+        );
+        return true;
+      });
+    }
+
+    this.mines.children.each((child) => {
+      const mine = child as Mine;
+      if (!mine.active || !shouldBlueMineSolidCollidePlanet(mine)) return true;
+      this.planets.children.each((planetChild) => {
+        const planet = planetChild as Planet;
+        if (!planet.active) return true;
+        resolveCirclePenetration(
+          mine,
+          planet.x,
+          planet.y,
+          PLANET_BODY_RADIUS,
+          approximateMineRadius(mine),
+        );
+        return true;
+      });
+      return true;
+    });
+  }
+
+  private onPlayerHitPlanet(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    planetObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.player.isGhostMode()) return;
+
+    const planet = planetObj as Planet;
+    if (!planet.active) return;
+
+    if (this.player.isInvincible() || this.player.isBoosting()) {
+      const { x, y, points, coinReward } = planet;
+      planet.destroy();
+      if (this.player.isBoosting()) this.addBoostScore(points);
+      else this.addScore(points);
+      if (coinReward > 0) this.awardCoins(coinReward, x, y);
+      playRockBreakSfx();
+      this.spawnExplosion(x, y, 14);
+    }
+  }
+
+  private onPlayerHitMoon(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    moonObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.player.isGhostMode()) return;
+
+    const moon = moonObj as Moon;
+    if (!moon.active) return;
+
+    if (this.player.isInvincible() || this.player.isBoosting()) {
+      const { x, y, points, coinReward } = moon;
+      moon.destroy();
+      if (this.player.isBoosting()) this.addBoostScore(points);
+      else this.addScore(points);
+      if (coinReward > 0) this.awardCoins(coinReward, x, y);
+      playRockBreakSfx();
+      this.spawnExplosion(x, y, 8);
+    }
+  }
+
+  private onPlayerHitBlackHole(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    _blackHoleObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused || this.isPlayerDying) return;
+    if (this.player.isGhostMode()) return;
+    if (this.player.isInvincible() || this.player.isBoosting()) return;
+    this.triggerPlayerDeath();
   }
 
   private onMineHitMine(
@@ -2276,8 +2502,8 @@ export class GameScene extends Phaser.Scene {
     const b = bObj as Mine;
     if (!a.active || !b.active || a === b) return;
 
-    // Blue ↔ blue: never explode. Unarmed pairs ignore each other; otherwise knock/arm.
-    if (a.isBlue && b.isBlue) {
+    // Kick-mine ↔ kick-mine: never explode. Unarmed pairs ignore each other; otherwise knock/arm.
+    if (a.isKickMine && b.isKickMine) {
       if (a.isDormantBlue && b.isDormantBlue) return;
 
       let knocked = false;
@@ -2287,7 +2513,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Armed blue detonates on non-blue mines; dormant blues stay inert.
+    // Armed kick-mine detonates on non-kick mines; dormant kick-mines stay inert.
     if (a.canDetonateFromContact) {
       this.triggerMineDetonation(a);
       return;
@@ -2403,6 +2629,8 @@ export class GameScene extends Phaser.Scene {
     return {
       asteroids: this.asteroids,
       comets: this.comets,
+      planets: this.planets,
+      moons: this.moons,
       mines: this.mines,
       mineCarriers: this.mineCarriers,
       spiderShips: this.spiderShips,
@@ -2457,6 +2685,12 @@ export class GameScene extends Phaser.Scene {
         },
         onAsteroidDestroyed: (ax, ay, points, coinReward, explosionCount) => {
           this.finalizeAsteroidRewards(ax, ay, points, coinReward, explosionCount);
+        },
+        onPlanetDestroyed: (px, py, points, coinReward, explosionCount) => {
+          this.finalizeCelestialRewards(px, py, points, coinReward, explosionCount);
+        },
+        onMoonDestroyed: (mx, my, points, coinReward, explosionCount) => {
+          this.finalizeCelestialRewards(mx, my, points, coinReward, explosionCount);
         },
         onEnemyDestroyed: (ex, ey, points, explosionCount) => {
           this.addScore(points);
@@ -2676,6 +2910,7 @@ export class GameScene extends Phaser.Scene {
   ): void {
     if (this.player.absorbHit()) return;
 
+    const hpBefore = this.hp;
     const hadArmor = this.armor > 0;
     let remaining = amount;
 
@@ -2710,6 +2945,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     playHitSfx();
+
+    if (hpBefore > LOW_HP_ALARM_THRESHOLD && this.hp <= LOW_HP_ALARM_THRESHOLD) {
+      playLowHpAlarmSfx();
+    }
 
     if (hadArmor) return;
 
@@ -3175,6 +3414,7 @@ export class GameScene extends Phaser.Scene {
 
     this.createBossInstance(definition, scaledHealth, scaledHealth);
 
+    playBossAppearAlarmSfx();
     this.cameras.main.shake(400, 0.012);
     const warning = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, definition.bossName.toUpperCase(), {
       fontFamily: 'Orbitron, sans-serif',
@@ -3213,6 +3453,7 @@ export class GameScene extends Phaser.Scene {
 
     this.createBossInstance(definition, scaledHealth, scaledHealth, scaledPoints);
 
+    playBossAppearAlarmSfx();
     this.cameras.main.shake(400, 0.012);
     const warning = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, definition.bossName.toUpperCase(), {
       fontFamily: 'Orbitron, sans-serif',
@@ -3416,6 +3657,7 @@ export class GameScene extends Phaser.Scene {
 
   private spawnAsteroid(forcedSize?: AsteroidSize): void {
     if (this.isGameOver || this.isPaused) return;
+    if (this.gameMode === 'editor' && !this.editorArea?.obstacles.asteroids.enabled) return;
     const config = Asteroid.randomConfig(forcedSize);
 
     const goldBonus = this.gameMode === 'survival' && hasSurvivalGoldSpawnBonus();
@@ -3507,6 +3749,21 @@ export class GameScene extends Phaser.Scene {
     this.runCoins = 0;
     this.updateCoinHud();
     return amount;
+  }
+
+  private finalizeCelestialRewards(
+    x: number,
+    y: number,
+    points: number,
+    coinReward: number,
+    explosionCount: number,
+  ): void {
+    this.addScore(points);
+    if (coinReward > 0) {
+      this.awardCoins(coinReward, x, y);
+    }
+    playRockBreakSfx();
+    this.spawnExplosion(x, y, explosionCount);
   }
 
   private finalizeAsteroidRewards(
@@ -3737,6 +3994,8 @@ export class GameScene extends Phaser.Scene {
       {
         asteroids: this.asteroids,
         comets: this.comets,
+        planets: this.planets,
+        moons: this.moons,
         mines: this.mines,
         mineCarriers: this.mineCarriers,
         spiderShips: this.spiderShips,
@@ -3750,6 +4009,12 @@ export class GameScene extends Phaser.Scene {
       {
         onAsteroidDestroyed: (ax, ay, points, coinReward, explosionCount) => {
           this.finalizeAsteroidRewards(ax, ay, points, coinReward, explosionCount);
+        },
+        onPlanetDestroyed: (px, py, points, coinReward, explosionCount) => {
+          this.finalizeCelestialRewards(px, py, points, coinReward, explosionCount);
+        },
+        onMoonDestroyed: (mx, my, points, coinReward, explosionCount) => {
+          this.finalizeCelestialRewards(mx, my, points, coinReward, explosionCount);
         },
         onEnemyDestroyed: (ex, ey, points, explosionCount) => {
           this.addScore(points);
@@ -4315,6 +4580,164 @@ export class GameScene extends Phaser.Scene {
       if (mine.isOffScreen()) mine.destroy();
       return true;
     });
+
+    this.planets.children.each((child) => {
+      const planet = child as Planet;
+      if (planet.isOffScreen()) planet.destroy();
+      return true;
+    });
+
+    this.moons.children.each((child) => {
+      const moon = child as Moon;
+      if (moon.isOffScreen()) moon.destroy();
+      return true;
+    });
+
+    this.blackHoles.children.each((child) => {
+      const hole = child as BlackHole;
+      if (hole.isOffScreen()) hole.destroy();
+      return true;
+    });
+
+    this.gravityFields.children.each((child) => {
+      const field = child as GravityField;
+      if (!field.active || field.isOffScreen()) field.destroy();
+      return true;
+    });
+  }
+
+  private shouldSpawnPlanetsAndMoons(): boolean {
+    if (this.gameMode === 'editor') {
+      const o = this.editorArea?.obstacles;
+      if (!o) return false;
+      return o.planets.enabled || o.moons.enabled;
+    }
+    if (this.secretId === 'galilean' || this.secretId === 'wise0855') return true;
+    if (this.secretId) return false;
+    if (this.gameMode === 'survival') {
+      return this.worldId === 'world2' || this.worldId === 'world3';
+    }
+    return false;
+  }
+
+  private shouldSpawnCelestialContent(): boolean {
+    return this.shouldSpawnPlanetsAndMoons();
+  }
+
+  private shouldSpawnBrownMines(): boolean {
+    if (this.gameMode === 'editor') {
+      return this.editorArea?.obstacles.brownMines.enabled === true;
+    }
+    if (this.secretId === 'galilean' || this.secretId === 'wise0855') return true;
+    if (this.secretId) return false;
+    if (this.gameMode === 'survival') {
+      return this.worldId === 'world2' || this.worldId === 'world3';
+    }
+    return false;
+  }
+
+  private countPlanetsOnScreen(): number {
+    return this.planets.countActive(true);
+  }
+
+  private countMoonsOnScreen(): number {
+    return this.moons.countActive(true);
+  }
+
+  private countBlackHolesOnScreen(): number {
+    return this.blackHoles.countActive(true);
+  }
+
+  private spawnPlanet(): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.gameMode === 'editor' && !this.editorArea?.obstacles.planets.enabled) return;
+    if (this.gameMode !== 'editor' && !this.shouldSpawnCelestialContent()) return;
+    if (this.countPlanetsOnScreen() >= MAX_PLANETS_ON_SCREEN) return;
+
+    const config = Planet.randomConfig();
+    const goldBonus = this.gameMode === 'survival' && hasSurvivalGoldSpawnBonus();
+    if (Math.random() < getGoldPlanetSpawnChance(goldBonus)) {
+      config.variant = 'gold';
+    }
+
+    const planet = new Planet(this, config);
+    this.planets.add(planet);
+    planet.setVelocity(config.velocityX, config.velocityY);
+  }
+
+  private spawnMoon(): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.gameMode === 'editor' && !this.editorArea?.obstacles.moons.enabled) return;
+    if (this.gameMode !== 'editor' && !this.shouldSpawnCelestialContent()) return;
+    if (this.countMoonsOnScreen() >= MAX_MOONS_ON_SCREEN) return;
+
+    const config = Moon.randomConfig();
+    const goldBonus = this.gameMode === 'survival' && hasSurvivalGoldSpawnBonus();
+    if (Math.random() < getGoldMoonSpawnChance(goldBonus)) {
+      config.variant = 'gold';
+    }
+
+    const moon = new Moon(this, config);
+    this.moons.add(moon);
+    moon.setVelocity(config.velocityX, config.velocityY);
+  }
+
+  private spawnBlackHole(): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.gameMode !== 'editor' || !this.editorArea?.obstacles.blackHoles.enabled) return;
+    if (this.countBlackHolesOnScreen() >= MAX_BLACK_HOLES_ON_SCREEN) return;
+
+    const config = BlackHole.randomConfig();
+    const hole = new BlackHole(this, config);
+    this.blackHoles.add(hole);
+  }
+
+  private countGravityFieldsOfSize(size: GravityFieldSize): number {
+    let count = 0;
+    this.gravityFields.children.each((child) => {
+      if ((child as GravityField).active && (child as GravityField).size === size) count += 1;
+      return true;
+    });
+    return count;
+  }
+
+  private spawnGravityField(size: GravityFieldSize): void {
+    if (this.isGameOver || this.isPaused || this.gameMode !== 'editor') return;
+    const rule = size === 'small'
+      ? this.editorArea?.obstacles.smallGravityFields
+      : this.editorArea?.obstacles.largeGravityFields;
+    if (!rule?.enabled) return;
+
+    const maxOnScreen = size === 'small' ? 4 : 3;
+    if (this.countGravityFieldsOfSize(size) >= maxOnScreen) return;
+
+    const field = new GravityField(this, GravityField.randomConfig(size));
+    this.gravityFields.add(field);
+  }
+
+  private collectGravitySources(): GravitySource[] {
+    const sources: GravitySource[] = [];
+    this.planets.children.each((child) => {
+      const planet = child as Planet;
+      if (planet.active) sources.push(planet);
+      return true;
+    });
+    this.moons.children.each((child) => {
+      const moon = child as Moon;
+      if (moon.active) sources.push(moon);
+      return true;
+    });
+    this.blackHoles.children.each((child) => {
+      const hole = child as BlackHole;
+      if (hole.active) sources.push(hole);
+      return true;
+    });
+    this.gravityFields.children.each((child) => {
+      const field = child as GravityField;
+      if (field.active) sources.push(field);
+      return true;
+    });
+    return sources;
   }
 
   private shouldSpawnComets(): boolean {
@@ -4376,6 +4799,7 @@ export class GameScene extends Phaser.Scene {
       const o = this.editorArea?.obstacles;
       if (!o) return false;
       return o.blueMines.enabled
+        || o.brownMines.enabled
         || o.grayMines.enabled
         || (o.redMines.enabled && canUseRedMines())
         || (o.purpleMines.enabled && canUsePurpleMines());
@@ -4404,9 +4828,14 @@ export class GameScene extends Phaser.Scene {
   private pickMineVariant(): MineVariant | null {
     if (!this.shouldSpawnMines()) return null;
 
-    // WISE: blue / gray / red from the start (no purple).
+    // WISE: blue / gray / red / brown from the start (no purple).
     if (this.secretId === 'wise0855') {
-      const variants: MineVariant[] = ['gray', 'blue', 'red'];
+      const variants: MineVariant[] = ['gray', 'blue', 'brown', 'red'];
+      return variants[Phaser.Math.Between(0, variants.length - 1)];
+    }
+
+    if (this.secretId === 'galilean') {
+      const variants: MineVariant[] = ['gray', 'blue', 'brown'];
       return variants[Phaser.Math.Between(0, variants.length - 1)];
     }
 
@@ -4417,8 +4846,14 @@ export class GameScene extends Phaser.Scene {
 
     if (canSpawnAdvanced) {
       const variants: MineVariant[] = ['gray', 'blue'];
+      if (this.shouldSpawnBrownMines()) variants.push('brown');
       if (this.score >= 6000) variants.push('red');
       if (this.score >= 9000) variants.push('purple');
+      return variants[Phaser.Math.Between(0, variants.length - 1)];
+    }
+
+    if (this.gameMode === 'survival' && this.worldId === 'world2' && !this.secretId) {
+      const variants: MineVariant[] = ['gray', 'blue', 'brown'];
       return variants[Phaser.Math.Between(0, variants.length - 1)];
     }
 
@@ -4430,12 +4865,12 @@ export class GameScene extends Phaser.Scene {
     return this.secretId === 'wise0855' ? undefined : this.storyLevel;
   }
 
-  /** Gray / red / purple only — blue mines do not count toward the mine limit. */
+  /** Gray / red / purple only — kick-mines do not count toward the mine limit. */
   private countLimitedMinesOnScreen(): number {
     let count = 0;
     this.mines.children.each((child) => {
       const mine = child as Mine;
-      if (mine.active && mine.variant !== 'blue') count += 1;
+      if (mine.active && !mine.isKickMine) count += 1;
       return true;
     });
     return count;
@@ -4478,8 +4913,8 @@ export class GameScene extends Phaser.Scene {
     if (variant === 'red' && !canUseRedMines()) return false;
     if (variant === 'purple' && !canUsePurpleMines()) return false;
 
-    // Blue mines ignore the on-screen mine limit entirely.
-    if (variant !== 'blue') {
+    // Kick-mines ignore the on-screen mine limit entirely.
+    if (variant !== 'blue' && variant !== 'brown') {
       if (this.gameMode === 'editor') {
         if (this.countMinesOfVariant(variant) >= MAX_MINES_PER_VARIANT_EDITOR) return false;
         if (this.countLimitedMinesOnScreen() >= this.getEditorMineCap()) return false;
@@ -4666,6 +5101,11 @@ export class GameScene extends Phaser.Scene {
     pushActive(this.invisibilityPickups, LIGHT_RADIUS.faint, 0.7);
     pushActive(this.fuelTankPickups, LIGHT_RADIUS.faint, 0.7);
     pushActive(this.asteroids, LIGHT_RADIUS.faint, 0.7, (sprite) => (sprite as Asteroid).isGold);
+    pushActive(this.planets, LIGHT_RADIUS.faint, 0.55, (sprite) => !(sprite as Planet).isGold);
+    pushActive(this.planets, LIGHT_RADIUS.enemySpotlight, 0.8, (sprite) => (sprite as Planet).isGold);
+    pushActive(this.moons, LIGHT_RADIUS.faint, 0.55, (sprite) => !(sprite as Moon).isGold);
+    pushActive(this.moons, LIGHT_RADIUS.enemySpotlight, 0.8, (sprite) => (sprite as Moon).isGold);
+    pushActive(this.blackHoles, LIGHT_RADIUS.mine, 0.7);
 
     this.bullets.children.each((child) => {
       const bullet = child as Phaser.Physics.Arcade.Sprite;
@@ -4722,6 +5162,8 @@ export class GameScene extends Phaser.Scene {
         {
           asteroids: this.asteroids,
           comets: this.comets,
+          planets: this.planets,
+          moons: this.moons,
           mines: this.mines,
           mineCarriers: this.mineCarriers,
           spiderShips: this.spiderShips,
@@ -4744,6 +5186,8 @@ export class GameScene extends Phaser.Scene {
       this.handleKeyboardMovement();
       this.handleTouchMovement();
       this.handleShooting(time);
+      applyGravitySources(this.player, this.collectGravitySources(), delta);
+      this.resolveCelestialPenetration();
     } else {
       stopRocketEngineSfx();
     }
@@ -4755,6 +5199,10 @@ export class GameScene extends Phaser.Scene {
     }
     this.updateDarknessOverlay();
     this.updateEnemies(time, delta);
+    this.gravityFields.children.each((child) => {
+      (child as GravityField).updateField(delta);
+      return true;
+    });
     this.tickFireDamage(time);
     if (this.bossActive) {
       this.updateBoss(time);
@@ -4793,6 +5241,20 @@ export class GameScene extends Phaser.Scene {
     if (this.shouldSpawnMines() && this.mineSpawnTimer >= 4000) {
       this.mineSpawnTimer = 0;
       this.spawnMine();
+    }
+
+    if (this.shouldSpawnCelestialContent()) {
+      this.planetSpawnTimer += delta;
+      if (this.planetSpawnTimer >= PLANET_SPAWN_INTERVAL_MS) {
+        this.planetSpawnTimer = 0;
+        if (Math.random() < PLANET_SPAWN_CHANCE) this.spawnPlanet();
+      }
+
+      this.moonSpawnTimer += delta;
+      if (this.moonSpawnTimer >= MOON_SPAWN_INTERVAL_MS) {
+        this.moonSpawnTimer = 0;
+        if (Math.random() < MOON_SPAWN_CHANCE) this.spawnMoon();
+      }
     }
 
     this.difficultyTimer += delta;
@@ -4951,9 +5413,54 @@ export class GameScene extends Phaser.Scene {
       }
     };
     tickMineRule(area.obstacles.blueMines, 'blue', true);
+    tickMineRule(area.obstacles.brownMines, 'brown', true);
     tickMineRule(area.obstacles.grayMines, 'gray', true);
     tickMineRule(area.obstacles.redMines, 'red', canUseRedMines());
     tickMineRule(area.obstacles.purpleMines, 'purple', canUsePurpleMines());
+
+    const tickCelestialRule = (
+      rule: typeof area.obstacles.planets,
+      spawn: () => void,
+      timerKey: 'planetSpawnTimer' | 'moonSpawnTimer',
+    ) => {
+      if (!rule.enabled) return;
+      this[timerKey] += delta;
+      const interval = getEffectiveIntervalMs(rule, this.score, elapsed);
+      if (this[timerKey] >= interval) {
+        this[timerKey] = 0;
+        if (Math.random() < rule.chance) spawn();
+      }
+    };
+
+    tickCelestialRule(area.obstacles.planets, () => this.spawnPlanet(), 'planetSpawnTimer');
+    tickCelestialRule(area.obstacles.moons, () => this.spawnMoon(), 'moonSpawnTimer');
+
+    const blackHoleRule = area.obstacles.blackHoles;
+    if (blackHoleRule.enabled) {
+      this.editorBlackHoleTimer = (this.editorBlackHoleTimer ?? 0) + delta;
+      const interval = getEffectiveIntervalMs(blackHoleRule, this.score, elapsed);
+      if (this.editorBlackHoleTimer >= interval) {
+        this.editorBlackHoleTimer = 0;
+        if (Math.random() < blackHoleRule.chance) this.spawnBlackHole();
+      }
+    }
+
+    const tickGravityFieldRule = (
+      rule: typeof area.obstacles.smallGravityFields,
+      size: GravityFieldSize,
+      timerKey: 'editorSmallGravityTimer' | 'editorLargeGravityTimer',
+    ) => {
+      if (!rule.enabled) return;
+      this[timerKey] += delta;
+      const interval = getEffectiveIntervalMs(rule, this.score, elapsed);
+      if (this[timerKey] >= interval) {
+        this[timerKey] = 0;
+        if (Math.random() < rule.chance) this.spawnGravityField(size);
+      }
+    };
+
+    tickGravityFieldRule(area.obstacles.smallGravityFields, 'small', 'editorSmallGravityTimer');
+    tickGravityFieldRule(area.obstacles.largeGravityFields, 'large', 'editorLargeGravityTimer');
 
     // Hearts / power-ups
     const tickPickup = (
@@ -5074,6 +5581,7 @@ export class GameScene extends Phaser.Scene {
 
     this.createBossInstance(definition, scaledHealth, scaledHealth, scaledPoints);
 
+    playBossAppearAlarmSfx();
     this.cameras.main.shake(400, 0.012);
     const warning = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, definition.bossName.toUpperCase(), {
       fontFamily: 'Orbitron, sans-serif',

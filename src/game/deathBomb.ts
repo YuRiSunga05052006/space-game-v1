@@ -3,11 +3,15 @@ import type { Asteroid } from './entities/Asteroid';
 import type { Comet } from './entities/Comet';
 import type { Mine } from './entities/Mine';
 import type { MineCarrier } from './entities/MineCarrier';
+import type { Planet } from './entities/Planet';
+import type { Moon } from './entities/Moon';
 import { getDeathBombDamage, getDeathBombRadius } from './powerUpEffects';
 
 export interface DeathBombGroups {
   asteroids: Phaser.Physics.Arcade.Group;
   comets: Phaser.Physics.Arcade.Group;
+  planets: Phaser.Physics.Arcade.Group;
+  moons: Phaser.Physics.Arcade.Group;
   mines: Phaser.Physics.Arcade.Group;
   mineCarriers: Phaser.Physics.Arcade.Group;
   spiderShips: Phaser.Physics.Arcade.Group;
@@ -39,6 +43,20 @@ export interface DeathBombCallbacks {
   onMineTriggered: (mine: Mine) => void;
   /** Death bomb kills a Mine Carrier — caller should spawn a blue mine. */
   onMineCarrierDefeated: (x: number, y: number, points: number) => void;
+  onPlanetDestroyed?: (
+    x: number,
+    y: number,
+    points: number,
+    coinReward: number,
+    explosionCount: number,
+  ) => void;
+  onMoonDestroyed?: (
+    x: number,
+    y: number,
+    points: number,
+    coinReward: number,
+    explosionCount: number,
+  ) => void;
 }
 
 function withinRadius(
@@ -131,6 +149,22 @@ export function detonateDeathBomb(
     const { x, y, points, coinReward } = comet;
     comet.destroy();
     callbacks.onAsteroidDestroyed(x, y, points, coinReward, 10);
+  });
+
+  forEachActive(groups.planets, (sprite) => {
+    if (!withinRadius(sprite.x, sprite.y, cx, cy, radius)) return;
+    const planet = sprite as Planet;
+    const { x, y, points, coinReward } = planet;
+    planet.destroy();
+    callbacks.onPlanetDestroyed?.(x, y, points, coinReward, 14);
+  });
+
+  forEachActive(groups.moons, (sprite) => {
+    if (!withinRadius(sprite.x, sprite.y, cx, cy, radius)) return;
+    const moon = sprite as Moon;
+    const { x, y, points, coinReward } = moon;
+    moon.destroy();
+    callbacks.onMoonDestroyed?.(x, y, points, coinReward, 8);
   });
 
   const minesToTrigger: Mine[] = [];

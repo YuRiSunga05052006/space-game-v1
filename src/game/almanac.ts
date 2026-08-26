@@ -66,7 +66,8 @@ export type AlmanacCategory =
   | 'storyEnemy'
   | 'enemy'
   | 'boss'
-  | 'mine';
+  | 'mine'
+  | 'misc';
 export type AlmanacPage =
   | 'shared'
   | 'world1'
@@ -334,6 +335,7 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
 const MINE_NAMES: Record<MineVariant, string> = {
   gray: 'Gray Mine',
   blue: 'Blue Mine',
+  brown: 'Brown Mine',
   red: 'Red Mine',
   purple: 'Purple Mine',
 };
@@ -341,6 +343,7 @@ const MINE_NAMES: Record<MineVariant, string> = {
 const MINE_SUBTITLES: Record<MineVariant, string> = {
   gray: 'Story W3 L21+ · All Survival · Secrets',
   blue: 'Story W3 L21+ · All Survival · Secrets',
+  brown: 'W2/W3 secrets · W2/W3 Survival · Editor',
   red: 'Survival W3 · 6000+ · W3+ secrets',
   purple: 'Survival W3 · 9000+ score',
 };
@@ -349,15 +352,152 @@ const MINE_DESCRIPTIONS: Record<MineVariant, string> = {
   gray:
     'Small naval mine. Immune to lasers. Player collision detonates it, damaging you (max on contact, less farther out), enemies, and obstacles, and can chain other mines and Mine Carriers. Touching a Mine Carrier alone does not set it off.',
   blue:
-    'Small naval mine. Immune to lasers. Starts dormant: asteroids, comets, enemies, and non-blue mines pass through without detonating it. Player kicks or knocks from other blue mines arm it (unarmed blues ignore each other). Once armed, contact with hazards or non-blue mines explodes it; other blue mines only knock it again. Blast damages enemies and obstacles and can chain armed mines/carriers, but never damages you.',
+    'Small naval mine. Immune to lasers. Starts dormant: asteroids, comets, enemies, and non-blue mines pass through without detonating it. Player kicks or knocks from other blue mines arm it (unarmed blues ignore each other). Once armed, contact with hazards or non-blue mines explodes it; other blue mines only knock it again. Blast damages enemies and obstacles and can chain armed mines/carriers, but never damages you. Cannot damage Planets.',
+  brown:
+    'Small naval mine. Immune to lasers. Functions like a Blue Mine (kick to arm, safe for the player) but once armed, direct contact also damages Planets. Can destroy Moons when armed. Appears in World 2/3 secret levels, World 2/3 Survival, and the Level Editor.',
   red:
     'Medium naval mine. Immune to lasers. Player collision detonates a moderate blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Appears in Survival World 3 (6000+ score) and secret levels in World 3 or later.',
   purple:
     'Large naval mine. Immune to lasers. Player collision detonates a massive blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Does not appear in Story Mode yet.',
 };
 
+function buildPlanetEntries(): AlmanacEntry[] {
+  return [
+    {
+      id: 'planet-normal',
+      category: 'asteroid',
+      name: 'Planet',
+      textureKey: 'planet',
+      textureScale: 1,
+      subtitle: 'W2/W3 secrets · W2/W3 Survival · Editor',
+      description:
+        'Large drifting world with strong gravity. Solid surface — your ship cannot pass through unless Invisible, invincible (Power Star), or boosting. Armed Blue Mines also collide with Planets. Destroy with those power-ups or a Death Bomb; phase through with Invisibility (you are pushed to the surface when Invisibility ends). Gray, Red, Purple, and armed Brown Mines damage it.',
+      stats: `HP ${8} · Gravity R ${200} · ${50} pts`,
+      almanacPage: 'shared',
+    },
+    {
+      id: 'moon-normal',
+      category: 'asteroid',
+      name: 'Moon',
+      textureKey: 'moon',
+      textureScale: 1,
+      subtitle: 'W2/W3 secrets · W2/W3 Survival · Editor',
+      description:
+        'Smaller body with weaker gravity than a Planet. Solid surface for your ship — pass through only while Invisible, invincible (Power Star), or boosting (you are pushed to the surface when Invisibility ends). Destroy with Power Star, boost modes, Death Bomb, or armed Blue/Brown Mines; Blue Mines do not collide with Moons.',
+      stats: `HP ${4} · Gravity R ${130} · ${30} pts`,
+      almanacPage: 'shared',
+    },
+  ];
+}
+
+function buildMiscEntries(): AlmanacEntry[] {
+  return [
+    {
+      id: 'misc-wormhole',
+      category: 'misc',
+      name: 'Wormhole',
+      textureKey: 'wormhole',
+      textureScale: 0.85,
+      subtitle: 'Story · Secret level entry',
+      description:
+        'Appears in Story Mode once you reach the score threshold on a secret-unlock level. Fly into it to enter that secret level (ISS, Dawn, Galilean Moons, WISE 0855, etc.).',
+      stats: 'Entry portal · Score-gated',
+      almanacPage: 'shared',
+    },
+    {
+      id: 'misc-warp-panel',
+      category: 'misc',
+      name: 'Warp Panel',
+      textureKey: 'warp-panel',
+      textureScale: 0.9,
+      subtitle: 'Story secrets · Level Editor',
+      description:
+        'Cyan exit panel in secret levels that unlocks a new world when reached (e.g. ISS → World 2, Dawn → World 3). In the Level Editor, warps the player to a linked sub-area.',
+      stats: 'Unlocks worlds / editor sub-areas',
+      almanacPage: 'shared',
+    },
+    {
+      id: 'misc-finish-panel',
+      category: 'misc',
+      name: 'Finish Panel',
+      textureKey: 'finish-panel',
+      textureScale: 0.9,
+      subtitle: 'Story secrets · Level Editor',
+      description:
+        'Green exit panel in secret levels that unlocks a campaign story level when reached. In the Level Editor, clears the level when touched.',
+      stats: 'Unlocks story levels / editor victory',
+      almanacPage: 'shared',
+    },
+    {
+      id: 'misc-black-hole',
+      category: 'misc',
+      name: 'Black Hole',
+      textureKey: 'black-hole',
+      textureScale: 0.42,
+      subtitle: 'Level Editor',
+      description:
+        'Deadly singularity with Planet-level gravity. Contact destroys your ship unless bypassed with a Power Star, Invisibility, Fuel Tank, Engine, or Hyperdrive. Immune to lasers and all mines.',
+      stats: `Gravity R ${200} · Instant kill on contact`,
+      almanacPage: 'shared',
+    },
+    {
+      id: 'misc-gravity-field-sm',
+      category: 'misc',
+      name: 'Small Gravity Field',
+      textureKey: 'gravity-field-sm',
+      textureScale: 0.75,
+      subtitle: 'Level Editor',
+      description:
+        'Invisible-strength gravity zone matching a Moon\'s pull. No solid surface — only affects the player unless bypassed with a Power Star, Invisibility, Fuel Tank, Engine, or Hyperdrive.',
+      stats: `Gravity R ${130} · Moon strength`,
+      almanacPage: 'shared',
+    },
+    {
+      id: 'misc-gravity-field-lg',
+      category: 'misc',
+      name: 'Large Gravity Field',
+      textureKey: 'gravity-field-lg',
+      textureScale: 0.75,
+      subtitle: 'Level Editor',
+      description:
+        'Wide gravity zone matching a Planet\'s pull. No solid surface — only affects the player unless bypassed with a Power Star, Invisibility, Fuel Tank, Engine, or Hyperdrive.',
+      stats: `Gravity R ${200} · Planet strength`,
+      almanacPage: 'shared',
+    },
+  ];
+}
+
+function buildGoldCelestialEntries(): AlmanacEntry[] {
+  return [
+    {
+      id: 'planet-gold',
+      category: 'goldAsteroid',
+      name: 'Gold Planet',
+      textureKey: 'planet-gold',
+      textureScale: 1,
+      subtitle: 'W2/W3 secrets · W2/W3 Survival · Editor',
+      description:
+        'Rare golden planet. Same rules as a normal Planet but awards bonus coins when destroyed. Slightly more common with the Electric Neon Rainbow skin equipped.',
+      stats: `HP ${15} · Gravity R ${200} · ${50} pts · +${12} coins`,
+      almanacPage: 'shared',
+    },
+    {
+      id: 'moon-gold',
+      category: 'goldAsteroid',
+      name: 'Gold Moon',
+      textureKey: 'moon-gold',
+      textureScale: 1,
+      subtitle: 'W2/W3 secrets · W2/W3 Survival · Editor',
+      description:
+        'Rare golden moon. Same rules as a normal Moon but awards bonus coins when destroyed. Slightly more common with the Electric Neon Rainbow skin equipped.',
+      stats: `HP ${10} · Gravity R ${130} · ${30} pts · +${8} coins`,
+      almanacPage: 'shared',
+    },
+  ];
+}
+
 function buildMineEntries(): AlmanacEntry[] {
-  const variants: MineVariant[] = ['gray', 'blue', 'red', 'purple'];
+  const variants: MineVariant[] = ['gray', 'blue', 'brown', 'red', 'purple'];
   return variants.map((variant) => {
     const data = MINE_DATA[variant];
     const dmgLabel = data.damagesPlayer
@@ -532,6 +672,9 @@ function buildWorld3VariantEntries(): AlmanacEntry[] {
 export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   ...buildAsteroidEntries(),
   ...buildGoldAsteroidEntries(),
+  ...buildPlanetEntries(),
+  ...buildGoldCelestialEntries(),
+  ...buildMiscEntries(),
   ...buildPickupEntries(),
   buildCometEntry(),
   buildGoldCometEntry(),
@@ -554,6 +697,7 @@ const PAGE_SECTIONS: Record<AlmanacPage, { label: string; category: AlmanacCateg
     { label: 'PICKUPS', category: 'pickup' },
     { label: 'SURVIVAL ENEMIES', category: 'enemy' },
     { label: 'MINES', category: 'mine' },
+    { label: 'MISC', category: 'misc' },
   ],
   world1: [
     { label: 'STORY ENEMIES', category: 'storyEnemy' },

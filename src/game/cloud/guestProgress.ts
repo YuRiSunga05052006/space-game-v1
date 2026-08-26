@@ -31,3 +31,13 @@ export function activateGuestProfile(): void {
     // ignore parse errors — cleared active progress is a valid fresh guest state
   }
 }
+
+/** Wipe guest active progress and saved guest snapshot (fresh guest account). */
+export function resetGuestProgress(): void {
+  clearActiveProgressData();
+  try {
+    localStorage.removeItem(GUEST_SNAPSHOT_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}

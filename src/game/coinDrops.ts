@@ -40,6 +40,18 @@ export const GOLD_COMET_SPAWN_CHANCE_FREQUENT = 0.01;
 export const MAX_COMETS_ON_SCREEN = 2;
 export const GOLD_COMET_COIN_REWARD = 15;
 
+export const GOLD_PLANET_SPAWN_CHANCE = 0.02;
+export const GOLD_MOON_SPAWN_CHANCE = 0.025;
+export const MAX_PLANETS_ON_SCREEN = 2;
+export const MAX_MOONS_ON_SCREEN = 3;
+export const MAX_BLACK_HOLES_ON_SCREEN = 2;
+export const PLANET_SPAWN_INTERVAL_MS = 12000;
+export const MOON_SPAWN_INTERVAL_MS = 8000;
+export const PLANET_SPAWN_CHANCE = 0.25;
+export const MOON_SPAWN_CHANCE = 0.35;
+export const GOLD_PLANET_COINS = 12;
+export const GOLD_MOON_COINS = 8;
+
 export const MINE_SPAWN_CHANCE = 0.04;
 /** Cap for gray / red / purple mines. Blue mines are uncapped. */
 export const MAX_MINES_ON_SCREEN = 4;
@@ -55,6 +67,26 @@ export function getGoldCometSpawnChance(survivalBonus: boolean, frequent = false
   return survivalBonus
     ? base * SPECIAL_SKIN_GOLD_SPAWN_MULTIPLIER
     : base;
+}
+
+export function getGoldPlanetSpawnChance(survivalBonus: boolean): number {
+  return survivalBonus
+    ? GOLD_PLANET_SPAWN_CHANCE * SPECIAL_SKIN_GOLD_SPAWN_MULTIPLIER
+    : GOLD_PLANET_SPAWN_CHANCE;
+}
+
+export function getGoldMoonSpawnChance(survivalBonus: boolean): number {
+  return survivalBonus
+    ? GOLD_MOON_SPAWN_CHANCE * SPECIAL_SKIN_GOLD_SPAWN_MULTIPLIER
+    : GOLD_MOON_SPAWN_CHANCE;
+}
+
+export function getGoldPlanetCoinReward(): number {
+  return GOLD_PLANET_COINS;
+}
+
+export function getGoldMoonCoinReward(): number {
+  return GOLD_MOON_COINS;
 }
 
 export function getCometSpawnChance(frequent: boolean): number {

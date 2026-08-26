@@ -91,6 +91,7 @@ export class BootScene extends Phaser.Scene {
     this.createFinishPanelTexture();
     this.createCometTextures();
     this.createMineTextures();
+    this.createCelestialTextures();
     this.createMineCarrierTexture();
     this.createFlamethrowerShipTexture();
     this.createFirePlumeTexture();
@@ -614,8 +615,92 @@ export class BootScene extends Phaser.Scene {
     // Gray/blue match Mine Carrier (36px); purple matches a big boss (64px); red sits between.
     drawMine('mine-gray', 36, 0x8a8f98, 0x5c616a, 0xc8ccd4);
     drawMine('mine-blue', 36, 0x3a78c8, 0x24508a, 0x88c0ff);
+    drawMine('mine-brown', 36, 0x8b6914, 0x5c4510, 0xc8a850);
     drawMine('mine-red', 50, 0xc23a3a, 0x7a1f1f, 0xff8888);
     drawMine('mine-purple', 64, 0x7a3ab8, 0x4a1f78, 0xd0a0ff);
+  }
+
+  private createCelestialTextures(): void {
+    const drawPlanet = (key: string, base: number, band: number, highlight: number) => {
+      const size = 96;
+      const cx = size / 2;
+      const cy = size / 2;
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(base, 1);
+      g.fillCircle(cx, cy, 44);
+      g.fillStyle(band, 0.55);
+      g.fillEllipse(cx, cy + 6, 78, 18);
+      g.fillEllipse(cx, cy - 10, 68, 12);
+      g.fillStyle(highlight, 0.35);
+      g.fillCircle(cx - 14, cy - 14, 16);
+      g.fillStyle(0x000000, 0.15);
+      g.fillCircle(cx + 10, cy + 12, 10);
+      g.generateTexture(key, size, size);
+      g.destroy();
+    };
+
+    drawPlanet('planet', 0x3366cc, 0x4488dd, 0x88bbff);
+    drawPlanet('planet-gold', 0xcc9922, 0xffcc44, 0xffeeaa);
+
+    const drawMoon = (key: string, base: number, crater: number) => {
+      const size = 56;
+      const cx = size / 2;
+      const cy = size / 2;
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(base, 1);
+      g.fillCircle(cx, cy, 26);
+      g.fillStyle(crater, 0.35);
+      g.fillCircle(cx - 8, cy - 4, 6);
+      g.fillCircle(cx + 6, cy + 5, 4);
+      g.fillCircle(cx + 2, cy - 8, 3);
+      g.fillStyle(0xffffff, 0.2);
+      g.fillCircle(cx - 10, cy - 10, 5);
+      g.generateTexture(key, size, size);
+      g.destroy();
+    };
+
+    drawMoon('moon', 0x8899aa, 0x556677);
+    drawMoon('moon-gold', 0xccaa44, 0x997722);
+
+    const g = this.make.graphics({ x: 0, y: 0 }, false);
+    g.fillStyle(0x000000, 0.01);
+    g.fillCircle(48, 48, 40);
+    g.generateTexture('black-hole-hit', 96, 96);
+    g.destroy();
+
+    const bh = this.make.graphics({ x: 0, y: 0 }, false);
+    const cx = 48;
+    const cy = 48;
+    bh.fillStyle(0xff7722, 0.55);
+    bh.fillEllipse(cx, cy, 72, 16);
+    bh.fillStyle(0x330044, 0.45);
+    bh.fillCircle(cx, cy, 33);
+    bh.fillStyle(0x550066, 0.75);
+    bh.fillCircle(cx, cy, 26);
+    bh.fillStyle(0x000000, 1);
+    bh.fillCircle(cx, cy, 18);
+    bh.fillStyle(0x110011, 1);
+    bh.fillCircle(cx, cy, 10);
+    bh.generateTexture('black-hole', 96, 96);
+    bh.destroy();
+
+    const drawGravityField = (key: string, radius: number, inner: number, color: number) => {
+      const size = radius * 2 + 8;
+      const cx = size / 2;
+      const cy = size / 2;
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.lineStyle(2, color, 0.35);
+      g.strokeCircle(cx, cy, radius);
+      g.lineStyle(1, color, 0.2);
+      g.strokeCircle(cx, cy, radius * 0.72);
+      g.fillStyle(color, 0.08);
+      g.fillCircle(cx, cy, inner);
+      g.generateTexture(key, size, size);
+      g.destroy();
+    };
+
+    drawGravityField('gravity-field-sm', 62, 18, 0x8899cc);
+    drawGravityField('gravity-field-lg', 96, 28, 0x6688dd);
   }
 
   private createMineCarrierTexture(): void {

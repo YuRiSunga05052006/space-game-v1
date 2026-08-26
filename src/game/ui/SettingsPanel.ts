@@ -14,6 +14,11 @@ import { createVolumeSlider } from './VolumeSlider';
 
 export interface SettingsPanelOptions {
   onBack: () => void;
+  /** Main-menu guest settings: hidden reset until Guest chip easter egg unlock. */
+  guestResetEnabled?: boolean;
+  onResetProgress?: () => void;
+  /** Keep reset visible after returning from the reset screen (same settings session). */
+  resetProgressUnlocked?: boolean;
   onAutoFireChange?: (autoFire: boolean) => void;
   onSoundVolumeChange?: (volume: number) => void;
   onMusicVolumeChange?: (volume: number) => void;
@@ -21,6 +26,7 @@ export interface SettingsPanelOptions {
 
 export interface SettingsPanelResult {
   root: Phaser.GameObjects.Container;
+  revealResetProgress: () => void;
   destroy: () => void;
 }
 
@@ -30,6 +36,7 @@ export function createSettingsPanel(
   options: SettingsPanelOptions,
 ): SettingsPanelResult {
   const root = scene.add.container(0, 0).setDepth(depth);
+  const guestResetEnabled = options.guestResetEnabled === true && !!options.onResetProgress;
 
   const overlay = scene.add.rectangle(
     GAME_WIDTH / 2,
@@ -127,16 +134,53 @@ export function createSettingsPanel(
     }).setOrigin(0.5),
   );
 
-  const { container: backBtn } = createMenuButton(scene, {
+  let resetUnlocked = guestResetEnabled && (options.resetProgressUnlocked ?? false);
+
+  const backBtnResult = createMenuButton(scene, {
     label: 'BACK',
     y: GAME_HEIGHT / 2 + 205,
     onClick: () => options.onBack(),
   });
-  backBtn.setX(GAME_WIDTH / 2);
-  root.add(backBtn);
+  backBtnResult.container.setX(GAME_WIDTH / 2);
+  root.add(backBtnResult.container);
+
+  let resetBtnResult: ReturnType<typeof createMenuButton> | undefined;
+
+  const layoutBottomButtons = () => {
+    backBtnResult.container.setY(resetUnlocked ? GAME_HEIGHT / 2 + 240 : GAME_HEIGHT / 2 + 205);
+    resetBtnResult?.container.setVisible(resetUnlocked);
+  };
+
+  const revealResetProgress = () => {
+    if (!guestResetEnabled || resetUnlocked) return;
+    resetUnlocked = true;
+
+    resetBtnResult = createMenuButton(scene, {
+      label: 'RESET PROGRESS',
+      y: GAME_HEIGHT / 2 + 188,
+      color: 0xff4466,
+      onClick: () => options.onResetProgress!(),
+    });
+    resetBtnResult.container.setX(GAME_WIDTH / 2);
+    root.add(resetBtnResult.container);
+    layoutBottomButtons();
+  };
+
+  if (resetUnlocked) {
+    resetBtnResult = createMenuButton(scene, {
+      label: 'RESET PROGRESS',
+      y: GAME_HEIGHT / 2 + 188,
+      color: 0xff4466,
+      onClick: () => options.onResetProgress!(),
+    });
+    resetBtnResult.container.setX(GAME_WIDTH / 2);
+    root.add(resetBtnResult.container);
+    layoutBottomButtons();
+  }
 
   return {
     root,
+    revealResetProgress,
     destroy: () => root.destroy(),
   };
 }

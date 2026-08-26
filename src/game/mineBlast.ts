@@ -3,6 +3,8 @@ import type { Asteroid } from './entities/Asteroid';
 import type { Comet } from './entities/Comet';
 import type { Mine } from './entities/Mine';
 import type { MineCarrier } from './entities/MineCarrier';
+import type { Planet } from './entities/Planet';
+import type { Moon } from './entities/Moon';
 
 export interface MineBlastSource {
   x: number;
@@ -17,6 +19,8 @@ export interface MineBlastSource {
 export interface MineBlastGroups {
   asteroids: Phaser.Physics.Arcade.Group;
   comets: Phaser.Physics.Arcade.Group;
+  planets: Phaser.Physics.Arcade.Group;
+  moons: Phaser.Physics.Arcade.Group;
   mines: Phaser.Physics.Arcade.Group;
   mineCarriers: Phaser.Physics.Arcade.Group;
   spiderShips: Phaser.Physics.Arcade.Group;
@@ -54,6 +58,20 @@ export interface MineBlastCallbacks {
   ) => void;
   onMineDestroyed: (x: number, y: number, points: number) => void;
   onCarrierChained: (x: number, y: number, points: number) => void;
+  onPlanetDestroyed?: (
+    x: number,
+    y: number,
+    points: number,
+    coinReward: number,
+    explosionCount: number,
+  ) => void;
+  onMoonDestroyed?: (
+    x: number,
+    y: number,
+    points: number,
+    coinReward: number,
+    explosionCount: number,
+  ) => void;
 }
 
 function withinRadius(
@@ -127,7 +145,39 @@ function hitEnemySprite(
   }
 }
 
-function blastDamageForRadius(radius: number): number {
+function hitPlanet(
+  planet: Planet,
+  cx: number,
+  cy: number,
+  radius: number,
+  damage: number,
+  callbacks: MineBlastCallbacks,
+): void {
+  if (!withinRadius(planet.x, planet.y, cx, cy, radius)) return;
+
+  const { x, y, points, coinReward } = planet;
+  if (planet.takeDamage(damage)) {
+    callbacks.onPlanetDestroyed?.(x, y, points, coinReward, 14);
+  }
+}
+
+function hitMoon(
+  moon: Moon,
+  cx: number,
+  cy: number,
+  radius: number,
+  damage: number,
+  callbacks: MineBlastCallbacks,
+): void {
+  if (!withinRadius(moon.x, moon.y, cx, cy, radius)) return;
+
+  const { x, y, points, coinReward } = moon;
+  if (moon.takeDamage(damage)) {
+    callbacks.onMoonDestroyed?.(x, y, points, coinReward, 8);
+  }
+}
+
+export function blastDamageForRadius(radius: number): number {
   if (radius >= 130) return 8;
   if (radius >= 100) return 6;
   if (radius >= 90) return 5;
@@ -225,6 +275,14 @@ export function detonateMineBlast(
       const { x, y, points, coinReward } = comet;
       comet.destroy();
       callbacks.onAsteroidDestroyed(x, y, points, coinReward, 10);
+    });
+
+    forEachActive(groups.planets, (sprite) => {
+      hitPlanet(sprite as Planet, cx, cy, radius, damage, callbacks);
+    });
+
+    forEachActive(groups.moons, (sprite) => {
+      hitMoon(sprite as Moon, cx, cy, radius, damage, callbacks);
     });
 
     const enemyGroups: { group: Phaser.Physics.Arcade.Group; explosionCount: number }[] = [

@@ -45,6 +45,8 @@ let invincibilityThemePlaying = false;
 let invincibilityThemeDesired = false;
 let invincibilityThemeResumeOffset = 0;
 let invincibilityThemeStartedAt = 0;
+let alarmBuffer: AudioBuffer | null = null;
+let alarmLoadPromise: Promise<AudioBuffer | null> | null = null;
 
 const EXPLOSION_URLS = [
   assetUrl('assets/explosion1.mp3'),
@@ -72,6 +74,7 @@ const ENEMY_LASER_URL = assetUrl('assets/laser-enemy.mp3');
 const ROCKET_ENGINE_URL = assetUrl('assets/rocket-engine.mp3');
 const INVINCIBILITY_THEME_URL = assetUrl('assets/invincibility-theme.mp3');
 const MAIN_THEME_URL = assetUrl('assets/main-theme.mp3');
+const ALARM_URL = assetUrl('assets/alarm.mp3');
 const ROCKET_ENGINE_VOLUME = 0.45;
 const INVINCIBILITY_THEME_VOLUME = 0.35;
 const MAIN_THEME_VOLUME = 0.20;
@@ -79,6 +82,7 @@ const BUTTON_CLICK_VOLUME = 0.85;
 const LASER_VOLUME = 0.45;
 const ENEMY_LASER_VOLUME = 0.5;
 const HIT_VOLUME = 0.85;
+const ALARM_VOLUME = 0.9;
 const ROCK_VOLUME = 0.8;
 const ROCK_BREAK_VOLUME = 0.9;
 
@@ -158,6 +162,7 @@ export async function initAudio(): Promise<void> {
   preloadRocketEngineSfx();
   preloadInvincibilityTheme();
   preloadMainTheme();
+  preloadAlarmSfx();
 }
 
 function loadMainThemeBuffer(): Promise<AudioBuffer | null> {
@@ -228,6 +233,81 @@ function pickRandomExplosionBuffer(buffers: AudioBuffer[]): AudioBuffer | null {
 
 export function preloadExplosionSfx(): void {
   void loadExplosionBuffers();
+}
+
+function loadAlarmBuffer(): Promise<AudioBuffer | null> {
+  if (alarmBuffer) {
+    return Promise.resolve(alarmBuffer);
+  }
+
+  if (!alarmLoadPromise) {
+    alarmLoadPromise = (async () => {
+      const audioCtx = await getRunningAudioContext();
+      if (!audioCtx) return null;
+
+      try {
+        const response = await fetch(ALARM_URL);
+        if (!response.ok) return null;
+
+        const arrayBuffer = await response.arrayBuffer();
+        alarmBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        return alarmBuffer;
+      } catch {
+        return null;
+      }
+    })();
+  }
+
+  return alarmLoadPromise;
+}
+
+export function preloadAlarmSfx(): void {
+  void loadAlarmBuffer();
+}
+
+function playAlarmSample(onComplete?: () => void): void {
+  if (getSoundVolume() <= 0) return;
+
+  void getRunningAudioContext().then((audioCtx) => {
+    if (!audioCtx || !sfxGain || getSoundVolume() <= 0) return;
+
+    void loadAlarmBuffer().then((buffer) => {
+      if (!buffer || !ctx || !sfxGain) return;
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+
+      const gain = ctx.createGain();
+      gain.gain.value = ALARM_VOLUME;
+      source.connect(gain);
+      gain.connect(sfxGain);
+      source.onended = () => onComplete?.();
+      source.start();
+    });
+  });
+}
+
+/** Single alarm clip (reset progress, low HP, etc.). */
+export function playAlarmSfx(): void {
+  playAlarmSample();
+}
+
+/** Low HP warning — plays once when HP drops to 4 or below from damage. */
+export function playLowHpAlarmSfx(): void {
+  playAlarmSfx();
+}
+
+/** Boss entrance — plays the alarm three times in sequence. */
+export function playBossAppearAlarmSfx(): void {
+  const playNext = (remaining: number) => {
+    if (remaining <= 0 || getSoundVolume() <= 0) return;
+    playAlarmSample(() => {
+      if (remaining > 1) {
+        window.setTimeout(() => playNext(remaining - 1), 120);
+      }
+    });
+  };
+  playNext(3);
 }
 
 function loadHitBuffers(): Promise<AudioBuffer[]> {

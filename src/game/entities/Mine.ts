@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 
-export type MineVariant = 'gray' | 'red' | 'purple' | 'blue';
+export type MineVariant = 'gray' | 'red' | 'purple' | 'blue' | 'brown';
 
 export interface MineConfig {
   variant: MineVariant;
@@ -41,6 +41,15 @@ export const MINE_DATA: Record<MineVariant, MineBlastStats> = {
     canChainCarriers: true,
     damagesPlayer: false,
   },
+  brown: {
+    texture: 'mine-brown',
+    bodyRadius: 12,
+    playerDamage: 0,
+    blastRadius: 70,
+    points: 30,
+    canChainCarriers: true,
+    damagesPlayer: false,
+  },
   red: {
     texture: 'mine-red',
     // Midway between carrier-sized and boss-sized mines.
@@ -66,6 +75,7 @@ export const MINE_DATA: Record<MineVariant, MineBlastStats> = {
 const MINE_SPEED: Record<MineVariant, number> = {
   gray: 90,
   blue: 90,
+  brown: 90,
   red: 75,
   purple: 60,
 };
@@ -78,7 +88,7 @@ export class Mine extends Phaser.Physics.Arcade.Sprite {
   readonly canChainCarriers: boolean;
   readonly damagesPlayer: boolean;
   private pushCooldownMs = 0;
-  /** Blue mines stay inert until the player kicks them once. */
+  /** Blue / brown mines stay inert until the player kicks them once. */
   private armed = false;
 
   constructor(scene: Phaser.Scene, config: MineConfig) {
@@ -105,22 +115,30 @@ export class Mine extends Phaser.Physics.Arcade.Sprite {
     return this.variant === 'blue';
   }
 
-  /** True after the player has kicked this blue mine at least once. */
+  get isBrown(): boolean {
+    return this.variant === 'brown';
+  }
+
+  get isKickMine(): boolean {
+    return this.isBlue || this.isBrown;
+  }
+
+  /** True after the player has kicked this kick-mine at least once. */
   get isArmed(): boolean {
     return this.armed;
   }
 
-  /** Dormant blue mines ignore hazard contact and blast chains. */
+  /** Dormant blue / brown mines ignore hazard contact and blast chains. */
   get isDormantBlue(): boolean {
-    return this.isBlue && !this.armed;
+    return this.isKickMine && !this.armed;
   }
 
   /**
-   * Armed blue mines detonate on hazard contact (enemies, asteroids, comets, etc.)
-   * and on contact with non-blue mines — not on other blue mines.
+   * Armed kick-mines detonate on hazard contact (enemies, asteroids, comets, moons, etc.)
+   * and on contact with non-kick mines — not on other kick-mines.
    */
   get canDetonateFromContact(): boolean {
-    return this.isBlue && this.armed;
+    return this.isKickMine && this.armed;
   }
 
   static randomConfig(variant: MineVariant): MineConfig {
@@ -165,11 +183,11 @@ export class Mine extends Phaser.Physics.Arcade.Sprite {
   }
 
   canAcceptPush(): boolean {
-    return this.isBlue && this.pushCooldownMs <= 0;
+    return this.isKickMine && this.pushCooldownMs <= 0;
   }
 
   /**
-   * Knock this blue mine away from a source. Arms it on first knock.
+   * Knock this kick-mine away from a source. Arms it on first knock.
    * Returns true if the knock was applied (for hit SFX).
    */
   applyKnockFrom(sourceX: number, sourceY: number): boolean {

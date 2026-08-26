@@ -67,12 +67,30 @@ export function migrateLegacyEnemyId(id: string): string {
 }
 
 export function isEditorObstacleVisible(
-  kind: 'asteroids' | 'comets' | 'blueMines' | 'grayMines' | 'redMines' | 'purpleMines',
+  kind:
+    | 'asteroids'
+    | 'comets'
+    | 'blueMines'
+    | 'grayMines'
+    | 'redMines'
+    | 'purpleMines'
+    | 'brownMines'
+    | 'planets'
+    | 'moons'
+    | 'blackHoles'
+    | 'smallGravityFields'
+    | 'largeGravityFields',
 ): boolean {
   switch (kind) {
     case 'asteroids':
     case 'blueMines':
     case 'grayMines':
+    case 'brownMines':
+    case 'planets':
+    case 'moons':
+    case 'blackHoles':
+    case 'smallGravityFields':
+    case 'largeGravityFields':
       return true;
     case 'comets':
       return canUseComets();

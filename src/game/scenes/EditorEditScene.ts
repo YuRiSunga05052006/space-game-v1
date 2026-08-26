@@ -384,6 +384,24 @@ export class EditorEditScene extends Phaser.Scene {
     if (isEditorObstacleVisible('purpleMines')) {
       addRule('Purple Mines', 'purpleMines', { showChance: true });
     }
+    if (isEditorObstacleVisible('brownMines')) {
+      addRule('Brown Mines', 'brownMines', { showChance: true });
+    }
+    if (isEditorObstacleVisible('planets')) {
+      addRule('Planets', 'planets', { showChance: true });
+    }
+    if (isEditorObstacleVisible('moons')) {
+      addRule('Moons', 'moons', { showChance: true });
+    }
+    if (isEditorObstacleVisible('blackHoles')) {
+      addRule('Black Holes', 'blackHoles', { showChance: true });
+    }
+    if (isEditorObstacleVisible('smallGravityFields')) {
+      addRule('Small Gravity Fields', 'smallGravityFields', { showChance: true });
+    }
+    if (isEditorObstacleVisible('largeGravityFields')) {
+      addRule('Large Gravity Fields', 'largeGravityFields', { showChance: true });
+    }
 
     this.finalizeScroll(y);
     this.addBackToMenu();

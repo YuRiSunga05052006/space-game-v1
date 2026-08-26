@@ -74,6 +74,12 @@ export interface CustomAreaContent {
     redMines: SpawnRule;
     /** Requires World 3 unlock. */
     purpleMines: SpawnRule;
+    brownMines: SpawnRule;
+    planets: SpawnRule;
+    moons: SpawnRule;
+    blackHoles: SpawnRule;
+    smallGravityFields: SpawnRule;
+    largeGravityFields: SpawnRule;
   };
   enemies: {
     survival: EnemySpawnRule[];
@@ -183,6 +189,12 @@ export function createDefaultAreaContent(): CustomAreaContent {
       grayMines: defaultSpawnRule({ enabled: false, intervalMs: 4000, chance: 0.5 }),
       redMines: defaultSpawnRule({ enabled: false, intervalMs: 4000, chance: 0.35 }),
       purpleMines: defaultSpawnRule({ enabled: false, intervalMs: 4000, chance: 0.35 }),
+      brownMines: defaultSpawnRule({ enabled: false, intervalMs: 4000, chance: 0.5 }),
+      planets: defaultSpawnRule({ enabled: false, intervalMs: 12000, chance: 0.25 }),
+      moons: defaultSpawnRule({ enabled: false, intervalMs: 8000, chance: 0.35 }),
+      blackHoles: defaultSpawnRule({ enabled: false, intervalMs: 15000, chance: 0.3 }),
+      smallGravityFields: defaultSpawnRule({ enabled: false, intervalMs: 10000, chance: 0.35 }),
+      largeGravityFields: defaultSpawnRule({ enabled: false, intervalMs: 14000, chance: 0.3 }),
     },
     enemies: {
       survival: [
@@ -491,6 +503,12 @@ function normalizeObstacles(
     grayMines,
     redMines,
     purpleMines,
+    brownMines: normalizeSpawnRule(raw.brownMines, def.brownMines),
+    planets: normalizeSpawnRule(raw.planets, def.planets),
+    moons: normalizeSpawnRule(raw.moons, def.moons),
+    blackHoles: normalizeSpawnRule(raw.blackHoles, def.blackHoles),
+    smallGravityFields: normalizeSpawnRule(raw.smallGravityFields, def.smallGravityFields),
+    largeGravityFields: normalizeSpawnRule(raw.largeGravityFields, def.largeGravityFields),
   };
 }
 
