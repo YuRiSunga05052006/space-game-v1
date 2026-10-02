@@ -49,7 +49,7 @@ export class MenuScene extends Phaser.Scene {
   private accountChipInputBlocker?: Phaser.GameObjects.Rectangle;
   private guestResetSequenceActive = false;
   private menuStars: Phaser.GameObjects.Image[] = [];
-  private menuTitle?: Phaser.GameObjects.Text;
+  private menuTitleParts: Phaser.GameObjects.Image[] = [];
   private menuHighScore?: Phaser.GameObjects.Text;
   private menuInstructions?: Phaser.GameObjects.Text;
   private freshStart = false;
@@ -127,6 +127,7 @@ export class MenuScene extends Phaser.Scene {
     this.menuOverlayActive = false;
     this.guestResetSequenceActive = false;
     this.menuStars = [];
+    this.menuTitleParts = [];
 
     if (this.freshStart) {
       this.cameras.main.setBackgroundColor('#0a0e27');
@@ -142,10 +143,11 @@ export class MenuScene extends Phaser.Scene {
       ensureMusic();
     }
     this.createStarfield();
-    this.createTitle();
+    const logoBottom = this.createTitle();
     this.createAccountChip();
-    this.createHighScore();
-    this.createInstructions();
+    const highScoreY = logoBottom + 40;
+    this.createHighScore(highScoreY);
+    this.createInstructions(highScoreY + 88);
     this.createActionButtons();
 
     this.input.keyboard?.once('keydown-SPACE', () => {
@@ -188,6 +190,7 @@ export class MenuScene extends Phaser.Scene {
     this.menuOverlayActive = false;
     this.guestResetSequenceActive = false;
     this.menuStars = [];
+    this.menuTitleParts = [];
   }
 
   private isMenuOverlayOpen(): boolean {
@@ -251,27 +254,33 @@ export class MenuScene extends Phaser.Scene {
     }
   }
 
-  private createTitle(): void {
-    const title = this.add.text(GAME_WIDTH / 2, 180, 'STAR\nBLASTER', {
-      fontFamily: 'Orbitron, sans-serif',
-      fontSize: '48px',
-      fontStyle: '900',
-      color: '#00d4ff',
-      align: 'center',
-      stroke: '#003344',
-      strokeThickness: 4,
-    });
-    title.setOrigin(0.5);
-    this.menuTitle = title;
+  /** Stacked Star / Blaster art. Returns the logo's bottom edge so the lines below can clear it. */
+  private createTitle(): number {
+    const maxWidth = GAME_WIDTH - 20;
+    const gap = -8;
+    const top = 56;
 
-    this.tweens.add({
-      targets: title,
-      y: title.y - 8,
-      duration: 2000,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
+    const star = this.add.image(GAME_WIDTH / 2, 0, 'logo-star').setDepth(2);
+    const blaster = this.add.image(GAME_WIDTH / 2, 0, 'logo-blaster').setDepth(2);
+    star.setScale(maxWidth / star.width);
+    blaster.setScale(maxWidth / blaster.width);
+
+    star.setY(top + star.displayHeight / 2);
+    blaster.setY(star.y + star.displayHeight / 2 + gap + blaster.displayHeight / 2);
+    this.menuTitleParts = [star, blaster];
+
+    for (const part of this.menuTitleParts) {
+      this.tweens.add({
+        targets: part,
+        y: part.y - 8,
+        duration: 2000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+
+    return blaster.y + blaster.displayHeight / 2;
   }
 
   private createAccountChip(): void {
@@ -303,22 +312,22 @@ export class MenuScene extends Phaser.Scene {
     this.syncAccountChip();
   }
 
-  private createHighScore(): void {
-    this.menuHighScore = this.add.text(GAME_WIDTH / 2, 300, formatHighScoreLabel(), {
+  private createHighScore(y: number): void {
+    this.menuHighScore = this.add.text(GAME_WIDTH / 2, y, formatHighScoreLabel(), {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '16px',
       color: '#ffcc00',
     }).setOrigin(0.5);
   }
 
-  private createInstructions(): void {
+  private createInstructions(y: number): void {
     const isMobile = this.sys.game.device.input.touch;
     const moveText = isMobile
       ? 'Drag to fly your rocket'
       : 'WASD or arrows to move';
     const shootText = getAutoFire() ? 'Auto-fire enabled' : 'Space / FIRE to shoot';
 
-    this.menuInstructions = this.add.text(GAME_WIDTH / 2, 400, `${moveText}\n${shootText}\nDodge & destroy asteroids\nEsc to pause`, {
+    this.menuInstructions = this.add.text(GAME_WIDTH / 2, y, `${moveText}\n${shootText}\nDodge & destroy asteroids\nEsc to pause`, {
       fontFamily: 'Orbitron, sans-serif',
       fontSize: '14px',
       color: '#8899bb',
@@ -531,7 +540,7 @@ export class MenuScene extends Phaser.Scene {
     return {
       stars: [...this.menuStars],
       buttons: [...this.menuButtons],
-      title: this.menuTitle,
+      titleParts: [...this.menuTitleParts],
       texts,
     };
   }

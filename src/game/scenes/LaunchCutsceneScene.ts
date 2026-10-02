@@ -10,6 +10,7 @@ import {
   BOOSTER_DEPLOYED_TEXTURE_KEY,
   BOOSTER_TEXTURE_HEIGHT,
   BOOSTER_TEXTURE_KEY,
+  getBoosterEngineMouthOffsets,
 } from '../boosterAppearances';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { normalizeGameSceneData, type GameSceneData } from '../gameMode';
@@ -18,7 +19,9 @@ import { getEquippedSkinId, PLAYER_SKINS } from '../playerSkins';
 import {
   getRainbowCyclePhase,
   getRocketSkinPalette,
+  getThrusterTints,
   makeRainbowPalette,
+  ROCKET_ENGINE_OFFSET_Y,
   ROCKET_TEXTURE_HEIGHT,
   ROCKET_TEXTURE_WIDTH,
   sampleRainbowColor,
@@ -48,6 +51,21 @@ const SKY_DARKEN_MS = 2800;
 const BOOSTER_FALL_SPEED = 95;
 const SHIP_DEPART_SPEED = 320;
 const FADE_OUT_MS = 500;
+/** Same smoke cadence as Player.updateThruster while the ship is moving. */
+const SHIP_SMOKE_INTERVAL_MS = 16;
+
+/**
+ * Downward cones for the five booster bells, left to right.
+ * 90° is straight down; outer bells lean out so each plume stays visible.
+ */
+const BOOSTER_PLUME_ANGLES: { min: number; max: number }[] = [
+  { min: 94, max: 102 },
+  { min: 90, max: 98 },
+  { min: 86, max: 94 },
+  { min: 82, max: 90 },
+  { min: 78, max: 86 },
+];
+const BOOSTER_ENGINE_MOUTHS = getBoosterEngineMouthOffsets();
 
 type CutscenePhase =
   | 'countdown'
@@ -88,8 +106,10 @@ export class LaunchCutsceneScene extends Phaser.Scene {
   private shipWingsDeployed = false;
   private electricRainbow = false;
 
-  private boosterExhaust?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private boosterExhausts: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
   private shipExhaust?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private shipSmoke?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private shipSmokeCooldown = 0;
 
   private clouds: CloudSprite[] = [];
   private skyDarkness = 0;
@@ -133,6 +153,8 @@ export class LaunchCutsceneScene extends Phaser.Scene {
     this.moonCraters = [];
     this.stars = [];
     this.starBaseAlphas = [];
+    this.boosterExhausts = [];
+    this.shipSmokeCooldown = 0;
 
     void initAudio();
     stopMusic();
@@ -171,13 +193,8 @@ export class LaunchCutsceneScene extends Phaser.Scene {
         || this.phase === 'ascent'
         || this.phase === 'skyDarken');
 
-    if (boosterFiring && this.boosterExhaust && this.stack) {
-      this.positionBoosterExhaust();
-      this.boosterExhaust.emitParticle();
-      this.boosterExhaust.emitParticle();
-      if (this.phase !== 'countdown') {
-        this.boosterExhaust.emitParticle();
-      }
+    if (boosterFiring && this.boosterExhausts.length > 0 && this.stack) {
+      this.emitBoosterPlumes(this.phase === 'countdown' ? 2 : 3);
     }
 
     if (this.phase === 'ascent') {
@@ -346,27 +363,73 @@ export class LaunchCutsceneScene extends Phaser.Scene {
 
     this.stack.add([this.shipGfx, this.booster]);
 
-    this.boosterExhaust = this.add.particles(0, 0, 'particle', {
-      speed: { min: 80, max: 180 },
-      scale: { start: 1.6, end: 0 },
-      alpha: { start: 0.95, end: 0 },
-      lifespan: 420,
-      tint: [0xff6b35, 0xffcc00, 0xffaa44, 0xffffff],
-      frequency: -1,
-      angle: { min: 75, max: 105 },
+    this.boosterExhausts = BOOSTER_ENGINE_MOUTHS.map((_, index) => {
+      const cone = BOOSTER_PLUME_ANGLES[index] ?? BOOSTER_PLUME_ANGLES[2];
+      const exhaust = this.add.particles(0, 0, 'particle', {
+        speed: { min: 90, max: 190 },
+        scale: { start: 0.85, end: 0 },
+        alpha: { start: 0.95, end: 0 },
+        lifespan: 400,
+        tint: [0xff6b35, 0xffcc00, 0xffaa44, 0xffffff],
+        frequency: -1,
+        angle: cone,
+      });
+      exhaust.setDepth(9);
+      return exhaust;
     });
-    this.boosterExhaust.setDepth(9);
 
-    this.shipExhaust = this.add.particles(0, 0, 'particle', {
-      speed: { min: 50, max: 120 },
-      scale: { start: 1.1, end: 0 },
-      alpha: { start: 0.9, end: 0 },
-      lifespan: 350,
-      tint: [0xff6b35, 0xffcc00, 0x66ccff],
+    this.createShipExhaust();
+  }
+
+  /**
+   * Flight plume matching Player.createThruster: skin-tinted flame, rainbow cycle,
+   * and the same smoke streak used while the player is moving.
+   */
+  private createShipExhaust(): void {
+    const equippedSkin = PLAYER_SKINS.find((skin) => skin.id === getEquippedSkinId());
+    const tint = equippedSkin
+      ? getThrusterTints(equippedSkin.appearanceId)
+      : [0xff6b35, 0xffcc00, 0xff4400];
+
+    const particleConfig: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig = {
+      speed: { min: 60, max: 140 },
+      scale: { start: 1.4, end: 0.1 },
+      alpha: { start: 0.95, end: 0 },
+      lifespan: 700,
+      angle: {
+        onEmit: () => Phaser.Math.FloatBetween(78, 102),
+      },
       frequency: -1,
-      angle: { min: 80, max: 100 },
-    });
-    this.shipExhaust.setDepth(11);
+    };
+
+    const smokeConfig: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig = {
+      speed: { min: 0, max: 2 },
+      scale: { start: 0.85, end: 0.3 },
+      alpha: { start: 0.28, end: 0 },
+      lifespan: 900,
+      rotate: {
+        onEmit: () => 90 + Phaser.Math.FloatBetween(-8, 8),
+      },
+      frequency: -1,
+    };
+
+    if (this.electricRainbow) {
+      particleConfig.tint = {
+        onEmit: () => sampleRainbowColor(getRainbowCyclePhase(this.time.now)),
+      };
+      smokeConfig.tint = {
+        onEmit: () => sampleRainbowColor(getRainbowCyclePhase(this.time.now)),
+      };
+    } else {
+      particleConfig.tint = tint;
+      smokeConfig.tint = tint;
+    }
+
+    this.shipExhaust = this.add.particles(0, 0, 'particle', particleConfig);
+    this.shipExhaust.setDepth(12);
+
+    this.shipSmoke = this.add.particles(0, 0, 'smoke-particle', smokeConfig);
+    this.shipSmoke.setDepth(11);
   }
 
   private redrawShip(): void {
@@ -460,16 +523,17 @@ export class LaunchCutsceneScene extends Phaser.Scene {
   private startIgnition(): void {
     this.ignitionStarted = true;
     startRocketEngineSfx();
-    this.positionBoosterExhaust();
   }
 
-  private positionBoosterExhaust(): void {
-    if (!this.stack || !this.boosterExhaust || !this.booster) return;
-    const boosterH = BOOSTER_TEXTURE_HEIGHT * STACK_SCALE;
-    this.boosterExhaust.setPosition(
-      this.stack.x,
-      this.stack.y + this.booster.y + boosterH / 2 - 4,
-    );
+  private emitBoosterPlumes(countPerEngine: number): void {
+    if (!this.stack || !this.booster || this.boosterExhausts.length === 0) return;
+    for (let i = 0; i < this.boosterExhausts.length; i++) {
+      const mouth = BOOSTER_ENGINE_MOUTHS[i];
+      if (!mouth) continue;
+      const x = this.stack.x + this.booster.x + mouth.x * STACK_SCALE;
+      const y = this.stack.y + this.booster.y + mouth.y * STACK_SCALE;
+      this.boosterExhausts[i].emitParticleAt(x, y, countPerEngine);
+    }
   }
 
   private beginClimbToMid(): void {
@@ -619,6 +683,7 @@ export class LaunchCutsceneScene extends Phaser.Scene {
     if (this.phase === 'shipDepart' || this.phase === 'done') return;
     this.phase = 'shipDepart';
     this.phaseElapsed = 0;
+    this.shipSmokeCooldown = 0;
     startRocketEngineSfx();
   }
 
@@ -627,13 +692,36 @@ export class LaunchCutsceneScene extends Phaser.Scene {
     this.phaseElapsed += delta;
 
     this.stack.y -= SHIP_DEPART_SPEED * (delta / 1000);
-    const exhaustY = this.stack.y + this.shipGfx.y + (ROCKET_TEXTURE_HEIGHT * STACK_SCALE) / 2 - 4;
-    this.shipExhaust?.setPosition(this.stack.x, exhaustY);
-    this.shipExhaust?.emitParticle();
-    this.shipExhaust?.emitParticle();
+    this.emitShipPlume(delta);
 
     if (this.stack.y < -100) {
       this.finishCutscene();
+    }
+  }
+
+  /** Same flame and smoke burst Player emits while the ship is moving. */
+  private emitShipPlume(delta: number): void {
+    if (!this.stack || !this.shipGfx) return;
+
+    const engineX = this.stack.x + this.shipGfx.x;
+    const engineY = this.stack.y + this.shipGfx.y + ROCKET_ENGINE_OFFSET_Y * STACK_SCALE;
+
+    if (this.shipExhaust) {
+      this.shipExhaust.setPosition(engineX, engineY);
+      this.shipExhaust.emitParticle();
+      this.shipExhaust.emitParticle();
+      this.shipExhaust.emitParticle();
+    }
+
+    if (this.shipSmoke) {
+      this.shipSmokeCooldown += delta;
+      if (this.shipSmokeCooldown >= SHIP_SMOKE_INTERVAL_MS) {
+        this.shipSmokeCooldown = 0;
+        const spreads = [0, 6, -6, 10, -10];
+        for (const spread of spreads) {
+          this.shipSmoke.emitParticleAt(engineX + spread, engineY);
+        }
+      }
     }
   }
 

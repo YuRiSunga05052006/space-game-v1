@@ -685,8 +685,9 @@ export class GameScene extends Phaser.Scene {
     this.comets = this.physics.add.group();
     this.mines = this.physics.add.group();
     this.mineCarriers = this.physics.add.group();
-    this.planets = this.physics.add.group();
-    this.moons = this.physics.add.group();
+    // immovable survives group-add defaults; otherwise a ram knocks them like blue mines.
+    this.planets = this.physics.add.group({ immovable: true });
+    this.moons = this.physics.add.group({ immovable: true });
     this.blackHoles = this.physics.add.group();
     this.gravityFields = this.add.group();
   }
@@ -3011,6 +3012,8 @@ export class GameScene extends Phaser.Scene {
     this.spawnBigExplosion(explosionX, explosionY);
     this.cameras.main.shake(400, 0.025);
     this.cameras.main.flash(250, 255, 120, 60);
+    this.player.updateFailEscape(16);
+    this.updateDarknessOverlay();
 
     this.time.delayedCall(1200, () => this.triggerGameOver());
   }
@@ -4663,6 +4666,8 @@ export class GameScene extends Phaser.Scene {
     const planet = new Planet(this, config);
     this.planets.add(planet);
     planet.setVelocity(config.velocityX, config.velocityY);
+    planet.setImmovable(true);
+    planet.setPushable(false);
   }
 
   private spawnMoon(): void {
@@ -4680,6 +4685,8 @@ export class GameScene extends Phaser.Scene {
     const moon = new Moon(this, config);
     this.moons.add(moon);
     moon.setVelocity(config.velocityX, config.velocityY);
+    moon.setImmovable(true);
+    moon.setPushable(false);
   }
 
   private spawnBlackHole(): void {
@@ -4960,25 +4967,21 @@ export class GameScene extends Phaser.Scene {
     const circles: CircleLight[] = [];
     const beams: BeamLight[] = [];
 
-    circles.push({
-      x: this.player.x,
-      y: this.player.y,
-      radius: LIGHT_RADIUS.playerSpotlight,
-      intensity: 1,
-    });
-    const beamRotation = this.player.rotation - Math.PI / 2;
-    beams.push({
-      x: this.player.x,
-      y: this.player.y,
-      rotation: beamRotation,
-      length: beamLengthToScreenEdge(this.player.x, this.player.y, beamRotation),
-      halfWidth: LIGHT_RADIUS.playerBeamHalfWidth,
-      intensity: 0.9,
-    });
-
-    // Trail glow: sampled thruster particles (capped) so obstruction stays cheap.
-    for (const light of this.player.collectTrailDarknessLights(LIGHT_RADIUS.trail)) {
-      circles.push(light);
+    const escape = this.isPlayerDying ? this.player.getFailEscapeSpotlight() : null;
+    if (this.isPlayerDying) {
+      // The wreck no longer holds a spotlight; it rides the departing upper module.
+      if (escape) {
+        this.pushPlayerSpotlight(circles, beams, escape.x, escape.y, escape.rotation);
+        for (const light of this.player.collectFailEscapeTrailLights(LIGHT_RADIUS.trail)) {
+          circles.push(light);
+        }
+      }
+    } else {
+      this.pushPlayerSpotlight(circles, beams, this.player.x, this.player.y, this.player.rotation);
+      // Trail glow: sampled thruster particles (capped) so obstruction stays cheap.
+      for (const light of this.player.collectTrailDarknessLights(LIGHT_RADIUS.trail)) {
+        circles.push(light);
+      }
     }
 
     const pushActive = (
@@ -5134,10 +5137,34 @@ export class GameScene extends Phaser.Scene {
     return { circles, beams };
   }
 
+  private pushPlayerSpotlight(
+    circles: CircleLight[],
+    beams: BeamLight[],
+    x: number,
+    y: number,
+    rotation: number,
+  ): void {
+    circles.push({
+      x,
+      y,
+      radius: LIGHT_RADIUS.playerSpotlight,
+      intensity: 1,
+    });
+    const beamRotation = rotation - Math.PI / 2;
+    beams.push({
+      x,
+      y,
+      rotation: beamRotation,
+      length: beamLengthToScreenEdge(x, y, beamRotation),
+      halfWidth: LIGHT_RADIUS.playerBeamHalfWidth,
+      intensity: 0.9,
+    });
+  }
+
   private updateDarknessOverlay(): void {
     if (!this.darknessOverlay) return;
 
-    const fullLight = this.player.isInvincible() || this.player.isBoosting();
+    const fullLight = !this.isPlayerDying && (this.player.isInvincible() || this.player.isBoosting());
     this.darknessOverlay.setFullIlluminate(fullLight);
     if (fullLight) {
       this.darknessOverlay.redraw([], []);
@@ -5149,6 +5176,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    if (this.isPlayerDying) {
+      this.player.updateFailEscape(delta);
+      this.updateDarknessOverlay();
+    }
+
     if (this.isGameOver || this.isPaused || this.isChoosingWeapon) {
       stopRocketEngineSfx();
       return;

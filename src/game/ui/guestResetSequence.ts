@@ -12,7 +12,7 @@ const SUCK_DURATION = 2600;
 export interface GuestResetSuckPayload {
   stars: Phaser.GameObjects.Image[];
   buttons: Phaser.GameObjects.Container[];
-  title?: Phaser.GameObjects.Text;
+  titleParts: Phaser.GameObjects.Image[];
   texts: Phaser.GameObjects.Text[];
 }
 
@@ -109,31 +109,6 @@ function snapshotTextStyle(text: Phaser.GameObjects.Text): TextStyleSnapshot {
   if (text.style.stroke) style.stroke = text.style.stroke as string;
   if (text.style.strokeThickness) style.strokeThickness = text.style.strokeThickness;
   return style;
-}
-
-function splitTitleIntoLogoParts(
-  scene: Phaser.Scene,
-  title: Phaser.GameObjects.Text,
-  depth: number,
-): Phaser.GameObjects.Text[] {
-  scene.tweens.killTweensOf(title);
-  title.setVisible(false);
-
-  const style = snapshotTextStyle(title);
-  const fontSize = parseFloat(String(title.style.fontSize)) || 48;
-  const gap = fontSize * 0.55;
-
-  const starPart = scene.add.text(title.x, title.y - gap, 'STAR', {
-    ...style,
-    align: 'center',
-  }).setOrigin(0.5).setDepth(depth);
-
-  const blasterPart = scene.add.text(title.x, title.y + gap, 'BLASTER', {
-    ...style,
-    align: 'center',
-  }).setOrigin(0.5).setDepth(depth);
-
-  return [starPart, blasterPart];
 }
 
 function splitTextIntoCharacters(
@@ -249,7 +224,7 @@ function suckButtonErratic(
 
 function suckGlyphErratic(
   scene: Phaser.Scene,
-  glyph: Phaser.GameObjects.Text,
+  glyph: Phaser.GameObjects.Text | Phaser.GameObjects.Image,
   duration: number,
   seed: number,
 ): void {
@@ -297,10 +272,11 @@ function suckMenuIntoBlackHole(scene: Phaser.Scene, payload: GuestResetSuckPaylo
     suckButtonErratic(scene, button, duration, seed++);
   });
 
-  if (payload.title?.active) {
-    const logoParts = splitTitleIntoLogoParts(scene, payload.title, depth);
-    logoParts.forEach((part) => suckGlyphErratic(scene, part, duration + 100, seed++));
-  }
+  payload.titleParts.forEach((part) => {
+    if (!part.active) return;
+    part.setDepth(depth);
+    suckGlyphErratic(scene, part, duration + 100, seed++);
+  });
 
   payload.texts.forEach((text) => {
     if (!text.active) return;

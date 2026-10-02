@@ -55,6 +55,8 @@ export class BootScene extends Phaser.Scene {
   preload(): void {
     this.load.image('shop-skins-tab-icon', assetUrl('assets/shop-skins-tab.png'));
     this.load.image('shop-powerups-tab-icon', assetUrl('assets/shop-powerups-tab.png'));
+    this.load.image('logo-star', assetUrl('assets/logo-star.png'));
+    this.load.image('logo-blaster', assetUrl('assets/logo-blaster.png'));
   }
 
   create(): void {

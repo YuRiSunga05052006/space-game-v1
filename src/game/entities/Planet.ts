@@ -42,6 +42,7 @@ export class Planet extends Phaser.Physics.Arcade.Sprite implements GravitySourc
 
     this.setCircle(PLANET_BODY_RADIUS);
     this.setImmovable(true);
+    this.setPushable(false);
     this.setDepth(5);
     this.setVelocity(config.velocityX, config.velocityY);
     this.setAngularVelocity(Phaser.Math.Between(-20, 20));

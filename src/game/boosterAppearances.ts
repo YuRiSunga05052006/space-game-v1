@@ -5,6 +5,29 @@ export const BOOSTER_TEXTURE_HEIGHT = 120;
 export const BOOSTER_TEXTURE_KEY = 'launch-booster';
 export const BOOSTER_DEPLOYED_TEXTURE_KEY = 'launch-booster-deployed';
 
+/** Horizontal offsets from the booster center to each of the five engine bells. */
+export const BOOSTER_ENGINE_X_OFFSETS = [-10, -5, 0, 5, 10] as const;
+
+const BOOSTER_ENGINE_BELL_HEIGHT = 6;
+
+/** Bell-center Y in texture space when the booster is drawn at `oy`. */
+export function boosterEngineBellCenterY(oy = 0): number {
+  const tankBottom = oy + 102;
+  const bayTop = tankBottom - 1;
+  const bayH = 7;
+  return bayTop + bayH + 1;
+}
+
+/**
+ * Unscaled offsets from the booster texture center to each engine bell mouth.
+ * Flame plumes should start here.
+ */
+export function getBoosterEngineMouthOffsets(): { x: number; y: number }[] {
+  const mouthFromTop = boosterEngineBellCenterY(0) + BOOSTER_ENGINE_BELL_HEIGHT / 2;
+  const y = mouthFromTop - BOOSTER_TEXTURE_HEIGHT / 2;
+  return BOOSTER_ENGINE_X_OFFSETS.map((x) => ({ x, y }));
+}
+
 export interface BoosterDrawOptions {
   /** Grid fins and landing legs. Retracted during launch ascent. */
   deployed?: boolean;
@@ -72,7 +95,7 @@ export function drawBooster(
   g.fillStyle(0x3a3a44, 1);
   g.fillRect(tankLeft, bayTop + 1, tankW, bayH - 2);
   // Mount stubs tying each bell into the bay
-  const engineXs = [cx - 10, cx - 5, cx, cx + 5, cx + 10];
+  const engineXs = BOOSTER_ENGINE_X_OFFSETS.map((offset) => cx + offset);
   g.fillStyle(0x4a4a54, 1);
   for (const ex of engineXs) {
     g.fillRect(ex - 1.5, bayTop + bayH - 2, 3, 3);
@@ -93,10 +116,10 @@ export function drawBooster(
   }
 
   // Five engine bells — tops nest into the bay so the tank reads as connected
-  const engineY = bayTop + bayH + 1;
+  const engineY = boosterEngineBellCenterY(oy);
   for (const ex of engineXs) {
     g.fillStyle(0x555560, 1);
-    g.fillEllipse(ex, engineY, 4.5, 6);
+    g.fillEllipse(ex, engineY, 4.5, BOOSTER_ENGINE_BELL_HEIGHT);
     g.fillStyle(0x333338, 1);
     g.fillEllipse(ex, engineY + 2, 2.5, 3);
   }

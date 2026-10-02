@@ -42,6 +42,7 @@ export class Moon extends Phaser.Physics.Arcade.Sprite implements GravitySource 
 
     this.setCircle(MOON_BODY_RADIUS);
     this.setImmovable(true);
+    this.setPushable(false);
     this.setDepth(5);
     this.setVelocity(config.velocityX, config.velocityY);
     this.setAngularVelocity(Phaser.Math.Between(-40, 40));

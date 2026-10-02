@@ -12,7 +12,6 @@ import {
   ROCKET_CANNON_OFFSET_Y,
   ROCKET_CANNON_TEXTURE_KEY,
   ROCKET_ENGINE_OFFSET_Y,
-  ROCKET_ESCAPE_TEXTURE_HEIGHT,
   ROCKET_LOWER_OFFSET_Y,
   ROCKET_TEXTURE_HEIGHT,
   ROCKET_TEXTURE_WIDTH,
@@ -31,12 +30,29 @@ import {
 
 const FAIL_ESCAPE_DURATION_MS = 1100;
 const FAIL_ESCAPE_SPEED = 520;
+/** Rear engines of the escape-upper texture, in sprite-local pixels (origin center). */
+const ESCAPE_ENGINE_OFFSET_Y = 13;
+/** Escape exhaust is a smaller copy of the ship's thruster plume. */
+const ESCAPE_PLUME_SCALE = 0.55;
+
+interface TrailDarknessLight {
+  x: number;
+  y: number;
+  radius: number;
+  intensity: number;
+  quality: 'simple';
+}
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly baseMaxSpeed = 280;
   private lastFired = 0;
   private thruster?: Phaser.GameObjects.Particles.ParticleEmitter;
   private smokeTrail?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private escapeModule?: Phaser.GameObjects.Image;
+  private escapeThruster?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private escapeSmoke?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private escapeSmokeAt = 0;
+  private escapePlumeFrame = -1;
   private smokeEmitCooldown = 0;
   private readonly smokeEmitIntervalMs = 16;
   private readonly engineWorldPos = new Phaser.Math.Vector2();
@@ -149,12 +165,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return computePlayerPowerScore(this.loadout, this.ownedWeaponIds.length);
   }
 
-  private createThruster(): void {
+  private thrusterTint(): number[] | { onEmit: () => number } {
+    if (this.electricRainbowSkin) {
+      return {
+        onEmit: () => sampleRainbowColor(getRainbowCyclePhase(this.scene.time.now)),
+      };
+    }
     const equippedSkin = PLAYER_SKINS.find((skin) => skin.id === getEquippedSkinId());
-    const electricRainbow = equippedSkin?.appearanceId === 'electricRainbow';
-    const tint = equippedSkin
+    return equippedSkin
       ? getThrusterTints(equippedSkin.appearanceId)
       : [0xff6b35, 0xffcc00, 0xff4400];
+  }
+
+  private createThruster(): void {
+    const tint = this.thrusterTint();
 
     const particleConfig: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig = {
       speed: { min: 60, max: 140 },
@@ -168,15 +192,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         },
       },
       frequency: -1,
+      tint,
     };
-
-    if (electricRainbow) {
-      particleConfig.tint = {
-        onEmit: () => sampleRainbowColor(getRainbowCyclePhase(this.scene.time.now)),
-      };
-    } else {
-      particleConfig.tint = tint;
-    }
 
     this.thruster = this.scene.add.particles(0, 0, 'particle', particleConfig);
     this.thruster.setDepth(9);
@@ -190,15 +207,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         onEmit: () => Phaser.Math.RadToDeg(this.rotation) + 90 + Phaser.Math.FloatBetween(-8, 8),
       },
       frequency: -1,
+      tint,
     };
-
-    if (electricRainbow) {
-      smokeConfig.tint = {
-        onEmit: () => sampleRainbowColor(getRainbowCyclePhase(this.scene.time.now)),
-      };
-    } else {
-      smokeConfig.tint = tint;
-    }
 
     this.smokeTrail = this.scene.add.particles(0, 0, 'smoke-particle', smokeConfig);
     this.smokeTrail.setDepth(8);
@@ -549,6 +559,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const targetX = upperPos.x + Math.cos(escapeAngle) * FAIL_ESCAPE_SPEED * (FAIL_ESCAPE_DURATION_MS / 1000);
     const targetY = upperPos.y + Math.sin(escapeAngle) * FAIL_ESCAPE_SPEED * (FAIL_ESCAPE_DURATION_MS / 1000);
 
+    this.escapeModule = escape;
+    this.createEscapePlumes();
+
     this.scene.tweens.add({
       targets: escape,
       x: targetX,
@@ -556,26 +569,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       duration: FAIL_ESCAPE_DURATION_MS,
       ease: 'Cubic.easeIn',
       onComplete: () => {
-        escape.destroy();
+        this.clearFailEscape();
       },
-    });
-
-    // Brief thruster burst from the escape module's hidden engines.
-    const escapeThruster = this.scene.add.particles(0, 0, 'particle', {
-      speed: { min: 40, max: 100 },
-      scale: { start: 1.0, end: 0 },
-      alpha: { start: 0.9, end: 0 },
-      lifespan: 280,
-      tint: [0x66ccff, 0xaaddff, 0xffffff],
-      frequency: 30,
-      angle: Phaser.Math.RadToDeg(facing) + 90,
-    });
-    escapeThruster.setDepth(11);
-    escapeThruster.startFollow(escape, 0, ROCKET_ESCAPE_TEXTURE_HEIGHT * 0.35, true);
-
-    this.scene.time.delayedCall(400, () => {
-      escapeThruster.stop();
-      escapeThruster.destroy();
     });
 
     this.scene.time.delayedCall(80, () => {
@@ -583,6 +578,105 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     });
 
     return { explosionX: lowerPos.x, explosionY: lowerPos.y };
+  }
+
+  /** Spotlight pose of the departing upper module, if it is still in flight. */
+  getFailEscapeSpotlight(): { x: number; y: number; rotation: number } | null {
+    if (!this.escapeModule?.active) return null;
+    return {
+      x: this.escapeModule.x,
+      y: this.escapeModule.y,
+      rotation: this.escapeModule.rotation,
+    };
+  }
+
+  /**
+   * Smaller flame and smoke, matching the ship's thruster, from the escape module.
+   * Safe to call more than once in the same frame.
+   */
+  updateFailEscape(delta: number): void {
+    const escape = this.escapeModule;
+    const thruster = this.escapeThruster;
+    if (!escape?.active || !thruster) return;
+
+    const now = this.scene.time.now;
+    if (this.escapePlumeFrame === now) return;
+    this.escapePlumeFrame = now;
+
+    const engine = this.getEscapeEngineWorldPosition();
+    thruster.setPosition(engine.x, engine.y);
+    thruster.emitParticle();
+    thruster.emitParticle();
+
+    if (this.escapeSmoke) {
+      this.escapeSmokeAt += delta;
+      if (this.escapeSmokeAt >= 16) {
+        this.escapeSmokeAt = 0;
+        const perpRad = escape.rotation;
+        for (const spread of [0, 3, -3, 6, -6]) {
+          this.escapeSmoke.emitParticleAt(
+            engine.x + Math.cos(perpRad) * spread,
+            engine.y + Math.sin(perpRad) * spread,
+          );
+        }
+      }
+    }
+  }
+
+  collectFailEscapeTrailLights(trailRadius: number): TrailDarknessLight[] {
+    return this.collectEmitterTrailLights(this.escapeThruster, trailRadius, 8);
+  }
+
+  private createEscapePlumes(): void {
+    const tint = this.thrusterTint();
+    const exhaustDeg = () => {
+      const facing = this.escapeModule?.rotation ?? 0;
+      return Phaser.Math.RadToDeg(facing) + 90;
+    };
+
+    this.escapeThruster = this.scene.add.particles(0, 0, 'particle', {
+      speed: { min: 60 * ESCAPE_PLUME_SCALE, max: 140 * ESCAPE_PLUME_SCALE },
+      scale: { start: 1.4 * ESCAPE_PLUME_SCALE, end: 0.1 * ESCAPE_PLUME_SCALE },
+      alpha: { start: 0.95, end: 0 },
+      lifespan: 700 * ESCAPE_PLUME_SCALE,
+      angle: {
+        onEmit: () => Phaser.Math.FloatBetween(exhaustDeg() - 12, exhaustDeg() + 12),
+      },
+      frequency: -1,
+      tint,
+    });
+    this.escapeThruster.setDepth(11);
+
+    this.escapeSmoke = this.scene.add.particles(0, 0, 'smoke-particle', {
+      speed: { min: 0, max: 2 * ESCAPE_PLUME_SCALE },
+      scale: { start: 0.85 * ESCAPE_PLUME_SCALE, end: 0.3 * ESCAPE_PLUME_SCALE },
+      alpha: { start: 0.28, end: 0 },
+      lifespan: 900 * ESCAPE_PLUME_SCALE,
+      rotate: {
+        onEmit: () => exhaustDeg() + Phaser.Math.FloatBetween(-8, 8),
+      },
+      frequency: -1,
+      tint,
+    });
+    this.escapeSmoke.setDepth(10);
+    this.escapeSmokeAt = 0;
+  }
+
+  private getEscapeEngineWorldPosition(): { x: number; y: number } {
+    const escape = this.escapeModule;
+    if (!escape) return { x: this.x, y: this.y };
+    escape.getWorldTransformMatrix(this.worldMatrix);
+    this.worldMatrix.transformPoint(0, ESCAPE_ENGINE_OFFSET_Y, this.engineWorldPos);
+    return { x: this.engineWorldPos.x, y: this.engineWorldPos.y };
+  }
+
+  private clearFailEscape(): void {
+    this.escapeModule?.destroy();
+    this.escapeModule = undefined;
+    this.escapeThruster?.destroy();
+    this.escapeThruster = undefined;
+    this.escapeSmoke?.destroy();
+    this.escapeSmoke = undefined;
   }
 
   updateThruster(_time: number, _delta: number): void {
@@ -708,21 +802,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * Intensity tracks particle alpha; dead particles are skipped.
    * Capped + strided so dark levels stay smooth (smoke is omitted — too dense).
    */
-  collectTrailDarknessLights(
-    trailRadius: number,
-  ): Array<{ x: number; y: number; radius: number; intensity: number; quality: 'simple' }> {
-    const lights: Array<{
-      x: number;
-      y: number;
-      radius: number;
-      intensity: number;
-      quality: 'simple';
-    }> = [];
+  collectTrailDarknessLights(trailRadius: number): TrailDarknessLight[] {
+    return this.collectEmitterTrailLights(this.thruster, trailRadius, 12);
+  }
 
-    const emitter = this.thruster;
+  private collectEmitterTrailLights(
+    emitter: Phaser.GameObjects.Particles.ParticleEmitter | undefined,
+    trailRadius: number,
+    maxLights: number,
+  ): TrailDarknessLight[] {
+    const lights: TrailDarknessLight[] = [];
     if (!emitter || !emitter.active || !emitter.visible) return lights;
 
-    const maxLights = 12;
     const alive = emitter.getAliveParticleCount();
     if (alive <= 0) return lights;
 
@@ -755,6 +846,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.deactivateInvisibility();
     this.deactivateBoostMode(false);
     this.clearMercyInvincibility();
+    if (this.escapeModule) {
+      this.scene.tweens.killTweensOf(this.escapeModule);
+    }
+    this.clearFailEscape();
     this.thruster?.destroy();
     this.smokeTrail?.destroy();
     this.rainbowShipGfx?.destroy();
