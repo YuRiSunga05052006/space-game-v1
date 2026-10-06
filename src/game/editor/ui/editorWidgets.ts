@@ -314,6 +314,64 @@ export function createDomNumberInput(
   };
 }
 
+/** Drag control for a whole-number range, with the current value shown beside it. */
+export function createRangeRow(
+  scene: Phaser.Scene,
+  label: string,
+  value: number,
+  min: number,
+  max: number,
+  onChange: (next: number) => void,
+): Phaser.GameObjects.Container {
+  const root = scene.add.container(0, 0);
+  root.add(scene.add.text(-150, 0, label, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '13px',
+    color: '#ccddee',
+  }).setOrigin(0, 0.5));
+
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.min = String(min);
+  input.max = String(max);
+  input.step = '1';
+  input.value = String(Phaser.Math.Clamp(Math.round(value), min, max));
+  input.style.cssText = [
+    'width:120px',
+    'height:28px',
+    'margin:0',
+    'accent-color:#00d4ff',
+    'background:transparent',
+    'cursor:pointer',
+  ].join(';');
+
+  const valueText = scene.add.text(145, 0, input.value, {
+    fontFamily: 'Orbitron, sans-serif',
+    fontSize: '13px',
+    color: '#00d4ff',
+  }).setOrigin(0.5);
+
+  const commit = (playSound: boolean) => {
+    const parsed = parseInt(input.value, 10);
+    const next = Number.isFinite(parsed) ? Phaser.Math.Clamp(parsed, min, max) : min;
+    input.value = String(next);
+    valueText.setText(String(next));
+    if (playSound) {
+      void initAudio().then(() => playSfx('ui'));
+    }
+    onChange(next);
+  };
+
+  input.addEventListener('input', () => commit(false));
+  input.addEventListener('change', () => commit(true));
+  input.addEventListener('pointerdown', (e) => e.stopPropagation());
+  input.addEventListener('mousedown', (e) => e.stopPropagation());
+  input.addEventListener('touchstart', (e) => e.stopPropagation());
+
+  root.add([scene.add.dom(50, 0, input).setOrigin(0.5), valueText]);
+  return root;
+}
+
 export function createStepperRow(
   scene: Phaser.Scene,
   label: string,

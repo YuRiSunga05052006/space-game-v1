@@ -27,6 +27,10 @@ import { Wormhole } from '../entities/Wormhole';
 import { FinishPanel } from '../entities/FinishPanel';
 import { WarpPanel } from '../entities/WarpPanel';
 import { Comet } from '../entities/Comet';
+import { IcePanel } from '../entities/IcePanel';
+import { PlasmaBall } from '../entities/PlasmaBall';
+import { Fan } from '../entities/Fan';
+import { RabiesShip, RABIES_BODY_DAMAGE, type RabiesShot } from '../entities/RabiesShip';
 import { Mine, type MineVariant } from '../entities/Mine';
 import { MineCarrier } from '../entities/MineCarrier';
 import { Planet } from '../entities/Planet';
@@ -106,6 +110,7 @@ import {
   canUseMineCarriers,
   canUsePurpleMines,
   canUseRedMines,
+  canUseWorld4EditorContent,
   getAreaContent,
   getCustomLevel,
   getEffectiveIntervalMs,
@@ -153,6 +158,9 @@ import {
   unlockSecretWise0855,
   completeSecretWise0855,
   onLevel20Cleared,
+  onLevel38Cleared,
+  unlockSecretCassini,
+  completeSecretCassini,
 } from '../worldProgress';
 import { getSecretLevel, getSecretsForWorld, getSecretWorldId } from '../secretLevels';
 import {
@@ -176,6 +184,12 @@ import {
   isWorld3VariantLevel,
   pickWorld3StoryEnemyVariant,
 } from '../world3/storyEnemyVariants';
+import {
+  getWorld4VariantDefinition,
+  hasWorld4Variants,
+  isWorld4VariantLevel,
+  pickWorld4StoryEnemyVariant,
+} from '../world4/storyEnemyVariants';
 import {
   applyAudioSettings,
   initAudio,
@@ -263,6 +277,10 @@ export class GameScene extends Phaser.Scene {
   private kamikazeWasps!: Phaser.Physics.Arcade.Group;
   private plasmaTurrets!: Phaser.Physics.Arcade.Group;
   private flamethrowerShips!: Phaser.Physics.Arcade.Group;
+  private rabiesShips!: Phaser.Physics.Arcade.Group;
+  private icePanels!: Phaser.Physics.Arcade.Group;
+  private plasmaBalls!: Phaser.Physics.Arcade.Group;
+  private fans!: Phaser.Physics.Arcade.Group;
   private firePlumes!: Phaser.Physics.Arcade.Group;
   private storyEnemies!: Phaser.Physics.Arcade.Group;
   private enemyLasers!: Phaser.Physics.Arcade.Group;
@@ -356,6 +374,9 @@ export class GameScene extends Phaser.Scene {
   private warpPanelSpawned = false;
   private darknessOverlay?: DarknessOverlay;
   private cometSpawnTimer = 0;
+  private iceSpawnTimer = 0;
+  private plasmaSpawnTimer = 0;
+  private fanSpawnTimer = 0;
   private mineSpawnTimer = 0;
   private planetSpawnTimer = 0;
   private moonSpawnTimer = 0;
@@ -495,6 +516,9 @@ export class GameScene extends Phaser.Scene {
     this.pendingSecretId = undefined;
     this.warpPanelSpawned = false;
     this.cometSpawnTimer = 0;
+    this.iceSpawnTimer = 0;
+    this.plasmaSpawnTimer = 0;
+    this.fanSpawnTimer = 0;
     this.mineSpawnTimer = 0;
     this.planetSpawnTimer = 0;
     this.moonSpawnTimer = 0;
@@ -531,11 +555,12 @@ export class GameScene extends Phaser.Scene {
 
     const secretDef = this.secretId ? getSecretLevel(this.secretId) : undefined;
     const editorBg = this.editorArea?.background;
+    const editorObstruction = editorBg?.obstruction ?? 0;
     const isDarkLevel = secretDef?.darkLevel === true
       || (this.gameMode === 'editor'
         && editorBg != null
         && !editorBg.starsEnabled
-        && editorBg.obstructionEnabled);
+        && editorObstruction > 0);
 
     const showStars = this.gameMode === 'editor'
       ? editorBg?.starsEnabled !== false
@@ -579,7 +604,10 @@ export class GameScene extends Phaser.Scene {
       const obstructionColor = this.gameMode === 'editor'
         ? (editorBg?.obstructionColor ?? 0x000000)
         : (secretDef?.darkObstructionColor ?? 0x000000);
-      this.darknessOverlay = new DarknessOverlay(this, obstructionColor);
+      const obstructionAlpha = this.gameMode === 'editor'
+        ? Phaser.Math.Clamp(editorObstruction, 0, 100) / 100
+        : 1;
+      this.darknessOverlay = new DarknessOverlay(this, obstructionColor, obstructionAlpha);
     }
 
     initAudio();
@@ -675,6 +703,10 @@ export class GameScene extends Phaser.Scene {
     this.kamikazeWasps = this.physics.add.group();
     this.plasmaTurrets = this.physics.add.group();
     this.flamethrowerShips = this.physics.add.group();
+    this.rabiesShips = this.physics.add.group();
+    this.icePanels = this.physics.add.group();
+    this.plasmaBalls = this.physics.add.group();
+    this.fans = this.physics.add.group();
     this.firePlumes = this.physics.add.group();
     this.storyEnemies = this.physics.add.group();
     this.enemyLasers = this.physics.add.group();
@@ -1059,6 +1091,46 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.add.overlap(
       this.bullets,
+      this.rabiesShips,
+      this.onBulletHitRabies as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.bullets,
+      this.plasmaBalls,
+      this.onBulletHitPlasma as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.bullets,
+      this.fans,
+      this.onBulletHitFan as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.enemyLasers,
+      this.plasmaBalls,
+      this.onLaserHitIndestructible as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.enemyLasers,
+      this.fans,
+      this.onLaserHitIndestructible as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.bullets,
       this.storyEnemies,
       this.onBulletHitStoryEnemy as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
       undefined,
@@ -1109,6 +1181,22 @@ export class GameScene extends Phaser.Scene {
       this.player,
       this.plasmaTurrets,
       this.onPlayerHitTurret as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.rabiesShips,
+      this.onPlayerHitRabies as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.plasmaBalls,
+      this.onPlayerHitPlasma as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
       undefined,
       this,
     );
@@ -1191,6 +1279,7 @@ export class GameScene extends Phaser.Scene {
       this.kamikazeWasps,
       this.plasmaTurrets,
       this.flamethrowerShips,
+      this.rabiesShips,
       this.storyEnemies,
       this.mineCarriers,
       this.bossShips,
@@ -1479,6 +1568,62 @@ export class GameScene extends Phaser.Scene {
     shipObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
   ): void {
     this.handleEnemyRam(shipObj as FlamethrowerShip, FLAMETHROWER_BODY_DAMAGE, 10);
+  }
+
+  private onBulletHitRabies(
+    bulletObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    shipObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    this.applyBulletToScoredEnemy(
+      bulletObj as Phaser.Physics.Arcade.Sprite,
+      shipObj as RabiesShip,
+      8,
+    );
+  }
+
+  private onPlayerHitRabies(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    shipObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    this.handleEnemyRam(shipObj as RabiesShip, RABIES_BODY_DAMAGE, 8);
+  }
+
+  private onBulletHitPlasma(
+    bulletObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    _plasmaObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    (bulletObj as Phaser.Physics.Arcade.Sprite).destroy();
+  }
+
+  private onBulletHitFan(
+    bulletObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    _fanObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    (bulletObj as Phaser.Physics.Arcade.Sprite).destroy();
+  }
+
+  private onLaserHitIndestructible(
+    laserObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    _targetObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    (laserObj as Phaser.Physics.Arcade.Sprite).destroy();
+  }
+
+  private onPlayerHitPlasma(
+    _playerObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+    plasmaObj: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile,
+  ): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.player.isGhostMode()) return;
+    const plasma = plasmaObj as PlasmaBall;
+    if (!plasma.active || !plasma.canHurt(this.time.now)) return;
+    if (this.player.isInvincible() || this.player.isBoosting()) return;
+    plasma.markHurt(this.time.now);
+    if (this.player.isShielded()) {
+      this.player.absorbHit();
+      return;
+    }
+    this.takeDamage(plasma.bodyDamage);
   }
 
   private onPlayerHitStoryEnemy(
@@ -2211,6 +2356,7 @@ export class GameScene extends Phaser.Scene {
     else if (secretId === 'dawn') unlockSecretDawn();
     else if (secretId === 'galilean') unlockSecretGalilean();
     else if (secretId === 'wise0855') unlockSecretWise0855();
+    else if (secretId === 'cassini') unlockSecretCassini();
 
     const secretWorldId = getSecretWorldId(secretId);
     const entryLevel = getSecretLevel(secretId)?.entryLevel ?? 1;
@@ -2277,6 +2423,8 @@ export class GameScene extends Phaser.Scene {
       completeSecretWise0855();
       const unlockLevelId = getSecretLevel('wise0855')?.finishUnlockLevel ?? 32;
       unlockLevel(unlockLevelId);
+    } else if (this.secretId === 'cassini') {
+      completeSecretCassini();
     }
     this.triggerVictory(true);
   }
@@ -2639,6 +2787,7 @@ export class GameScene extends Phaser.Scene {
       kamikazeWasps: this.kamikazeWasps,
       plasmaTurrets: this.plasmaTurrets,
       flamethrowerShips: this.flamethrowerShips,
+      rabiesShips: this.rabiesShips,
       storyEnemies: this.storyEnemies,
       bossShips: this.bossShips,
     };
@@ -3208,6 +3357,10 @@ export class GameScene extends Phaser.Scene {
       onLevel20Cleared();
     }
 
+    if (this.storyLevel === 38 && !this.secretId) {
+      onLevel38Cleared();
+    }
+
     if (isSecretClear && this.secretId === 'iss') {
       unlockLevel(11);
     }
@@ -3234,6 +3387,8 @@ export class GameScene extends Phaser.Scene {
       victoryTitle = 'GALILEAN MOONS CLEAR!';
     } else if (isSecretClear && this.secretId === 'wise0855') {
       victoryTitle = 'WISE 0855-0714 CLEAR!';
+    } else if (isSecretClear && this.secretId === 'cassini') {
+      victoryTitle = 'CASSINI-HUYGENS CLEAR!';
     } else if (this.storyLevel === getMaxLevelSlots()) {
       victoryTitle = 'STORY COMPLETE!';
     } else {
@@ -4006,6 +4161,7 @@ export class GameScene extends Phaser.Scene {
         kamikazeWasps: this.kamikazeWasps,
         plasmaTurrets: this.plasmaTurrets,
         flamethrowerShips: this.flamethrowerShips,
+        rabiesShips: this.rabiesShips,
         storyEnemies: this.storyEnemies,
         bossShips: this.bossShips,
       },
@@ -4137,6 +4293,13 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    if (this.worldId === 'world4' && hasWorld4Variants(this.storyLevel)) {
+      const definition = pickWorld4StoryEnemyVariant(this.storyLevel, this.getStoryEnemyCounts());
+      if (!definition) return;
+      this.addStoryEnemy(definition);
+      return;
+    }
+
     if (this.worldId === 'world3' && hasWorld3Variants(this.storyLevel)) {
       const definition = pickWorld3StoryEnemyVariant(this.storyLevel, this.getStoryEnemyCounts());
       if (!definition) return;
@@ -4156,9 +4319,11 @@ export class GameScene extends Phaser.Scene {
 
     const base = isGalileanMoonLevel(level)
       ? getGalileanMoonEnemyDefinition(level)
-      : isWorld3VariantLevel(level)
-        ? getWorld3VariantDefinition(level)
-        : getStoryEnemyDefinition(this.worldId, level);
+      : isWorld4VariantLevel(level)
+        ? getWorld4VariantDefinition(level)
+        : isWorld3VariantLevel(level)
+          ? getWorld3VariantDefinition(level)
+          : getStoryEnemyDefinition(this.worldId, level);
     const scaled = scaleStoryEnemyDefinition(base, this.score);
     this.addStoryEnemy(scaled);
   }
@@ -4191,6 +4356,7 @@ export class GameScene extends Phaser.Scene {
       turret: this.plasmaTurrets.countActive(true),
       mineCarrier: this.mineCarriers.countActive(true),
       flamethrower: this.flamethrowerShips.countActive(true),
+      rabies: this.rabiesShips.countActive(true),
     };
   }
 
@@ -4246,7 +4412,29 @@ export class GameScene extends Phaser.Scene {
         ship.setVelocity(config.velocityX, config.velocityY);
         break;
       }
+      case 'rabies': {
+        const config = RabiesShip.randomConfig();
+        const ship = new RabiesShip(this, config, (lx, ly, angle, shot) => {
+          this.fireRabiesLaser(lx, ly, angle, shot);
+        });
+        this.rabiesShips.add(ship);
+        ship.setVelocity(config.velocityX, config.velocityY);
+        break;
+      }
     }
+  }
+
+  private fireRabiesLaser(x: number, y: number, angle: number, shot: RabiesShot): void {
+    const textureKey = shot.style === 'pink'
+      ? 'enemy-laser-pink'
+      : shot.style === 'purple'
+        ? 'boss-special-laser'
+        : 'enemy-laser';
+    this.fireEnemyLaser(x, y, angle, {
+      damage: shot.damage,
+      isSpecial: shot.isSpecial,
+      textureKey,
+    });
   }
 
   private updateEnemies(time: number, delta: number): void {
@@ -4293,6 +4481,18 @@ export class GameScene extends Phaser.Scene {
       const ship = child as FlamethrowerShip;
       ship.tryFire(time, px, py);
       applyChillDriftVelocity(ship, time);
+      return true;
+    });
+
+    this.rabiesShips.children.each((child) => {
+      const ship = child as RabiesShip;
+      ship.tryFire(time, px, py);
+      applyChillDriftVelocity(ship, time);
+      return true;
+    });
+
+    this.fans.children.each((child) => {
+      (child as Fan).updateFan(delta);
       return true;
     });
 
@@ -4532,6 +4732,30 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
+    this.rabiesShips.children.each((child) => {
+      const ship = child as RabiesShip;
+      if (ship.isOffScreen()) ship.destroy();
+      return true;
+    });
+
+    this.icePanels.children.each((child) => {
+      const panel = child as IcePanel;
+      if (panel.isOffScreen()) panel.destroy();
+      return true;
+    });
+
+    this.plasmaBalls.children.each((child) => {
+      const ball = child as PlasmaBall;
+      if (ball.isOffScreen()) ball.destroy();
+      return true;
+    });
+
+    this.fans.children.each((child) => {
+      const fan = child as Fan;
+      if (fan.isOffScreen()) fan.destroy();
+      return true;
+    });
+
     this.storyEnemies.children.each((child) => {
       const enemy = child as StoryEnemy;
       if (enemy.isOffScreen()) enemy.destroy();
@@ -4615,12 +4839,12 @@ export class GameScene extends Phaser.Scene {
       if (!o) return false;
       return o.planets.enabled || o.moons.enabled;
     }
-    if (this.secretId === 'galilean' || this.secretId === 'wise0855') return true;
+    if (this.secretId === 'galilean' || this.secretId === 'wise0855' || this.secretId === 'cassini') return true;
     if (this.secretId) return false;
     if (this.gameMode === 'survival') {
-      return this.worldId === 'world2' || this.worldId === 'world3';
+      return this.worldId === 'world2' || this.worldId === 'world3' || this.worldId === 'world4';
     }
-    return false;
+    return this.gameMode === 'story' && this.storyLevel >= 39;
   }
 
   private shouldSpawnCelestialContent(): boolean {
@@ -4631,12 +4855,104 @@ export class GameScene extends Phaser.Scene {
     if (this.gameMode === 'editor') {
       return this.editorArea?.obstacles.brownMines.enabled === true;
     }
-    if (this.secretId === 'galilean' || this.secretId === 'wise0855') return true;
+    if (this.secretId === 'galilean' || this.secretId === 'wise0855' || this.secretId === 'cassini') return true;
     if (this.secretId) return false;
     if (this.gameMode === 'survival') {
-      return this.worldId === 'world2' || this.worldId === 'world3';
+      return this.worldId === 'world2' || this.worldId === 'world3' || this.worldId === 'world4';
     }
-    return false;
+    return this.gameMode === 'story' && this.storyLevel >= 39;
+  }
+
+  private shouldSpawnIcePanels(): boolean {
+    if (this.gameMode === 'editor') {
+      return this.editorArea?.obstacles.icePanels?.enabled === true;
+    }
+    if (this.secretId === 'galilean' || this.secretId === 'wise0855' || this.secretId === 'cassini') return true;
+    if (this.secretId) return false;
+    if (this.gameMode === 'survival') {
+      return this.worldId === 'world2' || this.worldId === 'world3' || this.worldId === 'world4';
+    }
+    return this.gameMode === 'story' && this.storyLevel >= 42;
+  }
+
+  private shouldSpawnPlasmaBalls(): boolean {
+    if (this.gameMode === 'editor') {
+      return this.editorArea?.obstacles.plasmaBalls?.enabled === true;
+    }
+    if (this.secretId) return false;
+    if (this.gameMode === 'survival') return this.worldId === 'world4';
+    return this.gameMode === 'story' && this.storyLevel >= 44;
+  }
+
+  private shouldSpawnFans(): boolean {
+    if (this.gameMode === 'editor') {
+      return this.editorArea?.obstacles.fans?.enabled === true;
+    }
+    if (this.secretId) return false;
+    if (this.gameMode === 'survival') return this.worldId === 'world4';
+    return this.gameMode === 'story' && this.storyLevel >= 46;
+  }
+
+  private spawnIcePanel(): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.icePanels.countActive(true) >= 3) return;
+    const config = IcePanel.randomConfig();
+    const panel = new IcePanel(this, config);
+    this.icePanels.add(panel);
+    panel.setVelocity(config.velocityX, config.velocityY);
+  }
+
+  private spawnPlasmaBall(): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.plasmaBalls.countActive(true) >= 3) return;
+    const config = PlasmaBall.randomConfig();
+    const ball = new PlasmaBall(this, config);
+    this.plasmaBalls.add(ball);
+    ball.setVelocity(config.velocityX, config.velocityY);
+  }
+
+  private spawnFan(): void {
+    if (this.isGameOver || this.isPaused) return;
+    if (this.fans.countActive(true) >= 2) return;
+    const config = Fan.randomConfig();
+    const fan = new Fan(this, config);
+    this.fans.add(fan);
+    fan.setVelocity(config.velocityX, config.velocityY);
+  }
+
+  private applySurfaceEffects(delta: number): void {
+    let slipping = false;
+    this.icePanels.children.each((child) => {
+      const panel = child as IcePanel;
+      if (!panel.active) return true;
+      if (panel.containsPoint(this.player.x, this.player.y)) slipping = true;
+      this.mines.children.each((mineChild) => {
+        const mine = mineChild as Mine;
+        if (mine.active && mine.isKickMine && mine.isArmed && panel.containsPoint(mine.x, mine.y)) {
+          mine.boostSlide(170);
+        }
+        return true;
+      });
+      return true;
+    });
+    this.player.setSlipping(slipping);
+
+    this.fans.children.each((child) => {
+      const fan = child as Fan;
+      if (!fan.active || !fan.isGusting) return true;
+      const accel = fan.windAcceleration();
+      if (fan.containsInWind(this.player.x, this.player.y)) {
+        this.player.applyAcceleration(accel.x, accel.y, delta);
+      }
+      this.mines.children.each((mineChild) => {
+        const mine = mineChild as Mine;
+        if (mine.active && mine.isKickMine && mine.isArmed && fan.containsInWind(mine.x, mine.y)) {
+          mine.applyAcceleration(accel.x, accel.y, delta);
+        }
+        return true;
+      });
+      return true;
+    });
   }
 
   private countPlanetsOnScreen(): number {
@@ -4815,8 +5131,9 @@ export class GameScene extends Phaser.Scene {
     if (
       this.secretId === 'iss'
       || this.secretId === 'dawn'
-      || this.secretId === 'galilean'
+      ||       this.secretId === 'galilean'
       || this.secretId === 'wise0855'
+      || this.secretId === 'cassini'
     ) {
       return true;
     }
@@ -4825,11 +5142,13 @@ export class GameScene extends Phaser.Scene {
     if (this.gameMode === 'survival') {
       return this.worldId === 'world1'
         || this.worldId === 'world2'
-        || this.worldId === 'world3';
+        || this.worldId === 'world3'
+        || this.worldId === 'world4';
     }
 
-    // Story: World 3 L21+ (gray/blue). Red/purple stay Survival W3-only.
-    return this.worldId === 'world3' && this.storyLevel >= 21;
+    // Story: World 3 L21+ and World 4 (gray/blue, plus brown from L39).
+    return (this.worldId === 'world3' && this.storyLevel >= 21)
+      || (this.worldId === 'world4' && this.storyLevel >= 39);
   }
 
   private pickMineVariant(): MineVariant | null {
@@ -4841,14 +5160,14 @@ export class GameScene extends Phaser.Scene {
       return variants[Phaser.Math.Between(0, variants.length - 1)];
     }
 
-    if (this.secretId === 'galilean') {
+    if (this.secretId === 'galilean' || this.secretId === 'cassini') {
       const variants: MineVariant[] = ['gray', 'blue', 'brown'];
       return variants[Phaser.Math.Between(0, variants.length - 1)];
     }
 
     const canSpawnAdvanced =
       this.gameMode === 'survival'
-      && this.worldId === 'world3'
+      && (this.worldId === 'world3' || this.worldId === 'world4')
       && !this.secretId;
 
     if (canSpawnAdvanced) {
@@ -4860,6 +5179,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.gameMode === 'survival' && this.worldId === 'world2' && !this.secretId) {
+      const variants: MineVariant[] = ['gray', 'blue', 'brown'];
+      return variants[Phaser.Math.Between(0, variants.length - 1)];
+    }
+
+    if (this.gameMode === 'story' && this.storyLevel >= 39 && this.shouldSpawnBrownMines()) {
       const variants: MineVariant[] = ['gray', 'blue', 'brown'];
       return variants[Phaser.Math.Between(0, variants.length - 1)];
     }
@@ -5080,6 +5404,13 @@ export class GameScene extends Phaser.Scene {
       0.5,
     );
     pushEnemyShipLights(
+      this.rabiesShips,
+      LIGHT_RADIUS.enemySpotlight,
+      0.65,
+      LIGHT_RADIUS.enemyBeamHalfWidth,
+      0.5,
+    );
+    pushEnemyShipLights(
       this.flamethrowerShips,
       LIGHT_RADIUS.enemySpotlight,
       0.65,
@@ -5203,6 +5534,7 @@ export class GameScene extends Phaser.Scene {
           kamikazeWasps: this.kamikazeWasps,
           plasmaTurrets: this.plasmaTurrets,
           flamethrowerShips: this.flamethrowerShips,
+          rabiesShips: this.rabiesShips,
           storyEnemies: this.storyEnemies,
         },
         delta,
@@ -5225,6 +5557,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.syncRocketEngineSound();
+    this.applySurfaceEffects(delta);
     this.player.updateThruster(time, delta);
     if (!this.isHitStunned) {
       this.player.clampToBounds();
@@ -5287,6 +5620,24 @@ export class GameScene extends Phaser.Scene {
         this.moonSpawnTimer = 0;
         if (Math.random() < MOON_SPAWN_CHANCE) this.spawnMoon();
       }
+    }
+
+    this.iceSpawnTimer += delta;
+    if (this.shouldSpawnIcePanels() && this.iceSpawnTimer >= 7000) {
+      this.iceSpawnTimer = 0;
+      if (Math.random() < 0.55) this.spawnIcePanel();
+    }
+
+    this.plasmaSpawnTimer += delta;
+    if (this.shouldSpawnPlasmaBalls() && this.plasmaSpawnTimer >= 8000) {
+      this.plasmaSpawnTimer = 0;
+      if (Math.random() < 0.5) this.spawnPlasmaBall();
+    }
+
+    this.fanSpawnTimer += delta;
+    if (this.shouldSpawnFans() && this.fanSpawnTimer >= 9000) {
+      this.fanSpawnTimer = 0;
+      if (Math.random() < 0.45) this.spawnFan();
     }
 
     this.difficultyTimer += delta;
@@ -5467,6 +5818,23 @@ export class GameScene extends Phaser.Scene {
     tickCelestialRule(area.obstacles.planets, () => this.spawnPlanet(), 'planetSpawnTimer');
     tickCelestialRule(area.obstacles.moons, () => this.spawnMoon(), 'moonSpawnTimer');
 
+    const tickWorld4Hazard = (
+      rule: typeof area.obstacles.icePanels,
+      spawn: () => void,
+      timerKey: 'iceSpawnTimer' | 'plasmaSpawnTimer' | 'fanSpawnTimer',
+    ) => {
+      if (!rule.enabled || !canUseWorld4EditorContent()) return;
+      this[timerKey] += delta;
+      const interval = getEffectiveIntervalMs(rule, this.score, elapsed);
+      if (this[timerKey] >= interval) {
+        this[timerKey] = 0;
+        if (Math.random() < rule.chance) spawn();
+      }
+    };
+    tickWorld4Hazard(area.obstacles.icePanels, () => this.spawnIcePanel(), 'iceSpawnTimer');
+    tickWorld4Hazard(area.obstacles.plasmaBalls, () => this.spawnPlasmaBall(), 'plasmaSpawnTimer');
+    tickWorld4Hazard(area.obstacles.fans, () => this.spawnFan(), 'fanSpawnTimer');
+
     const blackHoleRule = area.obstacles.blackHoles;
     if (blackHoleRule.enabled) {
       this.editorBlackHoleTimer = (this.editorBlackHoleTimer ?? 0) + delta;
@@ -5554,6 +5922,9 @@ export class GameScene extends Phaser.Scene {
           if ((counts[parsed.level] ?? 0) >= rule.maxOnScreen) continue;
           if (parsed.galilean || isGalileanMoonLevel(parsed.level)) {
             const definition = getGalileanMoonEnemyDefinition(parsed.level);
+            this.addStoryEnemy(definition);
+          } else if (parsed.world4Variant || isWorld4VariantLevel(parsed.level)) {
+            const definition = getWorld4VariantDefinition(parsed.level);
             this.addStoryEnemy(definition);
           } else if (parsed.world3Variant || isWorld3VariantLevel(parsed.level)) {
             const definition = getWorld3VariantDefinition(parsed.level);

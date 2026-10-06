@@ -47,17 +47,28 @@ import { isPowerUpOwned, type UpgradablePowerUpId } from './playerPowerUps';
 import { BOSS_DEFINITIONS as WORLD1_BOSSES } from './world1/bosses';
 import { BOSS_DEFINITIONS as WORLD2_BOSSES } from './world2/bosses';
 import { BOSS_DEFINITIONS as WORLD3_BOSSES } from './world3/bosses';
+import { BOSS_DEFINITIONS as WORLD4_BOSSES } from './world4/bosses';
 import { STORY_ENEMY_DEFINITIONS as WORLD1_STORY_ENEMIES, type StoryEnemyBehavior } from './world1/storyEnemyDefinitions';
 import { STORY_ENEMY_DEFINITIONS as WORLD2_STORY_ENEMIES } from './world2/storyEnemyDefinitions';
-import { GALILEAN_MOON_ENEMIES } from './world2/galileanEnemies';
+import { GALILEAN_MOON_ENEMIES, GALILEAN_SWARM_DRONE_GROUP } from './world2/galileanEnemies';
 import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from './world3/storyEnemyDefinitions';
 import {
   hasWorld3Variants,
+  WORLD3_STORY_ENEMY_GROUPS,
   WORLD3_STORY_ENEMY_VARIANTS,
 } from './world3/storyEnemyVariants';
+import { STORY_ENEMY_DEFINITIONS as WORLD4_STORY_ENEMIES } from './world4/storyEnemyDefinitions';
+import {
+  hasWorld4Variants,
+  WORLD4_STORY_ENEMY_GROUPS,
+  WORLD4_STORY_ENEMY_VARIANTS,
+} from './world4/storyEnemyVariants';
 import { getStoryEnemyUnlockScore, getSurvivalBossUnlockScore } from './survivalSpawn';
-import { FLAMETHROWER_UNLOCK_SCORE, MINE_CARRIER_UNLOCK_SCORE } from './enemies';
-import { isWorld2Unlocked, isWorld3Unlocked } from './worldProgress';
+import { FLAMETHROWER_UNLOCK_SCORE, MINE_CARRIER_UNLOCK_SCORE, RABIES_UNLOCK_SCORE } from './enemies';
+import { isWorld2Unlocked, isWorld3Unlocked, isWorld4Unlocked } from './worldProgress';
+import { PLASMA_BALL_DAMAGE } from './entities/PlasmaBall';
+import { RABIES_BODY_DAMAGE, RABIES_HEALTH, RABIES_PINK_DAMAGE, RABIES_POINTS } from './entities/RabiesShip';
+import { BOSS_SPECIAL_LASER_DAMAGE, LASER_DAMAGE } from './entities/EnemyLaser';
 
 export type AlmanacCategory =
   | 'asteroid'
@@ -67,6 +78,7 @@ export type AlmanacCategory =
   | 'enemy'
   | 'boss'
   | 'mine'
+  | 'hazard'
   | 'misc';
 export type AlmanacPage =
   | 'shared'
@@ -93,6 +105,8 @@ export interface AlmanacEntry {
   requiresWorld2?: boolean;
   /** When true, only shown on Shared after World 3 unlock. */
   requiresWorld3?: boolean;
+  /** When true, only shown on Shared after World 4 unlock. */
+  requiresWorld4?: boolean;
   /** When set, only shown after buying this power-up in the Shop (level ≥ 1). */
   requiresShopPowerUp?: Extract<UpgradablePowerUpId, 'shield' | 'invisibility' | 'fuelTank'>;
 }
@@ -305,6 +319,19 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     almanacPage: 'shared',
   },
   {
+    id: 'enemy-flamethrower',
+    category: 'enemy',
+    name: 'Flamethrower',
+    textureKey: 'flamethrower-ship',
+    textureScale: 1.1,
+    subtitle: `Story W2+ · W2+ secrets · Survival W2+ ${FLAMETHROWER_UNLOCK_SCORE}+ score`,
+    description:
+      'Summons aimed fire bursts instead of lasers. Standing in the flame deals continuous damage. No lingering residue after the burst ends. Appears in regular and secret levels in World 2 or later, and World 2 Survival or higher.',
+    stats: `HP ${FLAMETHROWER_HEALTH} · Body DMG ${FLAMETHROWER_BODY_DAMAGE} · Fire ${FIRE_DAMAGE} / ${FIRE_TICK_MS / 1000}s · ${FLAMETHROWER_POINTS} pts`,
+    almanacPage: 'shared',
+    requiresWorld2: true,
+  },
+  {
     id: 'enemy-mine-carrier',
     category: 'enemy',
     name: 'Mine Carrier',
@@ -318,17 +345,17 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     requiresWorld3: true,
   },
   {
-    id: 'enemy-flamethrower',
+    id: 'enemy-rabies',
     category: 'enemy',
-    name: 'Flamethrower',
-    textureKey: 'flamethrower-ship',
-    textureScale: 1.1,
-    subtitle: `Story W2+ · W2+ secrets · Survival W2+ ${FLAMETHROWER_UNLOCK_SCORE}+ score`,
+    name: 'Rabies Ship',
+    textureKey: 'rabies-ship',
+    textureScale: 1,
+    subtitle: `Story L42+ · World 4 Survival ${RABIES_UNLOCK_SCORE}+ score`,
     description:
-      'Summons aimed fire bursts instead of lasers. Standing in the flame deals continuous damage. No lingering residue after the burst ends. Appears in regular and secret levels in World 2 or later, and World 2 Survival or higher.',
-    stats: `HP ${FLAMETHROWER_HEALTH} · Body DMG ${FLAMETHROWER_BODY_DAMAGE} · Fire ${FIRE_DAMAGE} / ${FIRE_TICK_MS / 1000}s · ${FLAMETHROWER_POINTS} pts`,
+      `Fires one laser at a time for its whole life: the first 4 shots are red (${LASER_DAMAGE} damage), the next 4 are pink (${RABIES_PINK_DAMAGE} damage), and every shot after that is a purple boss-special laser (${BOSS_SPECIAL_LASER_DAMAGE} damage).`,
+    stats: `HP ${RABIES_HEALTH} · Body DMG ${RABIES_BODY_DAMAGE} · ${RABIES_POINTS} pts`,
     almanacPage: 'shared',
-    requiresWorld2: true,
+    requiresWorld4: true,
   },
 ];
 
@@ -343,7 +370,7 @@ const MINE_NAMES: Record<MineVariant, string> = {
 const MINE_SUBTITLES: Record<MineVariant, string> = {
   gray: 'Story W3 L21+ · All Survival · Secrets',
   blue: 'Story W3 L21+ · All Survival · Secrets',
-  brown: 'W2/W3 secrets · W2/W3 Survival · Editor',
+  brown: 'Story L39+ · W2/W3 secrets · W2+ Survival · Editor',
   red: 'Survival W3 · 6000+ · W3+ secrets',
   purple: 'Survival W3 · 9000+ score',
 };
@@ -354,7 +381,7 @@ const MINE_DESCRIPTIONS: Record<MineVariant, string> = {
   blue:
     'Small naval mine. Immune to lasers. Starts dormant: asteroids, comets, enemies, and non-blue mines pass through without detonating it. Player kicks or knocks from other blue mines arm it (unarmed blues ignore each other). Once armed, contact with hazards or non-blue mines explodes it; other blue mines only knock it again. Blast damages enemies and obstacles and can chain armed mines/carriers, but never damages you. Cannot damage Planets.',
   brown:
-    'Small naval mine. Immune to lasers. Functions like a Blue Mine (kick to arm, safe for the player) but once armed, direct contact also damages Planets. Can destroy Moons when armed. Appears in World 2/3 secret levels, World 2/3 Survival, and the Level Editor.',
+    'Small naval mine. Immune to lasers. Functions like a Blue Mine (kick to arm, safe for the player) but once armed, direct contact also damages Planets. Can destroy Moons when armed. Appears in regular levels from Level 39, World 2/3 secret levels, World 2 Survival and later, and the Level Editor.',
   red:
     'Medium naval mine. Immune to lasers. Player collision detonates a moderate blast that damages you (max on contact, less farther out) and can chain mines and Mine Carriers. Touching a Mine Carrier alone does not set it off. Appears in Survival World 3 (6000+ score) and secret levels in World 3 or later.',
   purple:
@@ -369,9 +396,9 @@ function buildPlanetEntries(): AlmanacEntry[] {
       name: 'Planet',
       textureKey: 'planet',
       textureScale: 1,
-      subtitle: 'W2/W3 secrets · W2/W3 Survival · Editor',
+      subtitle: 'Story L39+ · W2/W3 secrets · W2+ Survival · Editor',
       description:
-        'Large drifting world with strong gravity. Solid surface — your ship cannot pass through unless Invisible, invincible (Power Star), or boosting. Armed Blue Mines also collide with Planets. Destroy with those power-ups or a Death Bomb; phase through with Invisibility (you are pushed to the surface when Invisibility ends). Gray, Red, Purple, and armed Brown Mines damage it.',
+        'Large drifting world with strong gravity. Solid surface — your ship cannot pass through unless Invisible, invincible (Power Star), or boosting. Armed Blue Mines also collide with Planets. Destroy with those power-ups or a Death Bomb; phase through with Invisibility (you are pushed to the surface when Invisibility ends). Gray, Red, Purple, and armed Brown Mines damage it. Regular story levels from Hamal (Level 39) onward.',
       stats: `HP ${8} · Gravity R ${200} · ${50} pts`,
       almanacPage: 'shared',
     },
@@ -381,9 +408,9 @@ function buildPlanetEntries(): AlmanacEntry[] {
       name: 'Moon',
       textureKey: 'moon',
       textureScale: 1,
-      subtitle: 'W2/W3 secrets · W2/W3 Survival · Editor',
+      subtitle: 'Story L39+ · W2/W3 secrets · W2+ Survival · Editor',
       description:
-        'Smaller body with weaker gravity than a Planet. Solid surface for your ship — pass through only while Invisible, invincible (Power Star), or boosting (you are pushed to the surface when Invisibility ends). Destroy with Power Star, boost modes, Death Bomb, or armed Blue/Brown Mines; Blue Mines do not collide with Moons.',
+        'Smaller body with weaker gravity than a Planet. Solid surface for your ship — pass through only while Invisible, invincible (Power Star), or boosting (you are pushed to the surface when Invisibility ends). Destroy with Power Star, boost modes, Death Bomb, or armed Blue/Brown Mines; Blue Mines do not collide with Moons. Regular story levels from Hamal (Level 39) onward.',
       stats: `HP ${4} · Gravity R ${130} · ${30} pts`,
       almanacPage: 'shared',
     },
@@ -400,7 +427,7 @@ function buildMiscEntries(): AlmanacEntry[] {
       textureScale: 0.85,
       subtitle: 'Story · Secret level entry',
       description:
-        'Appears in Story Mode once you reach the score threshold on a secret-unlock level. Fly into it to enter that secret level (ISS, Dawn, Galilean Moons, WISE 0855, etc.).',
+        'Appears in Story Mode once you reach the score threshold on a secret-unlock level. Fly into it to enter that secret level (ISS, Dawn, Galilean Moons, Cassini-Huygens, WISE 0855, etc.).',
       stats: 'Entry portal · Score-gated',
       almanacPage: 'shared',
     },
@@ -412,7 +439,7 @@ function buildMiscEntries(): AlmanacEntry[] {
       textureScale: 0.9,
       subtitle: 'Story secrets · Level Editor',
       description:
-        'Cyan exit panel in secret levels that unlocks a new world when reached (e.g. ISS → World 2, Dawn → World 3). In the Level Editor, warps the player to a linked sub-area.',
+        'Cyan exit panel in secret levels that unlocks a new world when reached (e.g. ISS → World 2, Dawn → World 3, Cassini-Huygens → World 4). In the Level Editor, warps the player to a linked sub-area.',
       stats: 'Unlocks worlds / editor sub-areas',
       almanacPage: 'shared',
     },
@@ -429,15 +456,15 @@ function buildMiscEntries(): AlmanacEntry[] {
       almanacPage: 'shared',
     },
     {
-      id: 'misc-black-hole',
+      id: 'misc-gravity-field-lg',
       category: 'misc',
-      name: 'Black Hole',
-      textureKey: 'black-hole',
-      textureScale: 0.42,
+      name: 'Large Gravity Field',
+      textureKey: 'gravity-field-lg',
+      textureScale: 0.75,
       subtitle: 'Level Editor',
       description:
-        'Deadly singularity with Planet-level gravity. Contact destroys your ship unless bypassed with a Power Star, Invisibility, Fuel Tank, Engine, or Hyperdrive. Immune to lasers and all mines.',
-      stats: `Gravity R ${200} · Instant kill on contact`,
+        'Wide gravity zone matching a Planet\'s pull. No solid surface — only affects the player unless bypassed with a Power Star, Invisibility, Fuel Tank, Engine, or Hyperdrive.',
+      stats: `Gravity R ${200} · Planet strength`,
       almanacPage: 'shared',
     },
     {
@@ -450,18 +477,6 @@ function buildMiscEntries(): AlmanacEntry[] {
       description:
         'Invisible-strength gravity zone matching a Moon\'s pull. No solid surface — only affects the player unless bypassed with a Power Star, Invisibility, Fuel Tank, Engine, or Hyperdrive.',
       stats: `Gravity R ${130} · Moon strength`,
-      almanacPage: 'shared',
-    },
-    {
-      id: 'misc-gravity-field-lg',
-      category: 'misc',
-      name: 'Large Gravity Field',
-      textureKey: 'gravity-field-lg',
-      textureScale: 0.75,
-      subtitle: 'Level Editor',
-      description:
-        'Wide gravity zone matching a Planet\'s pull. No solid surface — only affects the player unless bypassed with a Power Star, Invisibility, Fuel Tank, Engine, or Hyperdrive.',
-      stats: `Gravity R ${200} · Planet strength`,
       almanacPage: 'shared',
     },
   ];
@@ -669,6 +684,199 @@ function buildWorld3VariantEntries(): AlmanacEntry[] {
     });
 }
 
+function insertEntriesAfterStoryLevel(
+  entries: AlmanacEntry[],
+  worldId: AlmanacPage,
+  afterLevel: number,
+  inserted: AlmanacEntry[],
+): AlmanacEntry[] {
+  const anchor = entries.findIndex((entry) => entry.id === `story-enemy-${worldId}-${afterLevel}`);
+  if (anchor < 0) return [...entries, ...inserted];
+  return [
+    ...entries.slice(0, anchor + 1),
+    ...inserted,
+    ...entries.slice(anchor + 1),
+  ];
+}
+
+/** Galilean moon ships sit between Jovian Swarm Drone and Ring Fragment Skimmer. */
+function buildOrderedWorld2StoryEntries(): AlmanacEntry[] {
+  return insertEntriesAfterStoryLevel(
+    buildStoryEnemyEntries(WORLD2_STORY_ENEMIES, 'world2', 'Story W2'),
+    'world2',
+    GALILEAN_SWARM_DRONE_GROUP.insertAfterLevel,
+    buildGalileanMoonEntries(),
+  );
+}
+
+/**
+ * Multi-star families occupy their parent story level's slot
+ * (Alpha Centauri between Proxima and Barnard, and so on).
+ */
+function buildOrderedWorld3StoryEntries(): AlmanacEntry[] {
+  const regular = buildWorld3StoryEnemyEntries();
+  const variants = buildWorld3VariantEntries();
+  const variantByLevel = new Map(variants.map((entry) => {
+    const level = Number(/variant-(\d+)$/.exec(entry.id)?.[1]);
+    return [level, entry] as const;
+  }));
+
+  const groups = [...WORLD3_STORY_ENEMY_GROUPS].sort((a, b) => a.parentLevel - b.parentLevel);
+  const result: AlmanacEntry[] = [];
+  let groupIndex = 0;
+
+  for (const entry of regular) {
+    const level = Number(/story-enemy-world3-(\d+)$/.exec(entry.id)?.[1]);
+    while (groupIndex < groups.length && groups[groupIndex].parentLevel < level) {
+      for (const variantLevel of groups[groupIndex].variantLevels) {
+        const variant = variantByLevel.get(variantLevel);
+        if (variant) result.push(variant);
+      }
+      groupIndex += 1;
+    }
+    result.push(entry);
+  }
+
+  while (groupIndex < groups.length) {
+    for (const variantLevel of groups[groupIndex].variantLevels) {
+      const variant = variantByLevel.get(variantLevel);
+      if (variant) result.push(variant);
+    }
+    groupIndex += 1;
+  }
+
+  return result;
+}
+
+function buildWorld4StoryEnemyEntries(): AlmanacEntry[] {
+  return Object.values(WORLD4_STORY_ENEMIES)
+    .filter((enemy) => !hasWorld4Variants(enemy.level))
+    .sort((a, b) => a.level - b.level)
+    .map((enemy) => {
+      const unlockScore = getStoryEnemyUnlockScore(enemy.level, 'world4');
+      return {
+        id: `story-enemy-world4-${enemy.level}`,
+        category: 'storyEnemy' as const,
+        name: enemy.enemyName,
+        textureKey: enemy.textureKey,
+        textureScale: 1,
+        subtitle: `Story W4 L${enemy.level} · Survival ${unlockScore}+ score`,
+        description: `${STORY_BEHAVIOR_DESCRIPTIONS[enemy.behavior]} Story levels use this enemy exclusively.${STORY_SURVIVAL_SUFFIX}`,
+        stats: `HP ${enemy.health} · DMG ${enemy.bodyDamage} · ${enemy.points} pts`,
+        almanacPage: 'world4' as const,
+      };
+    });
+}
+
+function buildWorld4VariantEntries(): AlmanacEntry[] {
+  return Object.values(WORLD4_STORY_ENEMY_VARIANTS)
+    .sort((a, b) => a.level - b.level)
+    .map((enemy) => {
+      const unlockScore = getStoryEnemyUnlockScore(enemy.level, 'world4');
+      return {
+        id: `story-enemy-world4-variant-${enemy.level}`,
+        category: 'storyEnemy' as const,
+        name: enemy.enemyName,
+        textureKey: enemy.textureKey,
+        textureScale: 1,
+        subtitle: `${enemy.groupName} · Story W4 L${enemy.parentLevel} · Survival ${unlockScore}+ score`,
+        description: `${STORY_BEHAVIOR_DESCRIPTIONS[enemy.behavior]} Variant of ${enemy.groupName}. Spawns in Story L${enemy.parentLevel} and World 4 Survival.${STORY_SURVIVAL_SUFFIX}`,
+        stats: `HP ${enemy.health} · DMG ${enemy.bodyDamage} · ${enemy.points} pts`,
+        almanacPage: 'world4' as const,
+      };
+    });
+}
+
+function buildOrderedWorld4StoryEntries(): AlmanacEntry[] {
+  const regular = buildWorld4StoryEnemyEntries();
+  const variants = buildWorld4VariantEntries();
+  const variantByLevel = new Map(variants.map((entry) => {
+    const level = Number(/variant-(\d+)$/.exec(entry.id)?.[1]);
+    return [level, entry] as const;
+  }));
+  const groups = [...WORLD4_STORY_ENEMY_GROUPS].sort((a, b) => a.parentLevel - b.parentLevel);
+  const result: AlmanacEntry[] = [];
+  let groupIndex = 0;
+
+  for (const entry of regular) {
+    const level = Number(/story-enemy-world4-(\d+)$/.exec(entry.id)?.[1]);
+    while (groupIndex < groups.length && groups[groupIndex].parentLevel < level) {
+      for (const variantLevel of groups[groupIndex].variantLevels) {
+        const variant = variantByLevel.get(variantLevel);
+        if (variant) result.push(variant);
+      }
+      groupIndex += 1;
+    }
+    result.push(entry);
+  }
+
+  while (groupIndex < groups.length) {
+    for (const variantLevel of groups[groupIndex].variantLevels) {
+      const variant = variantByLevel.get(variantLevel);
+      if (variant) result.push(variant);
+    }
+    groupIndex += 1;
+  }
+
+  return result;
+}
+
+function buildHazardEntries(): AlmanacEntry[] {
+  return [
+    {
+      id: 'hazard-ice-panel',
+      category: 'hazard',
+      name: 'Ice Panel',
+      textureKey: 'ice-panel',
+      textureScale: 0.45,
+      subtitle: 'Story L42+ · W2/W3 secrets · W2+ Survival',
+      description:
+        'Slippery panel. While your ship overlaps it, movement keeps momentum instead of snapping to full speed. Kicked blue and brown mines slide faster on the ice. Appears from Level 42, in World 2 and 3 secret levels, and in World 2 Survival and later.',
+      stats: 'Slip surface · No damage',
+      almanacPage: 'shared',
+      requiresWorld4: true,
+    },
+    {
+      id: 'hazard-plasma-ball',
+      category: 'hazard',
+      name: 'Plasma Ball',
+      textureKey: 'plasma-ball',
+      textureScale: 1,
+      subtitle: 'Story L44+ · World 4 Survival',
+      description:
+        'Drifting energy orb. Contact damages your ship. Lasers and mines cannot destroy it.',
+      stats: `DMG ${PLASMA_BALL_DAMAGE} · Indestructible`,
+      almanacPage: 'shared',
+      requiresWorld4: true,
+    },
+    {
+      id: 'hazard-fan',
+      category: 'hazard',
+      name: 'Fan',
+      textureKey: 'fan',
+      textureScale: 1,
+      subtitle: 'Story L46+ · World 4 Survival',
+      description:
+        'Blows wind in the direction it faces, gusting on and off. An active gust pushes your ship and kicked mines. Lasers and mines cannot hurt or destroy it.',
+      stats: 'Indestructible · Intermittent wind',
+      almanacPage: 'shared',
+      requiresWorld4: true,
+    },
+    {
+      id: 'hazard-black-hole',
+      category: 'hazard',
+      name: 'Black Hole',
+      textureKey: 'black-hole',
+      textureScale: 0.42,
+      subtitle: 'Level Editor',
+      description:
+        'Deadly singularity with Planet-level gravity. Contact destroys your ship unless bypassed with a Power Star, Invisibility, Fuel Tank, Engine, or Hyperdrive. Immune to lasers and all mines.',
+      stats: `Gravity R ${200} · Instant kill on contact`,
+      almanacPage: 'shared',
+    },
+  ];
+}
+
 export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   ...buildAsteroidEntries(),
   ...buildGoldAsteroidEntries(),
@@ -680,14 +888,15 @@ export const ALMANAC_ENTRIES: AlmanacEntry[] = [
   buildGoldCometEntry(),
   ...ENEMY_ENTRIES,
   ...buildMineEntries(),
+  ...buildHazardEntries(),
   ...buildStoryEnemyEntries(WORLD1_STORY_ENEMIES, 'world1', 'Story W1'),
   ...buildBossEntries(WORLD1_BOSSES, 'world1', 'Story W1'),
-  ...buildStoryEnemyEntries(WORLD2_STORY_ENEMIES, 'world2', 'Story W2'),
-  ...buildGalileanMoonEntries(),
+  ...buildOrderedWorld2StoryEntries(),
   ...buildBossEntries(WORLD2_BOSSES, 'world2', 'Story W2'),
-  ...buildWorld3StoryEnemyEntries(),
-  ...buildWorld3VariantEntries(),
+  ...buildOrderedWorld3StoryEntries(),
   ...buildBossEntries(WORLD3_BOSSES, 'world3', 'Story W3'),
+  ...buildOrderedWorld4StoryEntries(),
+  ...buildBossEntries(WORLD4_BOSSES, 'world4', 'Story W4'),
 ];
 
 const PAGE_SECTIONS: Record<AlmanacPage, { label: string; category: AlmanacCategory }[]> = {
@@ -697,6 +906,7 @@ const PAGE_SECTIONS: Record<AlmanacPage, { label: string; category: AlmanacCateg
     { label: 'PICKUPS', category: 'pickup' },
     { label: 'SURVIVAL ENEMIES', category: 'enemy' },
     { label: 'MINES', category: 'mine' },
+    { label: 'HAZARDS', category: 'hazard' },
     { label: 'MISC', category: 'misc' },
   ],
   world1: [
@@ -749,7 +959,7 @@ export function isAlmanacPageUnlocked(page: AlmanacPage): boolean {
   if (page === 'shared' || page === 'world1') return true;
   if (page === 'world2') return isWorld2Unlocked();
   if (page === 'world3') return isWorld3Unlocked();
-  // Worlds 4–8: visible in the tab bar, locked until those worlds ship.
+  if (page === 'world4') return isWorld4Unlocked();
   return false;
 }
 
@@ -757,10 +967,12 @@ export function getVisibleEntriesForPage(page: AlmanacPage): AlmanacEntry[] {
   if (!isAlmanacPageUnlocked(page)) return [];
   const world2Unlocked = isWorld2Unlocked();
   const world3Unlocked = isWorld3Unlocked();
+  const world4Unlocked = isWorld4Unlocked();
   return ALMANAC_ENTRIES.filter((entry) => {
     if (entry.almanacPage !== page) return false;
     if (entry.requiresWorld2 && !world2Unlocked && !world3Unlocked) return false;
     if (entry.requiresWorld3 && !world3Unlocked) return false;
+    if (entry.requiresWorld4 && !world4Unlocked) return false;
     if (entry.requiresShopPowerUp && !isPowerUpOwned(entry.requiresShopPowerUp)) return false;
     return true;
   });

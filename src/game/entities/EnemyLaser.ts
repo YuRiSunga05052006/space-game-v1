@@ -10,6 +10,7 @@ export interface EnemyLaserOptions {
   damage?: number;
   speed?: number;
   isSpecial?: boolean;
+  textureKey?: string;
 }
 
 export type EnemyLaserSprite = Phaser.Physics.Arcade.Sprite;
@@ -32,7 +33,7 @@ export function spawnEnemyLaser(
   laser.setVisible(true);
   laser.setRotation(angle + Math.PI / 2);
   laser.setDepth(isSpecial ? 8 : 7);
-  laser.setTexture(isSpecial ? 'boss-special-laser' : 'enemy-laser');
+  laser.setTexture(options.textureKey ?? (isSpecial ? 'boss-special-laser' : 'enemy-laser'));
   laser.clearTint();
   laser.setScale(isSpecial ? 1.5 : 1);
   laser.setData('damage', damage);

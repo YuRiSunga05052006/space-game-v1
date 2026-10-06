@@ -28,6 +28,7 @@ export interface MineBlastGroups {
   kamikazeWasps: Phaser.Physics.Arcade.Group;
   plasmaTurrets: Phaser.Physics.Arcade.Group;
   flamethrowerShips: Phaser.Physics.Arcade.Group;
+  rabiesShips: Phaser.Physics.Arcade.Group;
   storyEnemies: Phaser.Physics.Arcade.Group;
   bossShips: Phaser.Physics.Arcade.Group;
 }
@@ -291,6 +292,7 @@ export function detonateMineBlast(
       { group: groups.kamikazeWasps, explosionCount: 6 },
       { group: groups.plasmaTurrets, explosionCount: 8 },
       { group: groups.flamethrowerShips, explosionCount: 8 },
+      { group: groups.rabiesShips, explosionCount: 8 },
       { group: groups.storyEnemies, explosionCount: 8 },
     ];
 

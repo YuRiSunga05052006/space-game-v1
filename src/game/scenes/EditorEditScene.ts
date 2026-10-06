@@ -19,6 +19,7 @@ import {
 import {
   confirmYesNo,
   createDomTextInput,
+  createRangeRow,
   createRgbColorRow,
   createSpawnRuleBlock,
   createStepperRow,
@@ -29,7 +30,7 @@ import {
 } from '../editor/ui/editorWidgets';
 import { isPowerUpOwned } from '../playerPowerUps';
 import { createMenuButton } from '../ui/MenuButtons';
-import { isWorld2Unlocked, isWorld3Unlocked } from '../worldProgress';
+import { isWorld2Unlocked, isWorld3Unlocked, isWorld4Unlocked } from '../worldProgress';
 
 type EditPanel = 'menu' | 'objects' | 'obstacles' | 'enemies' | 'background' | 'misc' | 'save';
 type EnemyTab =
@@ -402,6 +403,15 @@ export class EditorEditScene extends Phaser.Scene {
     if (isEditorObstacleVisible('largeGravityFields')) {
       addRule('Large Gravity Fields', 'largeGravityFields', { showChance: true });
     }
+    if (isEditorObstacleVisible('icePanels')) {
+      addRule('Ice Panels', 'icePanels', { showChance: true });
+    }
+    if (isEditorObstacleVisible('plasmaBalls')) {
+      addRule('Plasma Balls', 'plasmaBalls', { showChance: true });
+    }
+    if (isEditorObstacleVisible('fans')) {
+      addRule('Fans', 'fans', { showChance: true });
+    }
 
     this.finalizeScroll(y);
     this.addBackToMenu();
@@ -411,6 +421,7 @@ export class EditorEditScene extends Phaser.Scene {
     if (tab === 'survival' || tab === 'world1') return true;
     if (tab === 'world2') return isWorld2Unlocked();
     if (tab === 'world3') return isWorld3Unlocked();
+    if (tab === 'world4') return isWorld4Unlocked();
     return false;
   }
 
@@ -574,12 +585,23 @@ export class EditorEditScene extends Phaser.Scene {
       y += 12;
     };
 
-    const renderWorld3StoryEnemies = () => {
-      const flatOpts = getVisibleStoryEnemyOptionsForWorld('world3');
-      const groups = getVisibleStoryEnemyGroupsForWorld('world3');
-      const flatByLevel = new Map(flatOpts.map((o) => [o.level, o]));
-      const groupByParent = new Map(groups.map((g) => [g.parentLevel, g]));
+    const addStoryGroup = (group: { groupName: string; variants: Array<{ id: string; name: string }> }) => {
+      panel.add(this.add.text(-150, y, group.groupName, {
+        fontFamily: 'Orbitron, sans-serif',
+        fontSize: '13px',
+        fontStyle: '700',
+        color: '#88bbdd',
+      }).setOrigin(0, 0.5));
+      y += 24;
 
+      for (const variant of group.variants) {
+        const { listIndex } = ensureStoryRule(variant.id);
+        addSingleEnemyRule(area.enemies.story, variant.name, listIndex, 16);
+      }
+      y += 8;
+    };
+
+    const addStoryEnemiesHeading = () => {
       panel.add(this.add.text(-150, y, 'Story enemies', {
         fontFamily: 'Orbitron, sans-serif',
         fontSize: '15px',
@@ -587,23 +609,66 @@ export class EditorEditScene extends Phaser.Scene {
         color: '#ffcc00',
       }).setOrigin(0, 0.5));
       y += 28;
+    };
+
+    const renderWorld2StoryEnemies = () => {
+      const flatOpts = getVisibleStoryEnemyOptionsForWorld('world2');
+      const groups = getVisibleStoryEnemyGroupsForWorld('world2');
+      const flatByLevel = new Map(flatOpts.map((o) => [o.level, o]));
+      const groupAfterLevel = new Map(
+        groups.filter((g) => g.insertAfterParent).map((g) => [g.parentLevel, g]),
+      );
+
+      addStoryEnemiesHeading();
+
+      for (let level = 11; level <= 20; level++) {
+        const flat = flatByLevel.get(level);
+        if (flat) {
+          const { listIndex } = ensureStoryRule(flat.id);
+          addSingleEnemyRule(area.enemies.story, flat.name, listIndex);
+        }
+        const group = groupAfterLevel.get(level);
+        if (group) addStoryGroup(group);
+      }
+      y += 12;
+    };
+
+    const renderWorld3StoryEnemies = () => {
+      const flatOpts = getVisibleStoryEnemyOptionsForWorld('world3');
+      const groups = getVisibleStoryEnemyGroupsForWorld('world3');
+      const flatByLevel = new Map(flatOpts.map((o) => [o.level, o]));
+      const groupByParent = new Map(groups.map((g) => [g.parentLevel, g]));
+
+      addStoryEnemiesHeading();
 
       for (let level = 21; level <= 38; level++) {
         const group = groupByParent.get(level);
-        if (group) {
-          panel.add(this.add.text(-150, y, group.groupName, {
-            fontFamily: 'Orbitron, sans-serif',
-            fontSize: '13px',
-            fontStyle: '700',
-            color: '#88bbdd',
-          }).setOrigin(0, 0.5));
-          y += 24;
+        if (group && !group.insertAfterParent) {
+          addStoryGroup(group);
+          continue;
+        }
 
-          for (const variant of group.variants) {
-            const { listIndex } = ensureStoryRule(variant.id);
-            addSingleEnemyRule(area.enemies.story, variant.name, listIndex, 16);
-          }
-          y += 8;
+        const flat = flatByLevel.get(level);
+        if (flat) {
+          const { listIndex } = ensureStoryRule(flat.id);
+          addSingleEnemyRule(area.enemies.story, flat.name, listIndex);
+        }
+      }
+      y += 12;
+    };
+
+    const renderWorld4StoryEnemies = () => {
+      const flatOpts = getVisibleStoryEnemyOptionsForWorld('world4');
+      const groups = getVisibleStoryEnemyGroupsForWorld('world4');
+      const flatByLevel = new Map(flatOpts.map((o) => [o.level, o]));
+      const groupByParent = new Map(groups.map((g) => [g.parentLevel, g]));
+
+      addStoryEnemiesHeading();
+
+      for (let level = 39; level <= 50; level++) {
+        const group = groupByParent.get(level);
+        if (group && !group.insertAfterParent) {
+          addStoryGroup(group);
           continue;
         }
 
@@ -627,8 +692,12 @@ export class EditorEditScene extends Phaser.Scene {
       );
     } else {
       const worldId = this.enemyTab;
-      if (worldId === 'world3') {
+      if (worldId === 'world2') {
+        renderWorld2StoryEnemies();
+      } else if (worldId === 'world3') {
         renderWorld3StoryEnemies();
+      } else if (worldId === 'world4') {
+        renderWorld4StoryEnemies();
       } else {
         const storyOpts = getVisibleStoryEnemyOptionsForWorld(worldId);
         addEnemyRules(
@@ -695,18 +764,15 @@ export class EditorEditScene extends Phaser.Scene {
     y += 36;
 
     if (!bg.starsEnabled) {
-      const obst = createToggleRow(this, 'Obstruction', bg.obstructionEnabled, (v) => {
-        bg.obstructionEnabled = v;
+      const obst = createRangeRow(this, 'Obstruction', bg.obstruction, 0, 100, (v) => {
+        bg.obstruction = v;
         this.markDirty();
-        this.render();
       });
       obst.setY(y);
       panel.add(obst);
       y += 36;
 
-      if (bg.obstructionEnabled) {
-        colorRow('Obstruction color', 'obstructionColor');
-      }
+      colorRow('Obstruction color', 'obstructionColor');
     }
 
     const presets = [

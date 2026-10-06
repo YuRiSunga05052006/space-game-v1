@@ -206,6 +206,36 @@ export class Mine extends Phaser.Physics.Arcade.Sprite {
     return this.applyKnockFrom(playerX, playerY);
   }
 
+  /** Armed kick-mines on ice ramp toward a faster slide and keep it. */
+  boostSlide(targetSpeed: number): void {
+    if (!this.isKickMine || !this.armed) return;
+    const body = this.body as Phaser.Physics.Arcade.Body | null;
+    if (!body) return;
+    const vx = body.velocity.x;
+    const vy = body.velocity.y;
+    const speed = Math.hypot(vx, vy);
+    if (speed < 12 || speed >= targetSpeed) return;
+    const next = Math.min(targetSpeed, speed * 1.04);
+    const scale = next / speed;
+    this.setVelocity(vx * scale, vy * scale);
+  }
+
+  applyAcceleration(ax: number, ay: number, delta: number): void {
+    if (!this.isKickMine || !this.armed) return;
+    const body = this.body as Phaser.Physics.Arcade.Body | null;
+    if (!body) return;
+    const dt = delta / 1000;
+    let vx = body.velocity.x + ax * dt;
+    let vy = body.velocity.y + ay * dt;
+    const speed = Math.hypot(vx, vy);
+    const cap = 240;
+    if (speed > cap) {
+      vx = (vx / speed) * cap;
+      vy = (vy / speed) * cap;
+    }
+    this.setVelocity(vx, vy);
+  }
+
   updateMine(_time: number, delta: number): void {
     if (this.pushCooldownMs > 0) {
       this.pushCooldownMs = Math.max(0, this.pushCooldownMs - delta);

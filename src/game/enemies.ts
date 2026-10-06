@@ -8,7 +8,8 @@ export type EnemyKind =
   | 'wasp'
   | 'turret'
   | 'mineCarrier'
-  | 'flamethrower';
+  | 'flamethrower'
+  | 'rabies';
 
 const ENEMY_BASE_INTERVAL: Record<EnemyKind, number> = {
   spider: 9000,
@@ -17,6 +18,7 @@ const ENEMY_BASE_INTERVAL: Record<EnemyKind, number> = {
   turret: 15000,
   mineCarrier: 14000,
   flamethrower: 12000,
+  rabies: 11000,
 };
 
 const ENEMY_INTERVAL_REDUCTION: Record<EnemyKind, number> = {
@@ -26,6 +28,7 @@ const ENEMY_INTERVAL_REDUCTION: Record<EnemyKind, number> = {
   turret: 900,
   mineCarrier: 900,
   flamethrower: 1000,
+  rabies: 800,
 };
 
 const ENEMY_MIN_INTERVAL: Record<EnemyKind, number> = {
@@ -35,6 +38,7 @@ const ENEMY_MIN_INTERVAL: Record<EnemyKind, number> = {
   turret: 6000,
   mineCarrier: 6000,
   flamethrower: 5000,
+  rabies: 4500,
 };
 
 const ENEMY_BASE_MAX: Record<EnemyKind, number> = {
@@ -44,6 +48,7 @@ const ENEMY_BASE_MAX: Record<EnemyKind, number> = {
   turret: 1,
   mineCarrier: 2,
   flamethrower: 2,
+  rabies: 2,
 };
 
 const ENEMY_SURVIVAL_MAX: Record<EnemyKind, number> = {
@@ -53,6 +58,7 @@ const ENEMY_SURVIVAL_MAX: Record<EnemyKind, number> = {
   turret: 3,
   mineCarrier: 3,
   flamethrower: 4,
+  rabies: 3,
 };
 
 /** Minimum ms between any enemy spawn attempt. */
@@ -60,6 +66,7 @@ export const ENEMY_SPAWN_TICK_MS = 2500;
 
 export const MINE_CARRIER_UNLOCK_SCORE = 3000;
 export const FLAMETHROWER_UNLOCK_SCORE = 2500;
+export const RABIES_UNLOCK_SCORE = 3000;
 
 /**
  * Score bands: 0-999 none, 1000+ spider, 2000+ seeker, 2500+ flamethrower (W2+),
@@ -81,10 +88,17 @@ export function getUnlockedEnemyKinds(
   }
   if (
     score >= MINE_CARRIER_UNLOCK_SCORE
-    && worldId === 'world3'
+    && (worldId === 'world3' || worldId === 'world4')
     && (storyLevel === undefined || storyLevel >= 27)
   ) {
     kinds.push('mineCarrier');
+  }
+  if (
+    score >= RABIES_UNLOCK_SCORE
+    && worldId === 'world4'
+    && (storyLevel === undefined || storyLevel >= 42)
+  ) {
+    kinds.push('rabies');
   }
   if (score >= 4000) kinds.push('wasp');
   if (score >= 5000) kinds.push('turret');
@@ -115,6 +129,7 @@ export function getMaxOnScreen(
       case 'spider':
       case 'wasp':
       case 'flamethrower':
+      case 'rabies':
         max += bonus;
         break;
       case 'seeker':
@@ -134,6 +149,7 @@ export function getMaxOnScreen(
   switch (kind) {
     case 'spider':
     case 'flamethrower':
+    case 'rabies':
       max += level;
       break;
     case 'seeker':
@@ -161,6 +177,10 @@ function getEnemyWeight(kind: EnemyKind, score: number, worldId: string, storyLe
       return score >= 2000 ? 3 + Math.floor(level / 2) : 0;
     case 'flamethrower':
       return getUnlockedEnemyKinds(score, worldId, storyLevel).includes('flamethrower')
+        ? 3 + level
+        : 0;
+    case 'rabies':
+      return getUnlockedEnemyKinds(score, worldId, storyLevel).includes('rabies')
         ? 3 + level
         : 0;
     case 'mineCarrier':

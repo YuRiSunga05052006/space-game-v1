@@ -11,6 +11,12 @@ export const GALILEAN_MOON_LEVELS = {
 
 export type GalileanMoonId = keyof typeof GALILEAN_MOON_LEVELS;
 
+/** Editor category for the four moon enemies, listed after Jovian Swarm Drone (L11). */
+export const GALILEAN_SWARM_DRONE_GROUP = {
+  groupName: 'Galilean Swarm Drone',
+  insertAfterLevel: 11,
+} as const;
+
 export const GALILEAN_SURVIVAL_UNLOCK_SCORES: Record<number, number> = {
   [GALILEAN_MOON_LEVELS.io]: 1500,
   [GALILEAN_MOON_LEVELS.europa]: 2500,

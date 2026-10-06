@@ -104,6 +104,15 @@ export const SECRET_GALILEAN_MAP_POSITION: { x: number; y: number } = (() => {
   };
 })();
 
+/** Probe marker just beside Saturn so it does not cover Titan. */
+export const SECRET_CASSINI_MAP_POSITION: { x: number; y: number } = (() => {
+  const saturn = positionOnOrbit(SATURN_ORBIT, SATURN_ANGLE);
+  return {
+    x: saturn.x + 0.055,
+    y: saturn.y + 0.02,
+  };
+})();
+
 export function getWorld2GalileanNeptuneRoute(): { from: { x: number; y: number }; to: { x: number; y: number } } {
   const neptune = positionOnOrbit(NEPTUNE_ORBIT, NEPTUNE_ANGLE);
   return {

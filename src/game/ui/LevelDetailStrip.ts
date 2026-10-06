@@ -3,6 +3,7 @@ import { playSfx } from '../audioManager';
 import { isLevelUnlocked, getHighestUnlockedLevelForWorld } from '../storyProgress';
 import { getLevelMeta, getBackgroundTheme } from '../levelResolver';
 import { getSecretLevel } from '../secretLevels';
+import { isWorld4ComingSoonLevel } from '../world4/levels';
 
 export interface LevelDetailStripConfig {
   x: number;
@@ -126,6 +127,15 @@ export function createLevelDetailStrip(
 
     const meta = getLevelMeta(worldId, level);
     const theme = getBackgroundTheme(worldId, meta.themeId);
+    if (isWorld4ComingSoonLevel(level)) {
+      locationText.setText(`LEVEL ${level} · ${meta.location.toUpperCase()}`);
+      locationText.setColor('#556677');
+      bossText.setText('Coming soon');
+      statusText.setText('COMING SOON');
+      playBtn.setVisible(false);
+      playBtn.setAlpha(0.35);
+      return;
+    }
     const unlocked = isLevelUnlocked(level);
 
     locationText.setText(`LEVEL ${level} · ${meta.location.toUpperCase()}`);

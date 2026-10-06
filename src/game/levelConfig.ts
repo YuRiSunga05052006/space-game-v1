@@ -45,6 +45,19 @@ export const BOSS_LEVEL_CONFIG: Record<number, BossLevelConfig> = {
   36: { spawnMs: 210_000, coinReward: 700 },
   37: { spawnMs: 210_000, coinReward: 710 },
   38: { spawnMs: 420_000, coinReward: 800 },
+  // World 4
+  39: { spawnMs: 180_000, coinReward: 820 },
+  40: { spawnMs: 180_000, coinReward: 830 },
+  41: { spawnMs: 180_000, coinReward: 840 },
+  42: { spawnMs: 210_000, coinReward: 850 },
+  43: { spawnMs: 210_000, coinReward: 860 },
+  44: { spawnMs: 240_000, coinReward: 900 },
+  45: { spawnMs: 210_000, coinReward: 910 },
+  46: { spawnMs: 210_000, coinReward: 920 },
+  47: { spawnMs: 210_000, coinReward: 930 },
+  48: { spawnMs: 210_000, coinReward: 940 },
+  49: { spawnMs: 210_000, coinReward: 950 },
+  50: { spawnMs: 300_000, coinReward: 1000 },
 };
 
 export function getBossConfigForLevel(level: number): BossLevelConfig {

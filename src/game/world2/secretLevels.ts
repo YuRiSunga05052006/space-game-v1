@@ -14,6 +14,18 @@ export const WORLD2_SECRET_LEVELS: Record<string, SecretLevelDefinition> = {
     exitPanel: 'finish',
     finishUnlockLevel: 15,
   },
+  cassini: {
+    id: 'cassini',
+    name: 'Cassini-Huygens',
+    location: 'Cassini-Huygens — Saturn Approach',
+    themeId: 'cassini',
+    hasBoss: false,
+    scoreThreshold: 7000,
+    exitScoreThreshold: 7000,
+    entryLevel: 12,
+    worldId: 'world2',
+    exitPanel: 'warp',
+  },
 };
 
 export function getWorld2SecretLevel(id: string): SecretLevelDefinition | undefined {

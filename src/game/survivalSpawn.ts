@@ -3,6 +3,7 @@ import { getEscalationLevel, getSurvivalEnemyCountBonus } from './difficulty';
 import { getStoryEnemyDefinition as getW1StoryEnemy } from './world1/storyEnemyDefinitions';
 import { getStoryEnemyDefinition as getW2StoryEnemy } from './world2/storyEnemyDefinitions';
 import { getStoryEnemyDefinition as getW3StoryEnemy } from './world3/storyEnemyDefinitions';
+import { getStoryEnemyDefinition as getW4StoryEnemy } from './world4/storyEnemyDefinitions';
 import {
   GALILEAN_SURVIVAL_UNLOCK_SCORES,
   getGalileanMoonEnemyDefinition,
@@ -15,6 +16,13 @@ import {
   hasWorld3Variants,
   isWorld3VariantLevel,
 } from './world3/storyEnemyVariants';
+import {
+  getWorld4VariantDefinition,
+  getWorld4VariantParentLevel,
+  getWorld4VariantPool,
+  hasWorld4Variants,
+  isWorld4VariantLevel,
+} from './world4/storyEnemyVariants';
 import type { StoryEnemyDefinition } from './levelResolver';
 import { getWorldLevelRange } from './worlds';
 
@@ -40,6 +48,10 @@ const WORLD3_STORY_ENEMY_UNLOCK_SCORES: Record<number, number> = Object.fromEntr
   Array.from({ length: 18 }, (_, i) => [21 + i, 0 + i * 1000]),
 );
 
+const WORLD4_STORY_ENEMY_UNLOCK_SCORES: Record<number, number> = Object.fromEntries(
+  Array.from({ length: 12 }, (_, i) => [39 + i, 0 + i * 1000]),
+);
+
 const WORLD_SURVIVAL_CONFIG: Record<string, WorldSurvivalConfig> = {
   world1: {
     min: 1,
@@ -59,6 +71,13 @@ const WORLD_SURVIVAL_CONFIG: Record<string, WorldSurvivalConfig> = {
     min: 21,
     max: 38,
     enemyScores: WORLD3_STORY_ENEMY_UNLOCK_SCORES,
+    bossFirst: 12000,
+    bossStep: 4000,
+  },
+  world4: {
+    min: 39,
+    max: 50,
+    enemyScores: WORLD4_STORY_ENEMY_UNLOCK_SCORES,
     bossFirst: 12000,
     bossStep: 4000,
   },
@@ -88,6 +107,10 @@ function getStoryEnemyDef(worldId: string, level: number): StoryEnemyDefinition 
   if (worldId === 'world2' && isGalileanMoonLevel(level)) {
     return getGalileanMoonEnemyDefinition(level);
   }
+  if (worldId === 'world4' && isWorld4VariantLevel(level)) {
+    return getWorld4VariantDefinition(level);
+  }
+  if (worldId === 'world4') return getW4StoryEnemy(level);
   if (worldId === 'world3' && isWorld3VariantLevel(level)) {
     return getWorld3VariantDefinition(level);
   }
@@ -107,7 +130,9 @@ export function getUnlockedStoryEnemyLevels(score: number, worldId = 'world1'): 
   const levels: number[] = [];
   for (let level = min; level <= max; level++) {
     if (score >= (table[level] ?? Infinity)) {
-      if (worldId === 'world3' && hasWorld3Variants(level)) {
+      if (worldId === 'world4' && hasWorld4Variants(level)) {
+        levels.push(...getWorld4VariantPool(level).map((v) => v.level));
+      } else if (worldId === 'world3' && hasWorld3Variants(level)) {
         levels.push(...getWorld3VariantPool(level).map((v) => v.level));
       } else {
         levels.push(level);
@@ -212,6 +237,12 @@ export function pickSurvivalBossLevel(score: number, _bossesDefeated: number, wo
 export function getStoryEnemyUnlockScore(level: number, worldId = 'world1'): number {
   if (worldId === 'world2' && isGalileanMoonLevel(level)) {
     return GALILEAN_SURVIVAL_UNLOCK_SCORES[level] ?? 0;
+  }
+  if (worldId === 'world4') {
+    const parentLevel = getWorld4VariantParentLevel(level);
+    if (parentLevel != null) {
+      return getUnlockTable(worldId)[parentLevel] ?? 0;
+    }
   }
   if (worldId === 'world3') {
     const parentLevel = getWorld3VariantParentLevel(level);

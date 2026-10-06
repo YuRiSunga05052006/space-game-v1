@@ -3,17 +3,21 @@ import { getWorldNumber } from './worlds';
 import { getWorld1Level } from './world1/levels';
 import { getWorld2Level } from './world2/levels';
 import { getWorld3Level } from './world3/levels';
+import { getWorld4ComingSoon, getWorld4Level, isWorld4ComingSoonLevel } from './world4/levels';
 import { getSecretLevel, getSecretWorldId, type SecretLevelDefinition } from './secretLevels';
 import { getBackgroundTheme as getWorld1Theme, type BackgroundTheme } from './world1/backgrounds';
 import { getBackgroundTheme as getWorld2Theme } from './world2/backgrounds';
 import { getBackgroundTheme as getWorld3Theme } from './world3/backgrounds';
+import { getBackgroundTheme as getWorld4Theme } from './world4/backgrounds';
 import { getWorldCardTheme } from './worldCardThemes';
 import { getBossDefinition as getWorld1Boss } from './world1/bosses';
 import { getBossDefinition as getWorld2Boss } from './world2/bosses';
 import { getBossDefinition as getWorld3Boss } from './world3/bosses';
+import { getBossDefinition as getWorld4Boss } from './world4/bosses';
 import { getStoryEnemyDefinition as getWorld1StoryEnemy } from './world1/storyEnemyDefinitions';
 import { getStoryEnemyDefinition as getWorld2StoryEnemy } from './world2/storyEnemyDefinitions';
 import { getStoryEnemyDefinition as getWorld3StoryEnemy } from './world3/storyEnemyDefinitions';
+import { getStoryEnemyDefinition as getWorld4StoryEnemy } from './world4/storyEnemyDefinitions';
 import {
   getGalileanMoonEnemyDefinition,
   isGalileanMoonLevel,
@@ -22,6 +26,10 @@ import {
   getWorld3VariantDefinition,
   isWorld3VariantLevel,
 } from './world3/storyEnemyVariants';
+import {
+  getWorld4VariantDefinition,
+  isWorld4VariantLevel,
+} from './world4/storyEnemyVariants';
 import {
   getWorld1MapNode,
   getWorld1MapRouteLevels,
@@ -49,15 +57,25 @@ import {
   WORLD3_MAP_NODES,
   WORLD3_ORBITS,
 } from './world3/mapLayout';
+import {
+  getWorld4MapNode,
+  getWorld4MapRouteLevels,
+  getWorld4RouteWaypoints,
+  SUN_POSITION as WORLD4_SUN,
+  WORLD4_MAP_NODES,
+  WORLD4_ORBITS,
+} from './world4/mapLayout';
 
 export type BossDefinition =
   | import('./world1/bosses').BossDefinition
   | import('./world2/bosses').BossDefinition
-  | import('./world3/bosses').BossDefinition;
+  | import('./world3/bosses').BossDefinition
+  | import('./world4/bosses').BossDefinition;
 export type StoryEnemyDefinition =
   | import('./world1/storyEnemyDefinitions').StoryEnemyDefinition
   | import('./world2/storyEnemyDefinitions').StoryEnemyDefinition
-  | import('./world3/storyEnemyDefinitions').StoryEnemyDefinition;
+  | import('./world3/storyEnemyDefinitions').StoryEnemyDefinition
+  | import('./world4/storyEnemyDefinitions').StoryEnemyDefinition;
 export type { StoryEnemyBehavior } from './world1/storyEnemyDefinitions';
 export type { BackgroundTheme } from './world1/backgrounds';
 
@@ -69,6 +87,7 @@ export interface LevelMeta {
 }
 
 function resolveContentWorldId(worldId: string, level: number): string {
+  if (worldId === 'world4' || level >= 39) return 'world4';
   if (worldId === 'world3' || level >= 21) return 'world3';
   if (worldId === 'world2' || level >= 11) return 'world2';
   return 'world1';
@@ -94,7 +113,21 @@ export function getLevelMeta(worldId: string, level: number, secretId?: string):
     }
   }
 
+  if (isWorld4ComingSoonLevel(level)) {
+    const soon = getWorld4ComingSoon(level);
+    return {
+      level,
+      location: soon?.location ?? 'Coming soon',
+      themeId: 'hamal',
+      bossName: 'Coming soon',
+    };
+  }
+
   const contentWorld = resolveContentWorldId(worldId, level);
+  if (contentWorld === 'world4') {
+    const meta = getWorld4Level(level);
+    return { level: meta.level, location: meta.location, themeId: meta.themeId, bossName: meta.bossName };
+  }
   if (contentWorld === 'world3') {
     const meta = getWorld3Level(level);
     return { level: meta.level, location: meta.location, themeId: meta.themeId, bossName: meta.bossName };
@@ -112,7 +145,7 @@ export function getBackgroundTheme(worldId: string, themeId: string): Background
   if (themeId === 'iss' || themeId === 'dawn') {
     return getWorld1Theme(themeId);
   }
-  if (themeId === 'galilean') {
+  if (themeId === 'galilean' || themeId === 'cassini') {
     return getWorld2Theme(themeId);
   }
   if (themeId === 'wise0855') {
@@ -125,6 +158,9 @@ export function getBackgroundTheme(worldId: string, themeId: string): Background
     || worldId === 'world8'
   ) {
     return getWorldCardTheme(worldId);
+  }
+  if (worldId === 'world4') {
+    return getWorld4Theme(themeId);
   }
   if (worldId === 'world3') {
     return getWorld3Theme(themeId);
@@ -139,6 +175,7 @@ const SURVIVAL_WORLD_THEME_IDS: Record<string, string> = {
   world1: 'earth',
   world2: 'jupiter',
   world3: 'sirius',
+  world4: 'hamal',
 };
 
 export function getSurvivalBackgroundTheme(worldId: string): BackgroundTheme {
@@ -152,6 +189,7 @@ export function getSurvivalHudLabel(worldId: string): string {
 
 export function getBossDefinition(worldId: string, level: number): BossDefinition {
   const contentWorld = resolveContentWorldId(worldId, level);
+  if (contentWorld === 'world4') return getWorld4Boss(level);
   if (contentWorld === 'world3') return getWorld3Boss(level);
   if (contentWorld === 'world2') return getWorld2Boss(level);
   return getWorld1Boss(level);
@@ -162,6 +200,10 @@ export function getStoryEnemyDefinition(worldId: string, level: number): StoryEn
   if (contentWorld === 'world2' || worldId === 'world2') {
     if (isGalileanMoonLevel(level)) return getGalileanMoonEnemyDefinition(level);
   }
+  if (contentWorld === 'world4') {
+    if (isWorld4VariantLevel(level)) return getWorld4VariantDefinition(level);
+    return getWorld4StoryEnemy(level);
+  }
   if (contentWorld === 'world3') {
     if (isWorld3VariantLevel(level)) return getWorld3VariantDefinition(level);
     return getWorld3StoryEnemy(level);
@@ -171,6 +213,22 @@ export function getStoryEnemyDefinition(worldId: string, level: number): StoryEn
 }
 
 export function getMapLayout(worldId: string) {
+  if (worldId === 'world4') {
+    return {
+      sunPosition: WORLD4_SUN,
+      orbits: WORLD4_ORBITS,
+      nodes: WORLD4_MAP_NODES,
+      getMapNode: getWorld4MapNode,
+      getRouteLevels: getWorld4MapRouteLevels,
+      getRouteWaypoints: getWorld4RouteWaypoints,
+      planetDecorations: undefined,
+      backgroundAsteroids: undefined,
+      asteroidBelt: undefined,
+      earthPosition: undefined,
+      earthMoonOrbitRadius: undefined,
+      routeStyle: 'dashedCyan' as const,
+    };
+  }
   if (worldId === 'world3') {
     return {
       sunPosition: WORLD3_SUN,

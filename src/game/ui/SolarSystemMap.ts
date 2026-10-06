@@ -9,11 +9,13 @@ import {
   isSecretGalileanComplete,
   isSecretWise0855Unlocked,
   isSecretWise0855Complete,
+  isSecretCassiniUnlocked,
 } from '../worldProgress';
 import type { MapNodeStyle, MapPlanetId, MapNodeLayout as World1MapNodeLayout } from '../world1/mapLayout';
 import { SECRET_ISS_MAP_POSITION, SECRET_DAWN_MAP_POSITION } from '../world1/mapLayout';
 import type { MapPlanetId as World2PlanetId, MapNodeLayout as World2MapNodeLayout } from '../world2/mapLayout';
-import { SECRET_GALILEAN_MAP_POSITION, getWorld2GalileanNeptuneRoute } from '../world2/mapLayout';
+import { SECRET_CASSINI_MAP_POSITION, SECRET_GALILEAN_MAP_POSITION, getWorld2GalileanNeptuneRoute } from '../world2/mapLayout';
+import type { MapNodeLayout as World4MapNodeLayout } from '../world4/mapLayout';
 import type { MapNodeLayout as World3MapNodeLayout } from '../world3/mapLayout';
 import { SECRET_WISE0855_MAP_POSITION, getWorld3WisePolluxRoute } from '../world3/mapLayout';
 
@@ -93,6 +95,17 @@ function drawMiniGalilean(g: Phaser.GameObjects.Graphics): void {
     g.fillStyle(0xffffff, 0.25);
     g.fillCircle(moon.x - moon.r * 0.25, moon.y - moon.r * 0.25, moon.r * 0.35);
   }
+}
+
+function drawMiniCassini(g: Phaser.GameObjects.Graphics): void {
+  g.fillStyle(0xddbb77, 1);
+  g.fillCircle(-6, 0, 3);
+  g.fillStyle(0xc8c8d8, 1);
+  g.fillRect(0, -2, 14, 4);
+  g.fillStyle(0xffcc88, 0.9);
+  g.fillTriangle(14, 0, 8, -4, 8, 4);
+  g.fillStyle(0x88aacc, 0.8);
+  g.fillRect(4, -5, 6, 2);
 }
 
 function drawMiniWise0855(g: Phaser.GameObjects.Graphics): void {
@@ -576,6 +589,10 @@ export function createSolarSystemMap(
       focusOnPosition(SECRET_GALILEAN_MAP_POSITION.x, SECRET_GALILEAN_MAP_POSITION.y);
       return;
     }
+    if (secretId === 'cassini') {
+      focusOnPosition(SECRET_CASSINI_MAP_POSITION.x, SECRET_CASSINI_MAP_POSITION.y);
+      return;
+    }
     if (secretId === 'wise0855') {
       focusOnPosition(SECRET_WISE0855_MAP_POSITION.x, SECRET_WISE0855_MAP_POSITION.y);
       return;
@@ -600,6 +617,10 @@ export function createSolarSystemMap(
       pos = mapToContent(SECRET_GALILEAN_MAP_POSITION.x, SECRET_GALILEAN_MAP_POSITION.y);
       themeId = 'galilean';
       ringRadius = 18;
+    } else if (selectedSecretId === 'cassini') {
+      pos = mapToContent(SECRET_CASSINI_MAP_POSITION.x, SECRET_CASSINI_MAP_POSITION.y);
+      themeId = 'cassini';
+      ringRadius = 18;
     } else if (selectedSecretId === 'wise0855') {
       pos = mapToContent(SECRET_WISE0855_MAP_POSITION.x, SECRET_WISE0855_MAP_POSITION.y);
       themeId = 'wise0855';
@@ -619,6 +640,9 @@ export function createSolarSystemMap(
       } else if (worldId === 'world3') {
         const w3Node = node as World3MapNodeLayout;
         ringRadius = w3Node.bossTier === 'finale' ? 24 : w3Node.bossTier === 'mid' ? 18 : 14;
+      } else if (worldId === 'world4') {
+        const w4Node = node as World4MapNodeLayout;
+        ringRadius = w4Node.comingSoon ? 12 : w4Node.bossTier === 'mid' ? 18 : 14;
       }
     }
 
@@ -631,7 +655,8 @@ export function createSolarSystemMap(
     const nodeLayout = layout.getMapNode(level);
     const meta = getLevelMeta(worldId, level);
     const theme = getBackgroundTheme(worldId, meta.themeId);
-    const unlocked = isLevelUnlocked(level);
+    const comingSoon = (nodeLayout as World4MapNodeLayout).comingSoon === true;
+    const unlocked = isLevelUnlocked(level) && !comingSoon;
     const pos = mapToContent(nodeLayout.x, nodeLayout.y);
     const nodeContainer = scene.add.container(pos.x, pos.y);
 
@@ -643,17 +668,25 @@ export function createSolarSystemMap(
     const w1Node = worldId === 'world1' ? (nodeLayout as World1MapNodeLayout) : undefined;
     const w2Node = worldId === 'world2' ? (nodeLayout as World2MapNodeLayout) : undefined;
     const w3Node = worldId === 'world3' ? (nodeLayout as World3MapNodeLayout) : undefined;
+    const w4Node = worldId === 'world4' ? (nodeLayout as World4MapNodeLayout) : undefined;
     const nodeRadius = worldId === 'world1' && w1Node
       ? getWorld1NodeRadius(w1Node.nodeStyle, w1Node.planetId)
       : worldId === 'world2' && w2Node
         ? getWorld2NodeRadius(w2Node.nodeStyle, w2Node.planetId)
         : worldId === 'world3' && w3Node
           ? (w3Node.bossTier === 'finale' ? 14 : w3Node.bossTier === 'mid' ? 11 : 9)
-          : (isFinaleStar ? 10 : nodeLayout.nodeStyle === 'moon' ? 6 : 8);
+          : worldId === 'world4' && w4Node
+            ? (w4Node.bossTier === 'mid' ? 11 : 9)
+            : (isFinaleStar ? 10 : nodeLayout.nodeStyle === 'moon' ? 6 : 8);
 
     if (worldId === 'world3' && w3Node?.bossTier) {
       const tierColor = w3Node.bossTier === 'finale' ? 0xff6644 : 0xffaa44;
       nodeGfx.lineStyle(2, tierColor, 0.7);
+      nodeGfx.strokeCircle(0, 0, nodeRadius + 6);
+    }
+
+    if (worldId === 'world4' && w4Node?.bossTier && !comingSoon) {
+      nodeGfx.lineStyle(2, 0xffaa44, 0.7);
       nodeGfx.strokeCircle(0, 0, nodeRadius + 6);
     }
 
@@ -688,14 +721,14 @@ export function createSolarSystemMap(
           nodeRadius,
         );
       }
-    } else if (worldId === 'world3') {
+    } else if (worldId === 'world3' || worldId === 'world4') {
       drawNodeShape(
         nodeGfx,
         0,
         0,
         nodeLayout.nodeStyle,
-        theme.planetColor,
-        alpha,
+        comingSoon ? 0x556677 : theme.planetColor,
+        comingSoon ? 0.35 : alpha,
         nodeRadius,
       );
     } else {
@@ -859,6 +892,44 @@ export function createSolarSystemMap(
       selectedLevel = 11;
       redrawSelection();
       onSelectLevel(11, 'galilean');
+    });
+
+    content.add(secretContainer);
+  }
+
+  if (worldId === 'world2' && isSecretCassiniUnlocked()) {
+    const secretPos = mapToContent(SECRET_CASSINI_MAP_POSITION.x, SECRET_CASSINI_MAP_POSITION.y);
+    const secretContainer = scene.add.container(secretPos.x, secretPos.y);
+
+    const secretGfx = scene.add.graphics();
+    drawMiniCassini(secretGfx);
+    secretContainer.add(secretGfx);
+
+    const secretLabel = scene.add.text(0, 16, 'CASSINI', {
+      fontFamily: 'Orbitron, sans-serif',
+      fontSize: '8px',
+      fontStyle: '700',
+      color: '#ffcc88',
+    }).setOrigin(0.5);
+    secretContainer.add(secretLabel);
+
+    secretContainer.setInteractive(
+      new Phaser.Geom.Rectangle(-22, -16, 44, 36),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    secretContainer.input!.cursor = 'pointer';
+
+    secretContainer.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+      isPanning = false;
+    });
+    secretContainer.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopPropagation();
+      playSfx('ui');
+      selectedSecretId = 'cassini';
+      selectedLevel = 12;
+      redrawSelection();
+      onSelectLevel(12, 'cassini');
     });
 
     content.add(secretContainer);

@@ -110,6 +110,16 @@ export const BACKGROUND_THEMES: Record<string, BackgroundTheme> = {
     planetX: 0.5,
     accentColor: 0x88aaff,
   },
+  cassini: {
+    id: 'cassini',
+    skyTop: 0x12100c,
+    skyBottom: 0x2a2418,
+    starColor: 0xffe0aa,
+    planetColor: 0xddbb77,
+    planetSize: 210,
+    planetX: 0.62,
+    accentColor: 0xffcc88,
+  },
   galilean: {
     id: 'galilean',
     skyTop: 0x0a1028,

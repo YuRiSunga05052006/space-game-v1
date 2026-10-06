@@ -10,6 +10,8 @@ export interface WorldProgressState {
   world2Survival: boolean;
   world3Story: boolean;
   world3Survival: boolean;
+  world4Story: boolean;
+  world4Survival: boolean;
   secretIssUnlocked: boolean;
   secretIssComplete: boolean;
   secretDawnUnlocked: boolean;
@@ -18,6 +20,8 @@ export interface WorldProgressState {
   secretGalileanComplete: boolean;
   secretWise0855Unlocked: boolean;
   secretWise0855Complete: boolean;
+  secretCassiniUnlocked: boolean;
+  secretCassiniComplete: boolean;
 }
 
 function defaultState(): WorldProgressState {
@@ -26,6 +30,8 @@ function defaultState(): WorldProgressState {
     world2Survival: false,
     world3Story: false,
     world3Survival: false,
+    world4Story: false,
+    world4Survival: false,
     secretIssUnlocked: false,
     secretIssComplete: false,
     secretDawnUnlocked: false,
@@ -34,6 +40,8 @@ function defaultState(): WorldProgressState {
     secretGalileanComplete: false,
     secretWise0855Unlocked: false,
     secretWise0855Complete: false,
+    secretCassiniUnlocked: false,
+    secretCassiniComplete: false,
   };
 }
 
@@ -47,6 +55,8 @@ function readState(): WorldProgressState {
       world2Survival: parsed.world2Survival === true,
       world3Story: parsed.world3Story === true,
       world3Survival: parsed.world3Survival === true,
+      world4Story: parsed.world4Story === true,
+      world4Survival: parsed.world4Survival === true,
       secretIssUnlocked: parsed.secretIssUnlocked === true,
       secretIssComplete: parsed.secretIssComplete === true,
       secretDawnUnlocked: parsed.secretDawnUnlocked === true,
@@ -55,6 +65,8 @@ function readState(): WorldProgressState {
       secretGalileanComplete: parsed.secretGalileanComplete === true,
       secretWise0855Unlocked: parsed.secretWise0855Unlocked === true,
       secretWise0855Complete: parsed.secretWise0855Complete === true,
+      secretCassiniUnlocked: parsed.secretCassiniUnlocked === true,
+      secretCassiniComplete: parsed.secretCassiniComplete === true,
     };
   } catch {
     return defaultState();
@@ -72,7 +84,7 @@ function unlockStoryLevelInStorage(level: number): void {
     if (!Array.isArray(parsed)) return;
     const levels = parsed
       .map((n) => parseInt(String(n), 10))
-      .filter((n) => n >= 1 && n <= 38);
+      .filter((n) => n >= 1 && n <= getWorldLevelRange('world4').max);
     if (!levels.includes(level)) {
       levels.push(level);
       writeProgressItem(STORY_STORAGE_KEY, JSON.stringify([...new Set(levels)].sort((a, b) => a - b)));
@@ -112,6 +124,19 @@ export function isWorld3Unlocked(): boolean {
   return state.world3Story || state.world3Survival;
 }
 
+export function isWorld4StoryUnlocked(): boolean {
+  return readState().world4Story;
+}
+
+export function isWorld4SurvivalUnlocked(): boolean {
+  return readState().world4Survival;
+}
+
+export function isWorld4Unlocked(): boolean {
+  const state = readState();
+  return state.world4Story || state.world4Survival;
+}
+
 export function isSecretIssUnlocked(): boolean {
   return readState().secretIssUnlocked;
 }
@@ -144,17 +169,32 @@ export function isSecretWise0855Complete(): boolean {
   return readState().secretWise0855Complete;
 }
 
-export function isLevel20Complete(): boolean {
-  const { max } = getWorldLevelRange('world2');
+export function isSecretCassiniUnlocked(): boolean {
+  return readState().secretCassiniUnlocked;
+}
+
+export function isSecretCassiniComplete(): boolean {
+  return readState().secretCassiniComplete;
+}
+
+function isStoryLevelInStorage(level: number): boolean {
   try {
     const raw = localStorage.getItem(STORY_STORAGE_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return false;
-    return parsed.includes(max);
+    return parsed.includes(level);
   } catch {
     return false;
   }
+}
+
+export function isLevel20Complete(): boolean {
+  return isStoryLevelInStorage(getWorldLevelRange('world2').max);
+}
+
+export function isLevel38Complete(): boolean {
+  return isStoryLevelInStorage(getWorldLevelRange('world3').max);
 }
 
 export function unlockWorld2Story(): void {
@@ -239,6 +279,36 @@ export function onLevel20Cleared(): void {
   writeState(state);
 }
 
+export function unlockSecretCassini(): void {
+  const state = readState();
+  state.secretCassiniUnlocked = true;
+  writeState(state);
+}
+
+export function completeSecretCassini(): void {
+  const state = readState();
+  state.secretCassiniComplete = true;
+  state.secretCassiniUnlocked = true;
+  tryUnlockWorld4(state);
+  writeState(state);
+}
+
+export function tryUnlockWorld4(state?: WorldProgressState): void {
+  const s = state ?? readState();
+  if (isLevel38Complete() || s.secretCassiniComplete) {
+    s.world4Story = true;
+    s.world4Survival = true;
+    unlockStoryLevelInStorage(getWorldLevelRange('world4').min);
+    if (!state) writeState(s);
+  }
+}
+
+export function onLevel38Cleared(): void {
+  const state = readState();
+  tryUnlockWorld4(state);
+  writeState(state);
+}
+
 export function isWorldUnlocked(worldId: string, mode: GameMode): boolean {
   if (worldId === 'world1') return true;
   if (worldId === 'world2') {
@@ -246,6 +316,9 @@ export function isWorldUnlocked(worldId: string, mode: GameMode): boolean {
   }
   if (worldId === 'world3') {
     return mode === 'story' ? isWorld3StoryUnlocked() : isWorld3SurvivalUnlocked();
+  }
+  if (worldId === 'world4') {
+    return mode === 'story' ? isWorld4StoryUnlocked() : isWorld4SurvivalUnlocked();
   }
   return false;
 }
@@ -256,6 +329,8 @@ export function unlockAllWorldsAndSecrets(): void {
     world2Survival: true,
     world3Story: true,
     world3Survival: true,
+    world4Story: true,
+    world4Survival: true,
     secretIssUnlocked: true,
     secretIssComplete: true,
     secretDawnUnlocked: true,
@@ -264,5 +339,7 @@ export function unlockAllWorldsAndSecrets(): void {
     secretGalileanComplete: true,
     secretWise0855Unlocked: true,
     secretWise0855Complete: true,
+    secretCassiniUnlocked: true,
+    secretCassiniComplete: true,
   });
 }

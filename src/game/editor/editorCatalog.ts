@@ -4,14 +4,23 @@ import {
   type AlmanacEntry,
 } from '../almanac';
 import type { EnemyKind } from '../enemies';
-import { isWorld2Unlocked, isWorld3Unlocked } from '../worldProgress';
+import { isWorld2Unlocked, isWorld3Unlocked, isWorld4Unlocked } from '../worldProgress';
+import { GALILEAN_SWARM_DRONE_GROUP } from '../world2/galileanEnemies';
 import {
   hasWorld3Variants,
   WORLD3_STORY_ENEMY_GROUPS,
 } from '../world3/storyEnemyVariants';
+import {
+  hasWorld4Variants,
+  WORLD4_STORY_ENEMY_GROUPS,
+} from '../world4/storyEnemyVariants';
 
 function canUseComets(): boolean {
-  return isWorld2Unlocked() || isWorld3Unlocked();
+  return isWorld2Unlocked() || isWorld3Unlocked() || isWorld4Unlocked();
+}
+
+function canUseWorld4(): boolean {
+  return isWorld4Unlocked();
 }
 
 function canUseWorld3(): boolean {
@@ -22,23 +31,26 @@ export interface EditorStoryEnemyOption {
   /** e.g. story-world1-3, story-world2-galilean-1101, story-world3-variant-2201 */
   id: string;
   name: string;
-  worldId: 'world1' | 'world2' | 'world3';
+  worldId: 'world1' | 'world2' | 'world3' | 'world4';
   level: number;
   galilean: boolean;
   world3Variant: boolean;
+  world4Variant: boolean;
 }
 
 export interface EditorStoryEnemyGroupOption {
   groupName: string;
   parentLevel: number;
   variants: EditorStoryEnemyOption[];
+  /** Keep the parent enemy, then show this group after it. */
+  insertAfterParent?: boolean;
 }
 
 export interface EditorBossOption {
   /** e.g. boss-world1-5 */
   id: string;
   name: string;
-  worldId: 'world1' | 'world2' | 'world3';
+  worldId: 'world1' | 'world2' | 'world3' | 'world4';
   level: number;
 }
 
@@ -49,6 +61,7 @@ const SURVIVAL_ID_BY_ALMANAC: Record<string, EnemyKind> = {
   'enemy-turret': 'turret',
   'enemy-mine-carrier': 'mineCarrier',
   'enemy-flamethrower': 'flamethrower',
+  'enemy-rabies': 'rabies',
 };
 
 const LEGACY_STORY_IDS: Record<string, string> = {
@@ -79,7 +92,10 @@ export function isEditorObstacleVisible(
     | 'moons'
     | 'blackHoles'
     | 'smallGravityFields'
-    | 'largeGravityFields',
+    | 'largeGravityFields'
+    | 'icePanels'
+    | 'plasmaBalls'
+    | 'fans',
 ): boolean {
   switch (kind) {
     case 'asteroids':
@@ -97,6 +113,10 @@ export function isEditorObstacleVisible(
     case 'redMines':
     case 'purpleMines':
       return canUseWorld3();
+    case 'icePanels':
+    case 'plasmaBalls':
+    case 'fans':
+      return canUseWorld4();
     default:
       return false;
   }
@@ -116,12 +136,25 @@ export function getVisibleSurvivalEnemyIds(): EnemyKind[] {
     'turret',
     'mineCarrier',
     'flamethrower',
+    'rabies',
   ];
   return all.filter((id) => visible.has(id));
 }
 
 function parseStoryAlmanacEntry(entry: AlmanacEntry): EditorStoryEnemyOption | null {
   // story-enemy-world3-variant-2201
+  const w4Variant = /^story-enemy-(world4)-variant-(\d+)$/.exec(entry.id);
+  if (w4Variant) {
+    return {
+      id: `story-${w4Variant[1]}-variant-${w4Variant[2]}`,
+      name: entry.name,
+      worldId: 'world4',
+      level: parseInt(w4Variant[2], 10),
+      galilean: false,
+      world3Variant: false,
+      world4Variant: true,
+    };
+  }
   const w3Variant = /^story-enemy-(world3)-variant-(\d+)$/.exec(entry.id);
   if (w3Variant) {
     return {
@@ -131,10 +164,11 @@ function parseStoryAlmanacEntry(entry: AlmanacEntry): EditorStoryEnemyOption | n
       level: parseInt(w3Variant[2], 10),
       galilean: false,
       world3Variant: true,
+      world4Variant: false,
     };
   }
   // story-enemy-world1-3
-  const normal = /^story-enemy-(world[123])-(\d+)$/.exec(entry.id);
+  const normal = /^story-enemy-(world[1234])-(\d+)$/.exec(entry.id);
   if (normal) {
     return {
       id: `story-${normal[1]}-${normal[2]}`,
@@ -143,6 +177,7 @@ function parseStoryAlmanacEntry(entry: AlmanacEntry): EditorStoryEnemyOption | n
       level: parseInt(normal[2], 10),
       galilean: false,
       world3Variant: false,
+      world4Variant: false,
     };
   }
   // story-enemy-world2-galilean-1101
@@ -155,13 +190,14 @@ function parseStoryAlmanacEntry(entry: AlmanacEntry): EditorStoryEnemyOption | n
       level: parseInt(gal[2], 10),
       galilean: true,
       world3Variant: false,
+      world4Variant: false,
     };
   }
   return null;
 }
 
 function parseBossAlmanacEntry(entry: AlmanacEntry): EditorBossOption | null {
-  const m = /^boss-(world[123])-(\d+)$/.exec(entry.id);
+  const m = /^boss-(world[1234])-(\d+)$/.exec(entry.id);
   if (!m) return null;
   return {
     id: `boss-${m[1]}-${m[2]}`,
@@ -195,13 +231,40 @@ export function getVisibleStoryEnemyOptions(): EditorStoryEnemyOption[] {
     .filter((o): o is EditorStoryEnemyOption => o != null);
 }
 
-/** World 3 story enemies grouped by multi-star variant families. */
+/** Story enemies grouped under a category header (W2 Galilean moons, W3 multi-star families). */
 export function getVisibleStoryEnemyGroupsForWorld(
-  worldId: 'world1' | 'world2' | 'world3',
+  worldId: 'world1' | 'world2' | 'world3' | 'world4',
 ): EditorStoryEnemyGroupOption[] {
+  const options = getVisibleStoryEnemyOptions().filter((o) => o.worldId === worldId);
+
+  if (worldId === 'world2') {
+    const variants = options
+      .filter((o) => o.galilean)
+      .sort((a, b) => a.level - b.level);
+    if (variants.length === 0) return [];
+    return [{
+      groupName: GALILEAN_SWARM_DRONE_GROUP.groupName,
+      parentLevel: GALILEAN_SWARM_DRONE_GROUP.insertAfterLevel,
+      variants,
+      insertAfterParent: true,
+    }];
+  }
+
+  if (worldId === 'world4') {
+    const byLevel = new Map(options.map((o) => [o.level, o]));
+    return WORLD4_STORY_ENEMY_GROUPS
+      .map((group) => ({
+        groupName: group.groupName,
+        parentLevel: group.parentLevel,
+        variants: group.variantLevels
+          .map((level) => byLevel.get(level))
+          .filter((o): o is EditorStoryEnemyOption => o != null),
+      }))
+      .filter((g) => g.variants.length > 0);
+  }
+
   if (worldId !== 'world3') return [];
 
-  const options = getVisibleStoryEnemyOptions().filter((o) => o.worldId === 'world3');
   const byLevel = new Map(options.map((o) => [o.level, o]));
 
   return WORLD3_STORY_ENEMY_GROUPS
@@ -215,14 +278,16 @@ export function getVisibleStoryEnemyGroupsForWorld(
     .filter((g) => g.variants.length > 0);
 }
 
-/** Flat story enemy options for a world tab, excluding grouped W3 parents. */
+/** Flat story enemy options for a world tab, excluding enemies shown inside a group. */
 export function getVisibleStoryEnemyOptionsForWorld(
   worldId: 'world1' | 'world2' | 'world3' | 'world4' | 'world5' | 'world6' | 'world7' | 'world8',
 ): EditorStoryEnemyOption[] {
-  if (worldId !== 'world1' && worldId !== 'world2' && worldId !== 'world3') return [];
+  if (worldId !== 'world1' && worldId !== 'world2' && worldId !== 'world3' && worldId !== 'world4') return [];
   return getVisibleStoryEnemyOptions().filter((o) => {
     if (o.worldId !== worldId) return false;
+    if (worldId === 'world2' && o.galilean) return false;
     if (worldId === 'world3' && hasWorld3Variants(o.level) && !o.world3Variant) return false;
+    if (worldId === 'world4' && hasWorld4Variants(o.level) && !o.world4Variant) return false;
     return true;
   });
 }
@@ -245,6 +310,18 @@ export function isBossIdUnlocked(id: string): boolean {
 
 export function parseEditorStoryId(id: string): EditorStoryEnemyOption | null {
   const migrated = migrateLegacyEnemyId(id);
+  const w4Var = /^story-world4-variant-(\d+)$/.exec(migrated);
+  if (w4Var) {
+    return {
+      id: migrated,
+      name: migrated,
+      worldId: 'world4',
+      level: parseInt(w4Var[1], 10),
+      galilean: false,
+      world3Variant: false,
+      world4Variant: true,
+    };
+  }
   const w3Var = /^story-world3-variant-(\d+)$/.exec(migrated);
   if (w3Var) {
     return {
@@ -254,6 +331,7 @@ export function parseEditorStoryId(id: string): EditorStoryEnemyOption | null {
       level: parseInt(w3Var[1], 10),
       galilean: false,
       world3Variant: true,
+      world4Variant: false,
     };
   }
   const gal = /^story-world2-galilean-(\d+)$/.exec(migrated);
@@ -265,9 +343,10 @@ export function parseEditorStoryId(id: string): EditorStoryEnemyOption | null {
       level: parseInt(gal[1], 10),
       galilean: true,
       world3Variant: false,
+      world4Variant: false,
     };
   }
-  const m = /^story-(world[123])-(\d+)$/.exec(migrated);
+  const m = /^story-(world[1234])-(\d+)$/.exec(migrated);
   if (!m) return null;
   return {
     id: migrated,
@@ -276,12 +355,13 @@ export function parseEditorStoryId(id: string): EditorStoryEnemyOption | null {
     level: parseInt(m[2], 10),
     galilean: false,
     world3Variant: false,
+    world4Variant: false,
   };
 }
 
 export function parseEditorBossId(id: string): EditorBossOption | null {
   const migrated = migrateLegacyEnemyId(id);
-  const m = /^boss-(world[123])-(\d+)$/.exec(migrated);
+  const m = /^boss-(world[1234])-(\d+)$/.exec(migrated);
   if (!m) return null;
   return {
     id: migrated,

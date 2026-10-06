@@ -78,12 +78,15 @@ export class DarknessOverlay {
   private readonly rt: Phaser.GameObjects.RenderTexture;
   private readonly brush: Phaser.GameObjects.Graphics;
   private readonly obstructionColor: number;
+  /** 0 = invisible, 1 = fully opaque. */
+  private readonly obstructionAlpha: number;
   private fullIlluminate = false;
   private readonly explosionLights: ExplosionLight[] = [];
 
-  constructor(scene: Phaser.Scene, obstructionColor = 0x000000) {
+  constructor(scene: Phaser.Scene, obstructionColor = 0x000000, obstructionAlpha = 1) {
     this.scene = scene;
     this.obstructionColor = obstructionColor;
+    this.obstructionAlpha = Phaser.Math.Clamp(obstructionAlpha, 0, 1);
     this.rt = scene.add
       .renderTexture(0, 0, GAME_WIDTH, GAME_HEIGHT)
       .setOrigin(0, 0)
@@ -119,7 +122,7 @@ export class DarknessOverlay {
     }
 
     this.rt.clear();
-    this.rt.fill(this.obstructionColor, 1);
+    this.rt.fill(this.obstructionColor, this.obstructionAlpha);
 
     this.brush.clear();
     for (const light of circles) {

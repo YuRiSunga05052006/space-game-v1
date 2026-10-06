@@ -485,6 +485,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.rainbowGlow.strokeCircle(0, 0, 34);
   }
 
+  private slipping = false;
+
+  /** Ice panels keep momentum instead of snapping velocity to the stick. */
+  setSlipping(active: boolean): void {
+    this.slipping = active;
+  }
+
+  applyAcceleration(ax: number, ay: number, delta: number): void {
+    const body = this.body as Phaser.Physics.Arcade.Body | null;
+    if (!body) return;
+    const dt = delta / 1000;
+    let vx = body.velocity.x + ax * dt;
+    let vy = body.velocity.y + ay * dt;
+    const cap = this.baseMaxSpeed * this.loadout.speedMultiplier * (this.boosting ? this.boostSpeedMultiplier : 1) * 1.6;
+    const speed = Math.hypot(vx, vy);
+    if (speed > cap) {
+      vx = (vx / speed) * cap;
+      vy = (vy / speed) * cap;
+    }
+    this.setVelocity(vx, vy);
+  }
+
   moveByVector(vx: number, vy: number): void {
     const len = Math.sqrt(vx * vx + vy * vy);
     if (len < 0.1) {
@@ -497,13 +519,34 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const ny = vy / len;
     const boostMult = this.boosting ? this.boostSpeedMultiplier : 1;
     const speed = this.baseMaxSpeed * this.loadout.speedMultiplier * boostMult;
-    this.setVelocity(nx * speed, ny * speed);
+    if (this.slipping) {
+      const body = this.body as Phaser.Physics.Arcade.Body;
+      this.setVelocity(
+        Phaser.Math.Linear(body.velocity.x, nx * speed, 0.12),
+        Phaser.Math.Linear(body.velocity.y, ny * speed, 0.12),
+      );
+    } else {
+      this.setVelocity(nx * speed, ny * speed);
+    }
 
     const angle = Phaser.Math.RadToDeg(Math.atan2(ny, nx)) + 90;
     this.setRotation(Phaser.Math.DegToRad(angle));
   }
 
   stopMove(): void {
+    if (this.slipping) {
+      const body = this.body as Phaser.Physics.Arcade.Body | null;
+      if (!body) return;
+      const vx = body.velocity.x * 0.975;
+      const vy = body.velocity.y * 0.975;
+      if (vx * vx + vy * vy < 64) {
+        this.setVelocity(0, 0);
+        this.isMoving = false;
+        return;
+      }
+      this.setVelocity(vx, vy);
+      return;
+    }
     this.setVelocity(0, 0);
     this.isMoving = false;
   }

@@ -17,8 +17,12 @@ export type StoryEnemyAppearanceId =
   | 'arcturusHunter'
   | 'trappistHopper'
   | 'capellaWeaver'
+  | 'capellaLWeaver'
   | 'alderaminStalker'
   | 'castorPhantom'
+  | 'castorB2Phantom'
+  | 'castorC1Phantom'
+  | 'castorC2Phantom'
   | 'aldebaranHerald';
 
 export interface StoryEnemyAppearancePalette {
@@ -111,6 +115,74 @@ function drawWeaver(g: Phaser.GameObjects.Graphics, p: StoryEnemyAppearancePalet
   g.fillCircle(CX, CY, 3);
 }
 
+function drawCapellaLWeaver(g: Phaser.GameObjects.Graphics, p: StoryEnemyAppearancePalette): void {
+  g.fillStyle(p.trim, 1);
+  g.fillRect(CX - 12, CY - 2, 24, 4);
+  g.lineStyle(2, p.trim, 0.9);
+  g.lineBetween(CX - 8, CY - 2, CX - 8, CY - 5);
+  g.lineBetween(CX + 8, CY + 2, CX + 8, CY + 4);
+  g.fillStyle(p.hullDark, 1);
+  g.fillCircle(CX - 8, CY - 9, 4.5);
+  g.fillCircle(CX + 8, CY + 9, 6.5);
+  g.fillStyle(p.hull, 1);
+  g.fillCircle(CX - 8, CY - 9, 3);
+  g.fillCircle(CX + 8, CY + 9, 4.5);
+  g.fillStyle(p.glow, 0.95);
+  g.fillCircle(CX - 8, CY - 10, 1.4);
+  g.fillCircle(CX + 8, CY + 8, 2);
+}
+
+function drawCastorB2Phantom(g: Phaser.GameObjects.Graphics, p: StoryEnemyAppearancePalette): void {
+  g.fillStyle(p.hullDark, 1);
+  g.fillTriangle(CX - 14, CY - 10, CX - 1, CY + 2, CX - 3, CY + 13);
+  g.fillTriangle(CX + 14, CY - 10, CX + 1, CY + 2, CX + 3, CY + 13);
+  g.fillStyle(p.hull, 1);
+  g.fillTriangle(CX - 10, CY - 6, CX - 1, CY + 1, CX - 2, CY + 9);
+  g.fillTriangle(CX + 10, CY - 6, CX + 1, CY + 1, CX + 2, CY + 9);
+  g.fillStyle(p.trim, 1);
+  g.fillCircle(CX, CY + 1, 3.5);
+  g.fillStyle(p.glow, 0.95);
+  g.fillCircle(CX, CY, 2);
+}
+
+function drawCastorC1Phantom(g: Phaser.GameObjects.Graphics, p: StoryEnemyAppearancePalette): void {
+  g.fillStyle(p.hullDark, 1);
+  g.beginPath();
+  g.moveTo(CX, CY - 14);
+  g.lineTo(CX + 12, CY - 3);
+  g.lineTo(CX + 8, CY + 13);
+  g.lineTo(CX - 8, CY + 13);
+  g.lineTo(CX - 12, CY - 3);
+  g.closePath();
+  g.fillPath();
+  g.fillStyle(p.hull, 1);
+  g.beginPath();
+  g.moveTo(CX, CY - 9);
+  g.lineTo(CX + 7, CY - 1);
+  g.lineTo(CX + 5, CY + 9);
+  g.lineTo(CX - 5, CY + 9);
+  g.lineTo(CX - 7, CY - 1);
+  g.closePath();
+  g.fillPath();
+  g.fillStyle(p.trim, 1);
+  g.fillRect(CX - 1.5, CY - 10, 3, 18);
+  g.fillStyle(p.glow, 0.95);
+  g.fillCircle(CX, CY - 1, 2.5);
+}
+
+function drawCastorC2Phantom(g: Phaser.GameObjects.Graphics, p: StoryEnemyAppearancePalette): void {
+  g.fillStyle(p.hullDark, 1);
+  g.fillTriangle(CX, CY, CX - 13, CY - 13, CX + 13, CY - 13);
+  g.fillTriangle(CX, CY, CX - 13, CY + 13, CX + 13, CY + 13);
+  g.fillStyle(p.hull, 1);
+  g.fillTriangle(CX, CY - 1, CX - 8, CY - 10, CX + 8, CY - 10);
+  g.fillTriangle(CX, CY + 1, CX - 8, CY + 10, CX + 8, CY + 10);
+  g.fillStyle(p.trim, 1);
+  g.fillRect(CX - 5, CY - 2, 10, 4);
+  g.fillStyle(p.glow, 0.95);
+  g.fillCircle(CX, CY, 2.5);
+}
+
 function drawHerald(g: Phaser.GameObjects.Graphics, p: StoryEnemyAppearancePalette): void {
   g.fillStyle(p.trim, 1);
   g.fillCircle(CX + 4, CY - 2, 6);
@@ -138,8 +210,12 @@ const DRAWERS: Record<StoryEnemyAppearanceId, (g: Phaser.GameObjects.Graphics, p
   arcturusHunter: drawDart,
   trappistHopper: drawDiamond,
   capellaWeaver: drawTwin,
+  capellaLWeaver: drawCapellaLWeaver,
   alderaminStalker: drawDisc,
   castorPhantom: drawWeaver,
+  castorB2Phantom: drawCastorB2Phantom,
+  castorC1Phantom: drawCastorC1Phantom,
+  castorC2Phantom: drawCastorC2Phantom,
   aldebaranHerald: drawHerald,
 };
 

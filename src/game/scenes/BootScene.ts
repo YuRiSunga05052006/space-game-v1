@@ -15,6 +15,11 @@ import { drawBossAppearance as drawWorld3Boss, getBossAppearancePalette as getWo
 import { STORY_ENEMY_DEFINITIONS as WORLD3_STORY_ENEMIES } from '../world3/storyEnemyDefinitions';
 import { drawStoryEnemyAppearance as drawWorld3StoryEnemy, getStoryEnemyAppearancePalette as getWorld3StoryEnemyPalette } from '../world3/storyEnemyAppearances';
 import { WORLD3_STORY_ENEMY_VARIANTS } from '../world3/storyEnemyVariants';
+import { BOSS_DEFINITIONS as WORLD4_BOSSES } from '../world4/bosses';
+import { drawBossAppearance as drawWorld4Boss, getBossAppearancePalette as getWorld4BossPalette } from '../world4/bossAppearances';
+import { STORY_ENEMY_DEFINITIONS as WORLD4_STORY_ENEMIES } from '../world4/storyEnemyDefinitions';
+import { drawStoryEnemyAppearance as drawWorld4StoryEnemy, getStoryEnemyAppearancePalette as getWorld4StoryEnemyPalette } from '../world4/storyEnemyAppearances';
+import { WORLD4_STORY_ENEMY_VARIANTS } from '../world4/storyEnemyVariants';
 import { PLAYER_SHAPES, shipTextureKey } from '../playerShapes';
 import { PLAYER_SKINS } from '../playerSkins';
 import {
@@ -79,6 +84,7 @@ export class BootScene extends Phaser.Scene {
     this.createPowerStarTexture();
     this.createSpiderShipTexture();
     this.createEnemyLaserTexture();
+    this.createWorld4HazardTextures();
     this.createBossSpecialLaserTexture();
     this.createLootBoxTexture();
     this.createHeavyBulletTexture();
@@ -336,6 +342,62 @@ export class BootScene extends Phaser.Scene {
     g.fillRoundedRect(2, 2, 4, 8, 1);
     g.generateTexture('enemy-laser', 8, 20);
     g.destroy();
+
+    const pink = this.make.graphics({ x: 0, y: 0 }, false);
+    pink.fillStyle(0xff66cc, 1);
+    pink.fillRoundedRect(0, 0, 8, 20, 2);
+    pink.fillStyle(0xffccee, 0.9);
+    pink.fillRoundedRect(2, 2, 4, 8, 1);
+    pink.generateTexture('enemy-laser-pink', 8, 20);
+    pink.destroy();
+  }
+
+  private createWorld4HazardTextures(): void {
+    const ice = this.make.graphics({ x: 0, y: 0 }, false);
+    ice.fillStyle(0x88ddff, 0.35);
+    ice.fillRoundedRect(0, 0, 120, 72, 8);
+    ice.lineStyle(2, 0xd8f6ff, 0.9);
+    ice.strokeRoundedRect(2, 2, 116, 68, 8);
+    ice.lineStyle(1, 0xffffff, 0.55);
+    ice.lineBetween(18, 14, 46, 54);
+    ice.lineBetween(40, 10, 78, 60);
+    ice.lineBetween(70, 16, 104, 48);
+    ice.generateTexture('ice-panel', 120, 72);
+    ice.destroy();
+
+    const plasma = this.make.graphics({ x: 0, y: 0 }, false);
+    plasma.fillStyle(0xaa44ff, 0.35);
+    plasma.fillCircle(16, 16, 16);
+    plasma.fillStyle(0xcc66ff, 0.95);
+    plasma.fillCircle(16, 16, 10);
+    plasma.fillStyle(0xffeeff, 0.95);
+    plasma.fillCircle(16, 16, 4);
+    plasma.generateTexture('plasma-ball', 32, 32);
+    plasma.destroy();
+
+    const fan = this.make.graphics({ x: 0, y: 0 }, false);
+    fan.fillStyle(0x667788, 1);
+    fan.fillCircle(16, 16, 14);
+    fan.fillStyle(0xddeeff, 1);
+    fan.fillTriangle(16, 16, 30, 10, 30, 22);
+    fan.fillStyle(0x99bbcc, 1);
+    fan.fillCircle(16, 16, 4);
+    fan.generateTexture('fan', 32, 32);
+    fan.destroy();
+
+    const rabies = this.make.graphics({ x: 0, y: 0 }, false);
+    rabies.fillStyle(0x661122, 1);
+    rabies.fillCircle(16, 18, 12);
+    rabies.fillStyle(0xcc2244, 1);
+    rabies.fillCircle(16, 18, 8);
+    rabies.fillStyle(0xff66cc, 1);
+    rabies.fillCircle(12, 14, 3);
+    rabies.fillStyle(0xaa44ff, 1);
+    rabies.fillCircle(20, 14, 3);
+    rabies.fillStyle(0xffffff, 0.9);
+    rabies.fillCircle(16, 20, 2);
+    rabies.generateTexture('rabies-ship', 32, 36);
+    rabies.destroy();
   }
 
   private createBossSpecialLaserTexture(): void {
@@ -471,6 +533,13 @@ export class BootScene extends Phaser.Scene {
       g.generateTexture(definition.textureKey, 64, 64);
       g.destroy();
     }
+    for (const definition of Object.values(WORLD4_BOSSES)) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      const palette = getWorld4BossPalette(definition.themeId);
+      drawWorld4Boss(g, definition.appearanceId, palette);
+      g.generateTexture(definition.textureKey, 64, 64);
+      g.destroy();
+    }
   }
 
   private createStoryEnemyTextures(): void {
@@ -506,7 +575,22 @@ export class BootScene extends Phaser.Scene {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
       const parent = WORLD3_STORY_ENEMIES[definition.parentLevel];
       const palette = getWorld3StoryEnemyPalette(parent.themeId, definition.paletteOverride);
-      drawWorld3StoryEnemy(g, parent.appearanceId, palette);
+      drawWorld3StoryEnemy(g, definition.appearanceId, palette);
+      g.generateTexture(definition.textureKey, 32, 36);
+      g.destroy();
+    }
+    for (const definition of Object.values(WORLD4_STORY_ENEMIES)) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      const palette = getWorld4StoryEnemyPalette(definition.themeId);
+      drawWorld4StoryEnemy(g, definition.appearanceId, palette);
+      g.generateTexture(definition.textureKey, 32, 36);
+      g.destroy();
+    }
+    for (const definition of Object.values(WORLD4_STORY_ENEMY_VARIANTS)) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      const parent = WORLD4_STORY_ENEMIES[definition.parentLevel];
+      const palette = getWorld4StoryEnemyPalette(parent.themeId, definition.paletteOverride);
+      drawWorld4StoryEnemy(g, definition.appearanceId, palette);
       g.generateTexture(definition.textureKey, 32, 36);
       g.destroy();
     }

@@ -1,6 +1,6 @@
 import { writeProgressItem } from '../cloud/progressStorage';
 import type { EnemyKind } from '../enemies';
-import { isWorld2Unlocked, isWorld3Unlocked } from '../worldProgress';
+import { isWorld2Unlocked, isWorld3Unlocked, isWorld4Unlocked } from '../worldProgress';
 import {
   getAllBossOptions,
   getAllStoryEnemyOptions,
@@ -39,8 +39,11 @@ export interface EditorBackgroundConfig {
   skyBottom: number;
   starColor: number;
   starsEnabled: boolean;
-  /** Only used when starsEnabled is false. */
-  obstructionEnabled: boolean;
+  /**
+   * 0 = off, 100 = fully opaque.
+   * Only used when starsEnabled is false.
+   */
+  obstruction: number;
   obstructionColor: number;
 }
 
@@ -80,6 +83,12 @@ export interface CustomAreaContent {
     blackHoles: SpawnRule;
     smallGravityFields: SpawnRule;
     largeGravityFields: SpawnRule;
+    /** Requires World 4 unlock. */
+    icePanels: SpawnRule;
+    /** Requires World 4 unlock. */
+    plasmaBalls: SpawnRule;
+    /** Requires World 4 unlock. */
+    fans: SpawnRule;
   };
   enemies: {
     survival: EnemySpawnRule[];
@@ -165,7 +174,7 @@ export function createDefaultAreaContent(): CustomAreaContent {
       skyBottom: 0x1a3a6a,
       starColor: 0xaaccff,
       starsEnabled: true,
-      obstructionEnabled: false,
+      obstruction: 0,
       obstructionColor: 0x000000,
     },
     objects: {
@@ -195,6 +204,9 @@ export function createDefaultAreaContent(): CustomAreaContent {
       blackHoles: defaultSpawnRule({ enabled: false, intervalMs: 15000, chance: 0.3 }),
       smallGravityFields: defaultSpawnRule({ enabled: false, intervalMs: 10000, chance: 0.35 }),
       largeGravityFields: defaultSpawnRule({ enabled: false, intervalMs: 14000, chance: 0.3 }),
+      icePanels: defaultSpawnRule({ enabled: false, intervalMs: 7000, chance: 0.55 }),
+      plasmaBalls: defaultSpawnRule({ enabled: false, intervalMs: 8000, chance: 0.5 }),
+      fans: defaultSpawnRule({ enabled: false, intervalMs: 9000, chance: 0.45 }),
     },
     enemies: {
       survival: [
@@ -204,6 +216,7 @@ export function createDefaultAreaContent(): CustomAreaContent {
         defaultSurvivalEnemy('turret'),
         defaultSurvivalEnemy('mineCarrier'),
         defaultSurvivalEnemy('flamethrower'),
+        defaultSurvivalEnemy('rabies'),
       ],
       story: getAllStoryEnemyOptions().map((o) => defaultStoryEnemy(o.id)),
       bosses: getAllBossOptions().map((o) => defaultBossEnemy(o.id)),
@@ -322,7 +335,11 @@ export function getAreaContent(
 }
 
 export function canUseComets(): boolean {
-  return isWorld2Unlocked() || isWorld3Unlocked();
+  return isWorld2Unlocked() || isWorld3Unlocked() || isWorld4Unlocked();
+}
+
+export function canUseWorld4EditorContent(): boolean {
+  return isWorld4Unlocked();
 }
 
 /** Red mines, purple mines, and mine carriers in the editor. */
@@ -414,15 +431,29 @@ function normalizeEnemyRule(raw: unknown, fallback: EnemySpawnRule): EnemySpawnR
   };
 }
 
+function readObstructionAmount(
+  raw: { obstruction?: number; obstructionEnabled?: boolean },
+  fallback: number,
+): number {
+  if (raw.obstruction !== undefined && raw.obstruction !== null) {
+    return clamp(Math.round(readNumber(raw.obstruction, fallback)), 0, 100);
+  }
+  // Older levels stored a boolean. On meant a fully opaque veil.
+  if (raw.obstructionEnabled === true) return 100;
+  return clamp(Math.round(fallback), 0, 100);
+}
+
 function normalizeBackground(raw: unknown): EditorBackgroundConfig {
   const def = createDefaultAreaContent().background;
-  const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<EditorBackgroundConfig>;
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<EditorBackgroundConfig> & {
+    obstructionEnabled?: boolean;
+  };
   return {
     skyTop: Number(r.skyTop ?? def.skyTop) || def.skyTop,
     skyBottom: Number(r.skyBottom ?? def.skyBottom) || def.skyBottom,
     starColor: Number(r.starColor ?? def.starColor) || def.starColor,
     starsEnabled: r.starsEnabled !== false,
-    obstructionEnabled: r.obstructionEnabled === true,
+    obstruction: readObstructionAmount(r, def.obstruction),
     obstructionColor: Number(r.obstructionColor ?? def.obstructionColor) || 0,
   };
 }
@@ -509,7 +540,15 @@ function normalizeObstacles(
     blackHoles: normalizeSpawnRule(raw.blackHoles, def.blackHoles),
     smallGravityFields: normalizeSpawnRule(raw.smallGravityFields, def.smallGravityFields),
     largeGravityFields: normalizeSpawnRule(raw.largeGravityFields, def.largeGravityFields),
+    icePanels: gateWorld4Obstacle(normalizeSpawnRule(raw.icePanels, def.icePanels)),
+    plasmaBalls: gateWorld4Obstacle(normalizeSpawnRule(raw.plasmaBalls, def.plasmaBalls)),
+    fans: gateWorld4Obstacle(normalizeSpawnRule(raw.fans, def.fans)),
   };
+}
+
+function gateWorld4Obstacle(rule: SpawnRule): SpawnRule {
+  if (!canUseWorld4EditorContent()) rule.enabled = false;
+  return rule;
 }
 
 function normalizeAreaContent(raw: unknown): CustomAreaContent {

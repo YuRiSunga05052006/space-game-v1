@@ -2,6 +2,7 @@ import type { GameMode } from './gameMode';
 import { getWorld1LevelCount } from './world1/levels';
 import { getWorld2LevelCount } from './world2/levels';
 import { getWorld3LevelCount } from './world3/levels';
+import { getWorld4LevelCount } from './world4/levels';
 import { isWorldUnlocked as checkWorldUnlocked } from './worldProgress';
 
 export interface WorldMeta {
@@ -20,6 +21,10 @@ export const WORLD_LEVEL_RANGES: Record<string, { min: number; max: number }> = 
   world3: {
     min: getWorld1LevelCount() + getWorld2LevelCount() + 1,
     max: getWorld1LevelCount() + getWorld2LevelCount() + getWorld3LevelCount(),
+  },
+  world4: {
+    min: getWorld1LevelCount() + getWorld2LevelCount() + getWorld3LevelCount() + 1,
+    max: getWorld1LevelCount() + getWorld2LevelCount() + getWorld3LevelCount() + getWorld4LevelCount(),
   },
 };
 
@@ -54,10 +59,10 @@ export const WORLDS: WorldMeta[] = [
   {
     id: 'world4',
     number: 4,
-    title: 'The Nebula',
-    subtitle: 'Deep frontier',
+    title: 'Stellar Gateway',
+    subtitle: 'Hamal → Big Dipper',
     locked: true,
-    levelCount: 0,
+    levelCount: 12,
     cardTheme: 'beltFinale',
   },
   {

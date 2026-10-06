@@ -32,6 +32,7 @@ interface VariantSpec {
   enemyName: string;
   textureKeySuffix: string;
   paletteOverride?: StoryEnemyPaletteOverride;
+  appearanceId?: StoryEnemyAppearanceId;
 }
 
 interface GroupSpec {
@@ -122,7 +123,7 @@ const GROUP_SPECS: GroupSpec[] = [
       { level: 3501, enemyName: 'Capella A Binary Weaver 1', textureKeySuffix: 'capella-a1' },
       { level: 3502, enemyName: 'Capella A Binary Weaver 2', textureKeySuffix: 'capella-a2', paletteOverride: YELLOW_DWARF },
       { level: 3503, enemyName: 'Capella H Binary Weaver', textureKeySuffix: 'capella-h', paletteOverride: RED_DWARF },
-      { level: 3504, enemyName: 'Capella L Binary Weaver', textureKeySuffix: 'capella-l', paletteOverride: RED_DWARF },
+      { level: 3504, enemyName: 'Capella L Binary Weaver', textureKeySuffix: 'capella-l', paletteOverride: RED_DWARF, appearanceId: 'capellaLWeaver' },
     ],
   },
   {
@@ -131,9 +132,9 @@ const GROUP_SPECS: GroupSpec[] = [
       { level: 3701, enemyName: 'Castor A Sextuple Phantom 1', textureKeySuffix: 'castor-a1' },
       { level: 3702, enemyName: 'Castor A Sextuple Phantom 2', textureKeySuffix: 'castor-a2', paletteOverride: RED_DWARF },
       { level: 3703, enemyName: 'Castor B Sextuple Phantom 1', textureKeySuffix: 'castor-b1', paletteOverride: WHITE_MAIN },
-      { level: 3704, enemyName: 'Castor B Sextuple Phantom 2', textureKeySuffix: 'castor-b2', paletteOverride: RED_DWARF },
-      { level: 3705, enemyName: 'Castor C Sextuple Phantom 1', textureKeySuffix: 'castor-c1', paletteOverride: RED_DWARF },
-      { level: 3706, enemyName: 'Castor C Sextuple Phantom 2', textureKeySuffix: 'castor-c2', paletteOverride: RED_DWARF },
+      { level: 3704, enemyName: 'Castor B Sextuple Phantom 2', textureKeySuffix: 'castor-b2', paletteOverride: RED_DWARF, appearanceId: 'castorB2Phantom' },
+      { level: 3705, enemyName: 'Castor C Sextuple Phantom 1', textureKeySuffix: 'castor-c1', paletteOverride: RED_DWARF, appearanceId: 'castorC1Phantom' },
+      { level: 3706, enemyName: 'Castor C Sextuple Phantom 2', textureKeySuffix: 'castor-c2', paletteOverride: RED_DWARF, appearanceId: 'castorC2Phantom' },
     ],
   },
 ];
@@ -146,6 +147,7 @@ function buildVariant(parent: StoryEnemyDefinition, spec: VariantSpec, groupName
     groupName,
     enemyName: spec.enemyName,
     textureKey: `story-enemy-w3-${spec.textureKeySuffix}`,
+    appearanceId: spec.appearanceId ?? parent.appearanceId,
     paletteOverride: spec.paletteOverride,
   };
 }
@@ -215,7 +217,5 @@ export function getWorld3StoryEnemyGroupsForLevel(parentLevel: number): World3St
 }
 
 export function getVariantAppearanceId(level: number): StoryEnemyAppearanceId {
-  const parentLevel = getWorld3VariantParentLevel(level);
-  if (parentLevel == null) return 'proximaSkiff';
-  return STORY_ENEMY_DEFINITIONS[parentLevel].appearanceId;
+  return WORLD3_STORY_ENEMY_VARIANTS[level]?.appearanceId ?? 'proximaSkiff';
 }
