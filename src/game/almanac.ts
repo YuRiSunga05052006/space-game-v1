@@ -337,7 +337,7 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     name: 'Mine Carrier',
     textureKey: 'mine-carrier',
     textureScale: 1.1,
-    subtitle: `Story W3 L27+ · W3+ secrets · Survival W3 ${MINE_CARRIER_UNLOCK_SCORE}+ score`,
+    subtitle: `Story W3 L27+ · W3+ secrets · Survival W3+ ${MINE_CARRIER_UNLOCK_SCORE}+ score`,
     description:
       'Does not fire lasers. Rams explode in a blast that damages you (max on contact, less farther out), enemies, obstacles, and can chain mines and other carriers. Defeating one leaves a Blue Mine behind. Also spawns in secret levels in World 3 or later',
     stats: `HP ${MINE_CARRIER_HEALTH} · Blast DMG up to ${MINE_CARRIER_BODY_DAMAGE} · R ${MINE_CARRIER_BLAST_RADIUS} · ${MINE_CARRIER_POINTS} pts`,
@@ -350,7 +350,7 @@ const ENEMY_ENTRIES: AlmanacEntry[] = [
     name: 'Rabies Ship',
     textureKey: 'rabies-ship',
     textureScale: 1,
-    subtitle: `Story L42+ · World 4 Survival ${RABIES_UNLOCK_SCORE}+ score`,
+    subtitle: `Story L42+ · Survival W4 ${RABIES_UNLOCK_SCORE}+ score`,
     description:
       `Fires one laser at a time for its whole life: the first 4 shots are red (${LASER_DAMAGE} damage), the next 4 are pink (${RABIES_PINK_DAMAGE} damage), and every shot after that is a purple boss-special laser (${BOSS_SPECIAL_LASER_DAMAGE} damage).`,
     stats: `HP ${RABIES_HEALTH} · Body DMG ${RABIES_BODY_DAMAGE} · ${RABIES_POINTS} pts`,
@@ -370,9 +370,9 @@ const MINE_NAMES: Record<MineVariant, string> = {
 const MINE_SUBTITLES: Record<MineVariant, string> = {
   gray: 'Story W3 L21+ · All Survival · Secrets',
   blue: 'Story W3 L21+ · All Survival · Secrets',
-  brown: 'Story L39+ · W2/W3 secrets · W2+ Survival · Editor',
-  red: 'Survival W3 · 6000+ · W3+ secrets',
-  purple: 'Survival W3 · 9000+ score',
+  brown: 'Story W4 L39+ · W2+ secrets · W2+ Survival · Editor',
+  red: 'Survival W3+ · 6000+ · W3+ secrets',
+  purple: 'Survival W3+ · 9000+ score',
 };
 
 const MINE_DESCRIPTIONS: Record<MineVariant, string> = {
@@ -396,7 +396,7 @@ function buildPlanetEntries(): AlmanacEntry[] {
       name: 'Planet',
       textureKey: 'planet',
       textureScale: 1,
-      subtitle: 'Story L39+ · W2/W3 secrets · W2+ Survival · Editor',
+      subtitle: 'Story L39+ · W2+ secrets · W2+ Survival · Editor',
       description:
         'Large drifting world with strong gravity. Solid surface — your ship cannot pass through unless Invisible, invincible (Power Star), or boosting. Armed Blue Mines also collide with Planets. Destroy with those power-ups or a Death Bomb; phase through with Invisibility (you are pushed to the surface when Invisibility ends). Gray, Red, Purple, and armed Brown Mines damage it. Regular story levels from Hamal (Level 39) onward.',
       stats: `HP ${8} · Gravity R ${200} · ${50} pts`,
@@ -408,7 +408,7 @@ function buildPlanetEntries(): AlmanacEntry[] {
       name: 'Moon',
       textureKey: 'moon',
       textureScale: 1,
-      subtitle: 'Story L39+ · W2/W3 secrets · W2+ Survival · Editor',
+      subtitle: 'Story L39+ · W2+ secrets · W2+ Survival · Editor',
       description:
         'Smaller body with weaker gravity than a Planet. Solid surface for your ship — pass through only while Invisible, invincible (Power Star), or boosting (you are pushed to the surface when Invisibility ends). Destroy with Power Star, boost modes, Death Bomb, or armed Blue/Brown Mines; Blue Mines do not collide with Moons. Regular story levels from Hamal (Level 39) onward.',
       stats: `HP ${4} · Gravity R ${130} · ${30} pts`,
@@ -490,7 +490,7 @@ function buildGoldCelestialEntries(): AlmanacEntry[] {
       name: 'Gold Planet',
       textureKey: 'planet-gold',
       textureScale: 1,
-      subtitle: 'W2/W3 secrets · W2/W3 Survival · Editor',
+      subtitle: 'W2+ secrets · W2+ Survival · Editor',
       description:
         'Rare golden planet. Same rules as a normal Planet but awards bonus coins when destroyed. Slightly more common with the Electric Neon Rainbow skin equipped.',
       stats: `HP ${15} · Gravity R ${200} · ${50} pts · +${12} coins`,
@@ -502,7 +502,7 @@ function buildGoldCelestialEntries(): AlmanacEntry[] {
       name: 'Gold Moon',
       textureKey: 'moon-gold',
       textureScale: 1,
-      subtitle: 'W2/W3 secrets · W2/W3 Survival · Editor',
+      subtitle: 'W2+ secrets · W2+ Survival · Editor',
       description:
         'Rare golden moon. Same rules as a normal Moon but awards bonus coins when destroyed. Slightly more common with the Electric Neon Rainbow skin equipped.',
       stats: `HP ${10} · Gravity R ${130} · ${30} pts · +${8} coins`,

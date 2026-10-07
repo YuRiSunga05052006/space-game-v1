@@ -173,9 +173,9 @@ export function getBackgroundTheme(worldId: string, themeId: string): Background
 
 const SURVIVAL_WORLD_THEME_IDS: Record<string, string> = {
   world1: 'earth',
-  world2: 'jupiter',
+  world2: 'saturn',
   world3: 'sirius',
-  world4: 'hamal',
+  world4: 'bigDipper',
 };
 
 export function getSurvivalBackgroundTheme(worldId: string): BackgroundTheme {

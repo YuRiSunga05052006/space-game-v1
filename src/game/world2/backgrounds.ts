@@ -112,9 +112,9 @@ export const BACKGROUND_THEMES: Record<string, BackgroundTheme> = {
   },
   cassini: {
     id: 'cassini',
-    skyTop: 0x12100c,
-    skyBottom: 0x2a2418,
-    starColor: 0xffe0aa,
+    skyTop: 0x101018,
+    skyBottom: 0x282838,
+    starColor: 0xccccdd,
     planetColor: 0xddbb77,
     planetSize: 210,
     planetX: 0.62,
